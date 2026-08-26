@@ -63,3 +63,38 @@ class AWSService:
             "status": "unsupported",
             "message": "Service health check is not supported yet",
         }
+
+    def get_ec2_summary(self):
+        try:
+            ec2 = boto3.client("ec2")
+            response = ec2.describe_instances()
+
+            total_instances = 0
+            running_instances = 0
+            stopped_instances = 0
+
+            for reservation in response.get("Reservations", []):
+                for instance in reservation.get("Instances", []):
+                    total_instances += 1
+
+                    state = instance.get("State", {}).get("Name")
+
+                    if state == "running":
+                        running_instances += 1
+                    elif state == "stopped":
+                        stopped_instances += 1
+
+            return {
+                "service": "ec2",
+                "status": "healthy",
+                "total_instances": total_instances,
+                "running_instances": running_instances,
+                "stopped_instances": stopped_instances,
+            }
+
+        except (BotoCoreError, ClientError) as error:
+            return {
+                "service": "ec2",
+                "status": "unhealthy",
+                "error": str(error),
+            }

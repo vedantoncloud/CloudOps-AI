@@ -53,3 +53,30 @@ def test_get_service_health_for_ec2():
         "service": "ec2",
         "status": "healthy",
     } 
+
+def test_get_ec2_summary():
+    fake_response = {
+        "Reservations": [
+            {
+                "Instances": [
+                    {"State": {"Name": "running"}},
+                    {"State": {"Name": "stopped"}},
+                    {"State": {"Name": "running"}},
+                ]
+            }
+        ]
+    }
+
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_ec2 = mock_client.return_value
+        mock_ec2.describe_instances.return_value = fake_response
+
+        result = AWSService().get_ec2_summary()
+
+    assert result == {
+        "service": "ec2",
+        "status": "healthy",
+        "total_instances": 3,
+        "running_instances": 2,
+        "stopped_instances": 1,
+    }
