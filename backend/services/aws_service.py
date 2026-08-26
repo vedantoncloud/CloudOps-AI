@@ -32,10 +32,28 @@ class AWSService:
             try:
                 sts = boto3.client("sts")
                 sts.get_caller_identity()
-                return {"service": "sts", "status": "healthy"}
+                return {
+                    "service": "sts",
+                    "status": "healthy",
+                }
             except (BotoCoreError, ClientError) as error:
                 return {
                     "service": "sts",
+                    "status": "unhealthy",
+                    "error": str(error),
+                }
+
+        if service_name == "ec2":
+            try:
+                ec2 = boto3.client("ec2")
+                ec2.describe_instances()
+                return {
+                    "service": "ec2",
+                    "status": "healthy",
+                }
+            except (BotoCoreError, ClientError) as error:
+                return {
+                    "service": "ec2",
                     "status": "unhealthy",
                     "error": str(error),
                 }

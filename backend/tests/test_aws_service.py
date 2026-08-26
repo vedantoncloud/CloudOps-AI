@@ -37,7 +37,19 @@ def test_get_service_health_for_sts():
 
 
 def test_get_service_health_for_unsupported_service():
-    result = AWSService().get_service_health("ec2")
+    result = AWSService().get_service_health("lambda")
 
-    assert result["service"] == "ec2"
+    assert result["service"] == "lambda"
     assert result["status"] == "unsupported"
+
+def test_get_service_health_for_ec2():
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_ec2 = mock_client.return_value
+        mock_ec2.describe_instances.return_value = {}
+
+        result = AWSService().get_service_health("ec2")
+
+    assert result == {
+        "service": "ec2",
+        "status": "healthy",
+    } 
