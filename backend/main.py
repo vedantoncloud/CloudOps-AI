@@ -29,3 +29,6 @@ def health_check():
 @app.get("/cloud/aws/status")
 def aws_status():
     return aws_service.get_status()
+@app.get("/cloud/aws/services/{service_name}")
+def aws_service_health(service_name: str):
+    return aws_service.get_service_health(service_name)

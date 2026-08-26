@@ -8,9 +8,6 @@ class AWSService:
             sts = boto3.client("sts")
             identity = sts.get_caller_identity()
 
-            s3 = boto3.client("s3")
-            s3.list_buckets()
-
             return {
                 "provider": "AWS",
                 "status": "connected",
@@ -18,15 +15,33 @@ class AWSService:
                 "arn": identity.get("Arn"),
                 "services": {
                     "sts": "healthy",
-                    "s3": "healthy",
                 },
-                "message": "AWS services are healthy",
+                "message": "AWS connection is working",
             }
 
         except (BotoCoreError, ClientError) as error:
             return {
                 "provider": "AWS",
                 "status": "disconnected",
-                "message": "Unable to connect to AWS services",
+                "message": "Unable to connect to AWS",
                 "error": str(error),
             }
+
+    def get_service_health(self, service_name):
+        if service_name == "sts":
+            try:
+                sts = boto3.client("sts")
+                sts.get_caller_identity()
+                return {"service": "sts", "status": "healthy"}
+            except (BotoCoreError, ClientError) as error:
+                return {
+                    "service": "sts",
+                    "status": "unhealthy",
+                    "error": str(error),
+                }
+
+        return {
+            "service": service_name,
+            "status": "unsupported",
+            "message": "Service health check is not supported yet",
+        }
