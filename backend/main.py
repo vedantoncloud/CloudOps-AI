@@ -32,3 +32,7 @@ def aws_status():
 @app.get("/cloud/aws/services/{service_name}")
 def aws_service_health(service_name: str):
     return aws_service.get_service_health(service_name)
+
+@app.get("/cloud/aws/ec2/summary")
+def aws_ec2_summary():
+    return aws_service.get_ec2_summary()
