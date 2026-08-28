@@ -80,3 +80,10 @@ def test_get_ec2_summary():
         "running_instances": 2,
         "stopped_instances": 1,
     }
+
+def test_get_ec2_instances():
+    result = AWSService().get_ec2_instances()
+
+    assert result["service"] == "ec2"
+    assert result["status"] == "healthy"
+    assert isinstance(result["instances"], list)

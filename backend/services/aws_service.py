@@ -122,3 +122,33 @@ class AWSService:
                 "status": "unhealthy",
                 "error": str(error),
             }
+
+    def get_ec2_instances(self):
+        try:
+            ec2 = boto3.client("ec2")
+            response = ec2.describe_instances()
+
+            instances = []
+
+            for reservation in response.get("Reservations", []):
+                for instance in reservation.get("Instances", []):
+                    instances.append({
+                        "instance_id": instance.get("InstanceId"),
+                        "state": instance.get("State", {}).get("Name"),
+                        "instance_type": instance.get("InstanceType"),
+                        "availability_zone": instance.get("Placement", {}).get("AvailabilityZone"),
+                        "private_ip": instance.get("PrivateIpAddress"),
+                    })
+
+            return {
+                "service": "ec2",
+                "status": "healthy",
+                "instances": instances,
+            }
+
+        except (BotoCoreError, ClientError) as error:
+            return {
+                "service": "ec2",
+                "status": "unhealthy",
+                "error": str(error),
+            }
