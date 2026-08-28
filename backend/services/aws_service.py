@@ -123,10 +123,21 @@ class AWSService:
                 "error": str(error),
             }
 
-    def get_ec2_instances(self):
+    def get_ec2_instances(self, state=None):
         try:
             ec2 = boto3.client("ec2")
-            response = ec2.describe_instances()
+
+            if state:
+                response = ec2.describe_instances(
+                    Filters=[
+                        {
+                            "Name": "instance-state-name",
+                            "Values": [state],
+                        }
+                    ]
+                )
+            else:
+                response = ec2.describe_instances()
 
             instances = []
 

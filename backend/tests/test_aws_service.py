@@ -87,3 +87,13 @@ def test_get_ec2_instances():
     assert result["service"] == "ec2"
     assert result["status"] == "healthy"
     assert isinstance(result["instances"], list)
+
+def test_get_ec2_instances_with_state_filter():
+    result = AWSService().get_ec2_instances("running")
+
+    assert result["service"] == "ec2"
+    assert result["status"] == "healthy"
+    assert isinstance(result["instances"], list)
+
+    for instance in result["instances"]:
+        assert instance["state"] == "running"
