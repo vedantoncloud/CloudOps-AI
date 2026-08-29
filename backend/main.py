@@ -40,3 +40,7 @@ def aws_ec2_summary():
 @app.get("/cloud/aws/ec2/instances")
 def aws_ec2_instances():
     return aws_service.get_ec2_instances()
+
+@app.get("/cloud/aws/ec2/instances")
+def aws_ec2_instances(state: str = None):
+    return aws_service.get_ec2_instances(state)
