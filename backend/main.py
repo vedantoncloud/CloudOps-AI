@@ -45,7 +45,7 @@ def aws_ec2_summary():
 
 
 @app.get("/cloud/aws/ec2/instances")
-def aws_ec2_instances(state: str = None):
+def aws_ec2_instances(state: str = None, tag: str = None):
     valid_states = {
         "pending",
         "running",
@@ -61,4 +61,4 @@ def aws_ec2_instances(state: str = None):
             detail=f"Invalid EC2 state: {state}",
         )
 
-    return aws_service.get_ec2_instances(state)
+    return aws_service.get_ec2_instances(state, tag)

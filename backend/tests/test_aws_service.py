@@ -116,3 +116,55 @@ def test_ec2_instances_rejects_invalid_state():
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Invalid EC2 state: invalid"
+
+
+def test_get_ec2_instances_with_tag_filter():
+    fake_response = {
+        "Reservations": [
+            {
+                "Instances": [
+                    {
+                        "InstanceId": "i-1234567890",
+                        "State": {"Name": "running"},
+                        "InstanceType": "t3.micro",
+                        "Placement": {
+                            "AvailabilityZone": "us-east-1a"
+                        },
+                        "PrivateIpAddress": "10.0.0.10",
+                        "Tags": [
+                            {
+                                "Key": "Name",
+                                "Value": "web-server",
+                            },
+                            {
+                                "Key": "Environment",
+                                "Value": "production",
+                            },
+                        ],
+                    }
+                ]
+            }
+        ]
+    }
+
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_ec2 = mock_client.return_value
+        mock_ec2.describe_instances.return_value = fake_response
+
+        result = AWSService().get_ec2_instances(
+            tag="Environment:production"
+        )
+
+    mock_ec2.describe_instances.assert_called_once_with(
+        Filters=[
+            {
+                "Name": "tag:Environment",
+                "Values": ["production"],
+            }
+        ]
+    )
+
+    assert result["service"] == "ec2"
+    assert result["status"] == "healthy"
+    assert result["instances"][0]["name"] == "web-server"
+    assert result["instances"][0]["tags"]["Environment"] == "production"

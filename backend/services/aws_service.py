@@ -127,19 +127,42 @@ class AWSService:
                 "error": str(error),
             }
 
-    def get_ec2_instances(self, state=None):
+    def get_ec2_instances(self, state=None, tag=None):
         try:
             ec2 = boto3.client("ec2")
 
+            filters = []
+
             if state:
-                response = ec2.describe_instances(
-                    Filters=[
-                        {
-                            "Name": "instance-state-name",
-                            "Values": [state],
-                        }
-                    ]
-                )
+                filters.append({
+                    "Name": "instance-state-name",
+                    "Values": [state],
+                })
+
+            if tag:
+                if ":" not in tag:
+                    return {
+                        "service": "ec2",
+                        "status": "invalid",
+                        "message": "Tag must be in key:value format",
+                    }
+
+                key, value = tag.split(":", 1)
+
+                if not key or not value:
+                    return {
+                        "service": "ec2",
+                        "status": "invalid",
+                        "message": "Tag must be in key:value format",
+                    }
+
+                filters.append({
+                    "Name": f"tag:{key}",
+                    "Values": [value],
+                })
+
+            if filters:
+                response = ec2.describe_instances(Filters=filters)
             else:
                 response = ec2.describe_instances()
 
@@ -150,9 +173,9 @@ class AWSService:
                     name = None
                     tags = {}
 
-                    for tag in instance.get("Tags", []):
-                        key = tag.get("Key")
-                        value = tag.get("Value")
+                    for instance_tag in instance.get("Tags", []):
+                        key = instance_tag.get("Key")
+                        value = instance_tag.get("Value")
 
                         if key:
                             tags[key] = value
