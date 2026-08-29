@@ -56,10 +56,12 @@ class AWSService:
             try:
                 sts = boto3.client("sts")
                 sts.get_caller_identity()
+
                 return {
                     "service": "sts",
                     "status": "healthy",
                 }
+
             except (BotoCoreError, ClientError) as error:
                 return {
                     "service": "sts",
@@ -71,10 +73,12 @@ class AWSService:
             try:
                 ec2 = boto3.client("ec2")
                 ec2.describe_instances()
+
                 return {
                     "service": "ec2",
                     "status": "healthy",
                 }
+
             except (BotoCoreError, ClientError) as error:
                 return {
                     "service": "ec2",
@@ -144,11 +148,17 @@ class AWSService:
             for reservation in response.get("Reservations", []):
                 for instance in reservation.get("Instances", []):
                     name = None
+                    tags = {}
 
                     for tag in instance.get("Tags", []):
-                        if tag.get("Key") == "Name":
-                            name = tag.get("Value")
-                            break
+                        key = tag.get("Key")
+                        value = tag.get("Value")
+
+                        if key:
+                            tags[key] = value
+
+                        if key == "Name":
+                            name = value
 
                     instances.append({
                         "instance_id": instance.get("InstanceId"),
@@ -157,6 +167,7 @@ class AWSService:
                         "instance_type": instance.get("InstanceType"),
                         "availability_zone": instance.get("Placement", {}).get("AvailabilityZone"),
                         "private_ip": instance.get("PrivateIpAddress"),
+                        "tags": tags,
                     })
 
             return {
