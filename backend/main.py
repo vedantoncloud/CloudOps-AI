@@ -62,3 +62,7 @@ def aws_ec2_instances(state: str = None, tag: str = None):
         )
 
     return aws_service.get_ec2_instances(state, tag)
+
+@app.get("/cloud/aws/s3/buckets")
+def aws_s3_buckets():
+    return aws_service.get_s3_buckets()

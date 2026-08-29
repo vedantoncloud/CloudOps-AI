@@ -205,3 +205,33 @@ class AWSService:
                 "status": "unhealthy",
                 "error": str(error),
             }
+
+    def get_s3_buckets(self):
+        try:
+            s3 = boto3.client("s3")
+            response = s3.list_buckets()
+
+            buckets = []
+
+            for bucket in response.get("Buckets", []):
+                buckets.append({
+                    "name": bucket.get("Name"),
+                    "creation_date": (
+                        bucket.get("CreationDate").isoformat()
+                        if bucket.get("CreationDate")
+                        else None
+                    ),
+                })
+
+            return {
+                "service": "s3",
+                "status": "healthy",
+                "buckets": buckets,
+            }
+
+        except (BotoCoreError, ClientError) as error:
+            return {
+                "service": "s3",
+                "status": "unhealthy",
+                "error": str(error),
+            }
