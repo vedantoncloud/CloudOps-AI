@@ -143,8 +143,16 @@ class AWSService:
 
             for reservation in response.get("Reservations", []):
                 for instance in reservation.get("Instances", []):
+                    name = None
+
+                    for tag in instance.get("Tags", []):
+                        if tag.get("Key") == "Name":
+                            name = tag.get("Value")
+                            break
+
                     instances.append({
                         "instance_id": instance.get("InstanceId"),
+                        "name": name,
                         "state": instance.get("State", {}).get("Name"),
                         "instance_type": instance.get("InstanceType"),
                         "availability_zone": instance.get("Placement", {}).get("AvailabilityZone"),
