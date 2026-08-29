@@ -1,6 +1,9 @@
 from unittest.mock import patch
 
+from fastapi.testclient import TestClient
+
 from services.aws_service import AWSService
+from main import app
 
 
 def test_get_status_when_aws_is_connected():
@@ -19,6 +22,7 @@ def test_get_status_when_aws_is_connected():
     assert result["status"] == "connected"
     assert result["account_id"] == "123456789012"
     assert result["arn"] == fake_identity["Arn"]
+
 
 def test_get_service_health_for_sts():
     with patch("services.aws_service.boto3.client") as mock_client:
@@ -42,6 +46,7 @@ def test_get_service_health_for_unsupported_service():
     assert result["service"] == "lambda"
     assert result["status"] == "unsupported"
 
+
 def test_get_service_health_for_ec2():
     with patch("services.aws_service.boto3.client") as mock_client:
         mock_ec2 = mock_client.return_value
@@ -52,7 +57,8 @@ def test_get_service_health_for_ec2():
     assert result == {
         "service": "ec2",
         "status": "healthy",
-    } 
+    }
+
 
 def test_get_ec2_summary():
     fake_response = {
@@ -81,12 +87,14 @@ def test_get_ec2_summary():
         "stopped_instances": 1,
     }
 
+
 def test_get_ec2_instances():
     result = AWSService().get_ec2_instances()
 
     assert result["service"] == "ec2"
     assert result["status"] == "healthy"
     assert isinstance(result["instances"], list)
+
 
 def test_get_ec2_instances_with_state_filter():
     result = AWSService().get_ec2_instances("running")
@@ -97,3 +105,14 @@ def test_get_ec2_instances_with_state_filter():
 
     for instance in result["instances"]:
         assert instance["state"] == "running"
+
+
+def test_ec2_instances_rejects_invalid_state():
+    client = TestClient(app)
+
+    response = client.get(
+        "/cloud/aws/ec2/instances?state=invalid"
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid EC2 state: invalid"
