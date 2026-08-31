@@ -270,6 +270,7 @@ def test_get_s3_buckets_when_access_denied():
     assert result["status"] == "unhealthy"
     assert "AccessDenied" in result["error"]
 
+
 def test_s3_bucket_details():
     fake_response = {
         "LocationConstraint": "ap-south-1"
@@ -312,3 +313,183 @@ def test_s3_bucket_details_access_denied():
     assert result["status"] == "unhealthy"
     assert result["bucket"] == "test-bucket"
     assert "AccessDenied" in result["error"]
+
+
+def test_get_s3_objects():
+    fake_response = {
+        "Contents": [
+            {
+                "Key": "test/file.txt",
+                "Size": 1024,
+                "LastModified": datetime(2026, 8, 31, 10, 0, 0),
+            },
+            {
+                "Key": "images/logo.png",
+                "Size": 2048,
+                "LastModified": datetime(2026, 8, 31, 11, 0, 0),
+            },
+        ],
+        "IsTruncated": False,
+    }
+
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_s3 = mock_client.return_value
+        mock_s3.list_objects_v2.return_value = fake_response
+
+        result = AWSService().get_s3_objects("cloudops-test")
+
+    mock_s3.list_objects_v2.assert_called_once_with(
+        Bucket="cloudops-test"
+    )
+
+    assert result["service"] == "s3"
+    assert result["status"] == "healthy"
+    assert result["bucket"] == "cloudops-test"
+    assert len(result["objects"]) == 2
+    assert result["objects"][0]["key"] == "test/file.txt"
+    assert result["objects"][0]["size"] == 1024
+    assert result["objects"][0]["last_modified"] == "2026-08-31T10:00:00"
+
+
+def test_get_s3_objects_empty_bucket():
+    fake_response = {
+        "IsTruncated": False,
+    }
+
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_s3 = mock_client.return_value
+        mock_s3.list_objects_v2.return_value = fake_response
+
+        result = AWSService().get_s3_objects("empty-bucket")
+
+    assert result["service"] == "s3"
+    assert result["status"] == "healthy"
+    assert result["bucket"] == "empty-bucket"
+    assert result["objects"] == []
+
+
+def test_get_s3_objects_pagination():
+    first_response = {
+        "Contents": [
+            {
+                "Key": "file1.txt",
+                "Size": 100,
+                "LastModified": datetime(2026, 8, 31, 10, 0, 0),
+            }
+        ],
+        "IsTruncated": True,
+        "NextContinuationToken": "token-123",
+    }
+
+    second_response = {
+        "Contents": [
+            {
+                "Key": "file2.txt",
+                "Size": 200,
+                "LastModified": datetime(2026, 8, 31, 11, 0, 0),
+            }
+        ],
+        "IsTruncated": False,
+    }
+
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_s3 = mock_client.return_value
+        mock_s3.list_objects_v2.side_effect = [
+            first_response,
+            second_response,
+        ]
+
+        result = AWSService().get_s3_objects("cloudops-test")
+
+    assert result["service"] == "s3"
+    assert result["status"] == "healthy"
+    assert result["bucket"] == "cloudops-test"
+    assert len(result["objects"]) == 2
+
+    assert result["objects"][0]["key"] == "file1.txt"
+    assert result["objects"][1]["key"] == "file2.txt"
+
+    assert mock_s3.list_objects_v2.call_count == 2
+
+    mock_s3.list_objects_v2.assert_any_call(
+        Bucket="cloudops-test"
+    )
+
+    mock_s3.list_objects_v2.assert_any_call(
+        Bucket="cloudops-test",
+        ContinuationToken="token-123",
+    )
+
+
+def test_get_s3_objects_access_denied():
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_s3 = mock_client.return_value
+        mock_s3.list_objects_v2.side_effect = ClientError(
+            {
+                "Error": {
+                    "Code": "AccessDenied",
+                    "Message": "Access Denied",
+                }
+            },
+            "ListObjectsV2",
+        )
+
+        result = AWSService().get_s3_objects("private-bucket")
+
+    assert result["service"] == "s3"
+    assert result["status"] == "unhealthy"
+    assert result["bucket"] == "private-bucket"
+    assert "AccessDenied" in result["error"]
+
+
+def test_s3_objects_api_success():
+    fake_response = {
+        "Contents": [
+            {
+                "Key": "test/file.txt",
+                "Size": 1024,
+                "LastModified": datetime(2026, 8, 31, 10, 0, 0),
+            }
+        ],
+        "IsTruncated": False,
+    }
+
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_s3 = mock_client.return_value
+        mock_s3.list_objects_v2.return_value = fake_response
+
+        client = TestClient(app)
+
+        response = client.get(
+            "/cloud/aws/s3/buckets/cloudops-test/objects"
+        )
+
+    assert response.status_code == 200
+    assert response.json()["service"] == "s3"
+    assert response.json()["status"] == "healthy"
+    assert response.json()["bucket"] == "cloudops-test"
+    assert len(response.json()["objects"]) == 1
+    assert response.json()["objects"][0]["key"] == "test/file.txt"
+
+
+def test_s3_objects_api_access_denied():
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_s3 = mock_client.return_value
+        mock_s3.list_objects_v2.side_effect = ClientError(
+            {
+                "Error": {
+                    "Code": "AccessDenied",
+                    "Message": "Access Denied",
+                }
+            },
+            "ListObjectsV2",
+        )
+
+        client = TestClient(app)
+
+        response = client.get(
+            "/cloud/aws/s3/buckets/private-bucket/objects"
+        )
+
+    assert response.status_code == 403
+    assert "AccessDenied" in response.json()["detail"]

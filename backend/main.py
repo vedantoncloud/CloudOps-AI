@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 
 from services.aws_service import AWSService
-from fastapi import FastAPI, HTTPException
+
 
 app = FastAPI(
     title="CloudOps AI",
@@ -63,13 +63,28 @@ def aws_ec2_instances(state: str = None, tag: str = None):
 
     return aws_service.get_ec2_instances(state, tag)
 
+
 @app.get("/cloud/aws/s3/buckets")
 def aws_s3_buckets():
     return aws_service.get_s3_buckets()
 
+
 @app.get("/cloud/aws/s3/buckets/{bucket_name}")
 def aws_s3_bucket_details(bucket_name: str):
     result = aws_service.get_s3_bucket_details(bucket_name)
+
+    if result["status"] == "unhealthy":
+        raise HTTPException(
+            status_code=403,
+            detail=result["error"],
+        )
+
+    return result
+
+
+@app.get("/cloud/aws/s3/buckets/{bucket_name}/objects")
+def aws_s3_objects(bucket_name: str):
+    result = aws_service.get_s3_objects(bucket_name)
 
     if result["status"] == "unhealthy":
         raise HTTPException(

@@ -263,3 +263,51 @@ class AWSService:
                 "bucket": bucket_name,
                 "error": str(error),
             }
+
+    def get_s3_objects(self, bucket_name):
+        try:
+            s3 = boto3.client("s3")
+
+            objects = []
+            continuation_token = None
+
+            while True:
+                params = {
+                    "Bucket": bucket_name,
+                }
+
+                if continuation_token:
+                    params["ContinuationToken"] = continuation_token
+
+                response = s3.list_objects_v2(**params)
+
+                for obj in response.get("Contents", []):
+                    objects.append({
+                        "key": obj.get("Key"),
+                        "size": obj.get("Size"),
+                        "last_modified": (
+                            obj.get("LastModified").isoformat()
+                            if obj.get("LastModified")
+                            else None
+                        ),
+                    })
+
+                if not response.get("IsTruncated"):
+                    break
+
+                continuation_token = response.get("NextContinuationToken")
+
+            return {
+                "service": "s3",
+                "status": "healthy",
+                "bucket": bucket_name,
+                "objects": objects,
+            }
+
+        except (BotoCoreError, ClientError) as error:
+            return {
+                "service": "s3",
+                "status": "unhealthy",
+                "bucket": bucket_name,
+                "error": str(error),
+            }
