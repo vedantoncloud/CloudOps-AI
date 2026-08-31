@@ -269,3 +269,46 @@ def test_get_s3_buckets_when_access_denied():
     assert result["service"] == "s3"
     assert result["status"] == "unhealthy"
     assert "AccessDenied" in result["error"]
+
+def test_s3_bucket_details():
+    fake_response = {
+        "LocationConstraint": "ap-south-1"
+    }
+
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_s3 = mock_client.return_value
+        mock_s3.get_bucket_location.return_value = fake_response
+
+        result = AWSService().get_s3_bucket_details("cloudops-test")
+
+    mock_s3.get_bucket_location.assert_called_once_with(
+        Bucket="cloudops-test"
+    )
+
+    assert result == {
+        "service": "s3",
+        "status": "healthy",
+        "bucket": "cloudops-test",
+        "region": "ap-south-1",
+    }
+
+
+def test_s3_bucket_details_access_denied():
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_s3 = mock_client.return_value
+        mock_s3.get_bucket_location.side_effect = ClientError(
+            {
+                "Error": {
+                    "Code": "AccessDenied",
+                    "Message": "Access Denied",
+                }
+            },
+            "GetBucketLocation",
+        )
+
+        result = AWSService().get_s3_bucket_details("test-bucket")
+
+    assert result["service"] == "s3"
+    assert result["status"] == "unhealthy"
+    assert result["bucket"] == "test-bucket"
+    assert "AccessDenied" in result["error"]

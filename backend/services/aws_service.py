@@ -235,3 +235,31 @@ class AWSService:
                 "status": "unhealthy",
                 "error": str(error),
             }
+
+    def get_s3_bucket_details(self, bucket_name):
+        try:
+            s3 = boto3.client("s3")
+
+            response = s3.get_bucket_location(
+                Bucket=bucket_name
+            )
+
+            region = response.get("LocationConstraint")
+
+            if region is None:
+                region = "us-east-1"
+
+            return {
+                "service": "s3",
+                "status": "healthy",
+                "bucket": bucket_name,
+                "region": region,
+            }
+
+        except (BotoCoreError, ClientError) as error:
+            return {
+                "service": "s3",
+                "status": "unhealthy",
+                "bucket": bucket_name,
+                "error": str(error),
+            }
