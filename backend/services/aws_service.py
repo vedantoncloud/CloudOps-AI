@@ -371,3 +371,55 @@ class AWSService:
                 "instance_id": instance_id,
                 "error": str(error),
             }
+
+    def get_ec2_network_utilization(self, instance_id):
+        try:
+            cloudwatch = boto3.client("cloudwatch")
+
+            end_time = datetime.now(timezone.utc)
+            start_time = end_time - timedelta(minutes=10)
+
+            metrics = {}
+
+            for metric_name in ["NetworkIn", "NetworkOut"]:
+                response = cloudwatch.get_metric_statistics(
+                    Namespace="AWS/EC2",
+                    MetricName=metric_name,
+                    Dimensions=[
+                        {
+                            "Name": "InstanceId",
+                            "Value": instance_id,
+                        }
+                    ],
+                    StartTime=start_time,
+                    EndTime=end_time,
+                    Period=300,
+                    Statistics=["Average"],
+                )
+
+                datapoints = response.get("Datapoints", [])
+
+                if datapoints:
+                    latest = max(
+                        datapoints,
+                        key=lambda datapoint: datapoint.get("Timestamp")
+                    )
+
+                    metrics[metric_name] = latest.get("Average")
+                else:
+                    metrics[metric_name] = None
+
+            return {
+                "service": "cloudwatch",
+                "status": "healthy",
+                "instance_id": instance_id,
+                "metrics": metrics,
+            }
+
+        except (BotoCoreError, ClientError) as error:
+            return {
+                "service": "cloudwatch",
+                "status": "unhealthy",
+                "instance_id": instance_id,
+                "error": str(error),
+            }

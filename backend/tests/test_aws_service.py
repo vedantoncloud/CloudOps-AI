@@ -557,3 +557,151 @@ def test_get_ec2_cpu_utilization_access_denied():
     assert result["status"] == "unhealthy"
     assert result["instance_id"] == "i-1234567890"
     assert "AccessDenied" in result["error"]
+
+def test_get_ec2_network_utilization():
+    fake_timestamp = datetime(2026, 9, 1, 10, 0, 0)
+
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_cloudwatch = mock_client.return_value
+
+        mock_cloudwatch.get_metric_statistics.side_effect = [
+            {
+                "Datapoints": [
+                    {
+                        "Average": 12345.0,
+                        "Timestamp": fake_timestamp,
+                    }
+                ]
+            },
+            {
+                "Datapoints": [
+                    {
+                        "Average": 67890.0,
+                        "Timestamp": fake_timestamp,
+                    }
+                ]
+            },
+        ]
+
+        result = AWSService().get_ec2_network_utilization(
+            "i-1234567890"
+        )
+
+    assert result["service"] == "cloudwatch"
+    assert result["status"] == "healthy"
+    assert result["instance_id"] == "i-1234567890"
+
+    assert result["metrics"]["NetworkIn"] == 12345.0
+    assert result["metrics"]["NetworkOut"] == 67890.0
+
+    assert mock_cloudwatch.get_metric_statistics.call_count == 2
+
+
+def test_get_ec2_network_utilization_when_no_datapoints():
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_cloudwatch = mock_client.return_value
+
+        mock_cloudwatch.get_metric_statistics.return_value = {
+            "Datapoints": []
+        }
+
+        result = AWSService().get_ec2_network_utilization(
+            "i-1234567890"
+        )
+
+    assert result["service"] == "cloudwatch"
+    assert result["status"] == "healthy"
+    assert result["instance_id"] == "i-1234567890"
+    assert result["metrics"]["NetworkIn"] is None
+    assert result["metrics"]["NetworkOut"] is None
+
+
+def test_get_ec2_network_utilization_access_denied():
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_cloudwatch = mock_client.return_value
+
+        mock_cloudwatch.get_metric_statistics.side_effect = ClientError(
+            {
+                "Error": {
+                    "Code": "AccessDenied",
+                    "Message": "Access Denied",
+                }
+            },
+            "GetMetricStatistics",
+        )
+
+        result = AWSService().get_ec2_network_utilization(
+            "i-1234567890"
+        )
+
+    assert result["service"] == "cloudwatch"
+    assert result["status"] == "unhealthy"
+    assert result["instance_id"] == "i-1234567890"
+    assert "AccessDenied" in result["error"]
+
+def test_network_objects_api_success():
+    client = TestClient(app)
+
+    with patch(
+        "services.aws_service.boto3.client"
+    ) as mock_client:
+        mock_cloudwatch = mock_client.return_value
+
+        mock_cloudwatch.get_metric_statistics.side_effect = [
+            {
+                "Datapoints": [
+                    {
+                        "Average": 12345.0,
+                        "Timestamp": datetime(2026, 9, 1, 10, 0, 0),
+                    }
+                ]
+            },
+            {
+                "Datapoints": [
+                    {
+                        "Average": 67890.0,
+                        "Timestamp": datetime(2026, 9, 1, 10, 0, 0),
+                    }
+                ]
+            },
+        ]
+
+        response = client.get(
+            "/cloud/aws/ec2/instances/i-1234567890/network"
+        )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["service"] == "cloudwatch"
+    assert data["status"] == "healthy"
+    assert data["instance_id"] == "i-1234567890"
+    assert data["metrics"]["NetworkIn"] == 12345.0
+    assert data["metrics"]["NetworkOut"] == 67890.0
+
+
+def test_network_objects_api_access_denied():
+    client = TestClient(app)
+
+    with patch(
+        "services.aws_service.boto3.client"
+    ) as mock_client:
+        mock_cloudwatch = mock_client.return_value
+
+        mock_cloudwatch.get_metric_statistics.side_effect = ClientError(
+            {
+                "Error": {
+                    "Code": "AccessDenied",
+                    "Message": "Access Denied",
+                }
+            },
+            "GetMetricStatistics",
+        )
+
+        response = client.get(
+            "/cloud/aws/ec2/instances/i-1234567890/network"
+        )
+
+    assert response.status_code == 403
+    assert "AccessDenied" in response.json()["detail"]
