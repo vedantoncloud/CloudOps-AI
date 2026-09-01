@@ -423,3 +423,47 @@ class AWSService:
                 "instance_id": instance_id,
                 "error": str(error),
             }
+
+    def get_ec2_instance_status(self, instance_id):
+        try:
+            ec2 = boto3.client("ec2")
+
+            response = ec2.describe_instance_status(
+                InstanceIds=[instance_id],
+                IncludeAllInstances=True,
+            )
+
+            statuses = response.get("InstanceStatuses", [])
+
+            if not statuses:
+                return {
+                    "service": "ec2",
+                    "status": "healthy",
+                    "instance_id": instance_id,
+                    "instance_status": None,
+                    "system_status": None,
+                    "state": None,
+                }
+
+            instance = statuses[0]
+
+            instance_state = instance.get("InstanceState", {})
+            instance_status = instance.get("InstanceStatus", {})
+            system_status = instance.get("SystemStatus", {})
+
+            return {
+                "service": "ec2",
+                "status": "healthy",
+                "instance_id": instance_id,
+                "instance_status": instance_status.get("Status"),
+                "system_status": system_status.get("Status"),
+                "state": instance_state.get("Name"),
+            }
+
+        except (BotoCoreError, ClientError) as error:
+            return {
+                "service": "ec2",
+                "status": "unhealthy",
+                "instance_id": instance_id,
+                "error": str(error),
+            }

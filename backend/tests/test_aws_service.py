@@ -705,3 +705,88 @@ def test_network_objects_api_access_denied():
 
     assert response.status_code == 403
     assert "AccessDenied" in response.json()["detail"]
+
+def test_get_ec2_instance_status():
+    fake_response = {
+        "InstanceStatuses": [
+            {
+                "InstanceId": "i-1234567890",
+                "InstanceState": {
+                    "Name": "running"
+                },
+                "InstanceStatus": {
+                    "Status": "ok"
+                },
+                "SystemStatus": {
+                    "Status": "ok"
+                },
+            }
+        ]
+    }
+
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_ec2 = mock_client.return_value
+        mock_ec2.describe_instance_status.return_value = fake_response
+
+        result = AWSService().get_ec2_instance_status(
+            "i-1234567890"
+        )
+
+    mock_ec2.describe_instance_status.assert_called_once_with(
+        InstanceIds=["i-1234567890"],
+        IncludeAllInstances=True,
+    )
+
+    assert result == {
+        "service": "ec2",
+        "status": "healthy",
+        "instance_id": "i-1234567890",
+        "instance_status": "ok",
+        "system_status": "ok",
+        "state": "running",
+    }
+
+
+def test_get_ec2_instance_status_when_no_status():
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_ec2 = mock_client.return_value
+        mock_ec2.describe_instance_status.return_value = {
+            "InstanceStatuses": []
+        }
+
+        result = AWSService().get_ec2_instance_status(
+            "i-1234567890"
+        )
+
+    assert result == {
+        "service": "ec2",
+        "status": "healthy",
+        "instance_id": "i-1234567890",
+        "instance_status": None,
+        "system_status": None,
+        "state": None,
+    }
+
+
+def test_get_ec2_instance_status_access_denied():
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_ec2 = mock_client.return_value
+
+        mock_ec2.describe_instance_status.side_effect = ClientError(
+            {
+                "Error": {
+                    "Code": "AccessDenied",
+                    "Message": "Access Denied",
+                }
+            },
+            "DescribeInstanceStatus",
+        )
+
+        result = AWSService().get_ec2_instance_status(
+            "i-1234567890"
+        )
+
+    assert result["service"] == "ec2"
+    assert result["status"] == "unhealthy"
+    assert result["instance_id"] == "i-1234567890"
+    assert "AccessDenied" in result["error"]
