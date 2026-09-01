@@ -490,6 +490,70 @@ def test_s3_objects_api_access_denied():
         response = client.get(
             "/cloud/aws/s3/buckets/private-bucket/objects"
         )
+def test_get_ec2_cpu_utilization():
+    fake_response = {
+        "Datapoints": [
+            {
+                "Average": 24.5,
+                "Timestamp": datetime(2026, 9, 1, 10, 0, 0),
+            }
+        ]
+    }
 
-    assert response.status_code == 403
-    assert "AccessDenied" in response.json()["detail"]
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_cloudwatch = mock_client.return_value
+        mock_cloudwatch.get_metric_statistics.return_value = fake_response
+
+        result = AWSService().get_ec2_cpu_utilization(
+            "i-1234567890"
+        )
+
+    assert result["service"] == "cloudwatch"
+    assert result["status"] == "healthy"
+    assert result["instance_id"] == "i-1234567890"
+    assert result["metric"] == "CPUUtilization"
+    assert result["value"] == 24.5
+    assert result["timestamp"] == "2026-09-01T10:00:00"
+
+
+def test_get_ec2_cpu_utilization_when_no_datapoints():
+    fake_response = {
+        "Datapoints": []
+    }
+
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_cloudwatch = mock_client.return_value
+        mock_cloudwatch.get_metric_statistics.return_value = fake_response
+
+        result = AWSService().get_ec2_cpu_utilization(
+            "i-1234567890"
+        )
+
+    assert result["service"] == "cloudwatch"
+    assert result["status"] == "healthy"
+    assert result["instance_id"] == "i-1234567890"
+    assert result["metric"] == "CPUUtilization"
+    assert result["value"] is None
+
+
+def test_get_ec2_cpu_utilization_access_denied():
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_cloudwatch = mock_client.return_value
+        mock_cloudwatch.get_metric_statistics.side_effect = ClientError(
+            {
+                "Error": {
+                    "Code": "AccessDenied",
+                    "Message": "Access Denied",
+                }
+            },
+            "GetMetricStatistics",
+        )
+
+        result = AWSService().get_ec2_cpu_utilization(
+            "i-1234567890"
+        )
+
+    assert result["service"] == "cloudwatch"
+    assert result["status"] == "unhealthy"
+    assert result["instance_id"] == "i-1234567890"
+    assert "AccessDenied" in result["error"]

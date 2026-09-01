@@ -1,4 +1,5 @@
 import boto3
+from datetime import datetime, timedelta, timezone
 from botocore.exceptions import BotoCoreError, ClientError
 
 
@@ -309,5 +310,64 @@ class AWSService:
                 "service": "s3",
                 "status": "unhealthy",
                 "bucket": bucket_name,
+                "error": str(error),
+            }
+
+    def get_ec2_cpu_utilization(self, instance_id):
+        try:
+            cloudwatch = boto3.client("cloudwatch")
+
+            end_time = datetime.now(timezone.utc)
+            start_time = end_time - timedelta(minutes=10)
+
+            response = cloudwatch.get_metric_statistics(
+                Namespace="AWS/EC2",
+                MetricName="CPUUtilization",
+                Dimensions=[
+                    {
+                        "Name": "InstanceId",
+                        "Value": instance_id,
+                    }
+                ],
+                StartTime=start_time,
+                EndTime=end_time,
+                Period=300,
+                Statistics=["Average"],
+            )
+
+            datapoints = response.get("Datapoints", [])
+
+            if not datapoints:
+                return {
+                    "service": "cloudwatch",
+                    "status": "healthy",
+                    "instance_id": instance_id,
+                    "metric": "CPUUtilization",
+                    "value": None,
+                }
+
+            latest = max(
+                datapoints,
+                key=lambda datapoint: datapoint.get("Timestamp")
+            )
+
+            return {
+                "service": "cloudwatch",
+                "status": "healthy",
+                "instance_id": instance_id,
+                "metric": "CPUUtilization",
+                "value": latest.get("Average"),
+                "timestamp": (
+                    latest.get("Timestamp").isoformat()
+                    if latest.get("Timestamp")
+                    else None
+                ),
+            }
+
+        except (BotoCoreError, ClientError) as error:
+            return {
+                "service": "cloudwatch",
+                "status": "unhealthy",
+                "instance_id": instance_id,
                 "error": str(error),
             }
