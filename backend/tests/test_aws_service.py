@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from datetime import datetime
 
 from fastapi.testclient import TestClient
@@ -490,6 +490,224 @@ def test_s3_objects_api_access_denied():
         response = client.get(
             "/cloud/aws/s3/buckets/private-bucket/objects"
         )
+def test_get_s3_objects_with_prefix():
+    mock_s3 = MagicMock()
+
+    mock_s3.list_objects_v2.return_value = {
+        "Contents": [
+            {
+                "Key": "logs/app.log",
+                "Size": 100,
+                "LastModified": datetime(2026, 9, 1, 12, 0, 0),
+            },
+            {
+                "Key": "logs/error.log",
+                "Size": 200,
+                "LastModified": datetime(2026, 9, 1, 12, 5, 0),
+            },
+        ],
+        "IsTruncated": False,
+    }
+
+    with patch(
+        "services.aws_service.boto3.client",
+        return_value=mock_s3,
+    ):
+        service = AWSService()
+        result = service.get_s3_objects(
+            "cloudops-test",
+            prefix="logs/",
+        )
+
+    assert result["status"] == "healthy"
+    assert result["bucket"] == "cloudops-test"
+    assert result["prefix"] == "logs/"
+    assert len(result["objects"]) == 2
+
+    mock_s3.list_objects_v2.assert_called_once_with(
+        Bucket="cloudops-test",
+        Prefix="logs/",
+    )
+
+
+def test_get_s3_objects_with_max_keys():
+    mock_s3 = MagicMock()
+
+    mock_s3.list_objects_v2.return_value = {
+        "Contents": [
+            {
+                "Key": "file1.txt",
+                "Size": 100,
+                "LastModified": datetime(2026, 9, 1, 12, 0, 0),
+            },
+            {
+                "Key": "file2.txt",
+                "Size": 200,
+                "LastModified": datetime(2026, 9, 1, 12, 5, 0),
+            },
+            {
+                "Key": "file3.txt",
+                "Size": 300,
+                "LastModified": datetime(2026, 9, 1, 12, 10, 0),
+            },
+        ],
+        "IsTruncated": False,
+    }
+
+    with patch(
+        "services.aws_service.boto3.client",
+        return_value=mock_s3,
+    ):
+        service = AWSService()
+        result = service.get_s3_objects(
+            "cloudops-test",
+            max_keys=2,
+        )
+
+    assert result["status"] == "healthy"
+    assert len(result["objects"]) == 2
+    assert result["objects"][0]["key"] == "file1.txt"
+    assert result["objects"][1]["key"] == "file2.txt"
+
+    mock_s3.list_objects_v2.assert_called_once_with(
+        Bucket="cloudops-test",
+        MaxKeys=2,
+    )
+
+
+def test_get_s3_objects_with_prefix_and_max_keys():
+    mock_s3 = MagicMock()
+
+    mock_s3.list_objects_v2.return_value = {
+        "Contents": [
+            {
+                "Key": "logs/app.log",
+                "Size": 100,
+                "LastModified": datetime(2026, 9, 1, 12, 0, 0),
+            },
+            {
+                "Key": "logs/error.log",
+                "Size": 200,
+                "LastModified": datetime(2026, 9, 1, 12, 5, 0),
+            },
+        ],
+        "IsTruncated": False,
+    }
+
+    with patch(
+        "services.aws_service.boto3.client",
+        return_value=mock_s3,
+    ):
+        service = AWSService()
+        result = service.get_s3_objects(
+            "cloudops-test",
+            prefix="logs/",
+            max_keys=2,
+        )
+
+    assert result["status"] == "healthy"
+    assert result["bucket"] == "cloudops-test"
+    assert result["prefix"] == "logs/"
+    assert len(result["objects"]) == 2
+
+    mock_s3.list_objects_v2.assert_called_once_with(
+        Bucket="cloudops-test",
+        Prefix="logs/",
+        MaxKeys=2,
+    )
+
+
+def test_s3_objects_api_with_prefix():
+    fake_response = {
+        "Contents": [
+            {
+                "Key": "logs/app.log",
+                "Size": 100,
+                "LastModified": datetime(2026, 9, 1, 12, 0, 0),
+            },
+            {
+                "Key": "logs/error.log",
+                "Size": 200,
+                "LastModified": datetime(2026, 9, 1, 12, 5, 0),
+            },
+        ],
+        "IsTruncated": False,
+    }
+
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_s3 = mock_client.return_value
+        mock_s3.list_objects_v2.return_value = fake_response
+
+        client = TestClient(app)
+
+        response = client.get(
+            "/cloud/aws/s3/buckets/cloudops-test/objects?prefix=logs/"
+        )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["service"] == "s3"
+    assert data["status"] == "healthy"
+    assert data["bucket"] == "cloudops-test"
+    assert data["prefix"] == "logs/"
+    assert len(data["objects"]) == 2
+
+
+def test_s3_objects_api_with_max_keys():
+    fake_response = {
+        "Contents": [
+            {
+                "Key": "file1.txt",
+                "Size": 100,
+                "LastModified": datetime(2026, 9, 1, 12, 0, 0),
+            },
+            {
+                "Key": "file2.txt",
+                "Size": 200,
+                "LastModified": datetime(2026, 9, 1, 12, 5, 0),
+            },
+            {
+                "Key": "file3.txt",
+                "Size": 300,
+                "LastModified": datetime(2026, 9, 1, 12, 10, 0),
+            },
+        ],
+        "IsTruncated": False,
+    }
+
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_s3 = mock_client.return_value
+        mock_s3.list_objects_v2.return_value = fake_response
+
+        client = TestClient(app)
+
+        response = client.get(
+            "/cloud/aws/s3/buckets/cloudops-test/objects?max_keys=2"
+        )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["service"] == "s3"
+    assert data["status"] == "healthy"
+    assert data["bucket"] == "cloudops-test"
+    assert len(data["objects"]) == 2
+
+
+def test_s3_objects_api_rejects_invalid_max_keys():
+    client = TestClient(app)
+
+    response = client.get(
+        "/cloud/aws/s3/buckets/cloudops-test/objects?max_keys=0"
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "max_keys must be between 1 and 1000"
+
+
 def test_get_ec2_cpu_utilization():
     fake_response = {
         "Datapoints": [

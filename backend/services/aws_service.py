@@ -265,7 +265,7 @@ class AWSService:
                 "error": str(error),
             }
 
-    def get_s3_objects(self, bucket_name):
+    def get_s3_objects(self, bucket_name, prefix=None, max_keys=None):
         try:
             s3 = boto3.client("s3")
 
@@ -276,6 +276,12 @@ class AWSService:
                 params = {
                     "Bucket": bucket_name,
                 }
+
+                if prefix:
+                    params["Prefix"] = prefix
+
+                if max_keys:
+                    params["MaxKeys"] = min(max_keys, 1000)
 
                 if continuation_token:
                     params["ContinuationToken"] = continuation_token
@@ -293,6 +299,13 @@ class AWSService:
                         ),
                     })
 
+                    if max_keys and len(objects) >= max_keys:
+                        objects = objects[:max_keys]
+                        break
+
+                if max_keys and len(objects) >= max_keys:
+                    break
+
                 if not response.get("IsTruncated"):
                     break
 
@@ -302,6 +315,7 @@ class AWSService:
                 "service": "s3",
                 "status": "healthy",
                 "bucket": bucket_name,
+                "prefix": prefix,
                 "objects": objects,
             }
 
