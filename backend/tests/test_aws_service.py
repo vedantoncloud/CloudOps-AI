@@ -490,6 +490,11 @@ def test_s3_objects_api_access_denied():
         response = client.get(
             "/cloud/aws/s3/buckets/private-bucket/objects"
         )
+
+    assert response.status_code == 403
+    assert "AccessDenied" in response.json()["detail"]
+
+
 def test_get_s3_objects_with_prefix():
     mock_s3 = MagicMock()
 
@@ -776,6 +781,7 @@ def test_get_ec2_cpu_utilization_access_denied():
     assert result["instance_id"] == "i-1234567890"
     assert "AccessDenied" in result["error"]
 
+
 def test_get_ec2_network_utilization():
     fake_timestamp = datetime(2026, 9, 1, 10, 0, 0)
 
@@ -857,6 +863,7 @@ def test_get_ec2_network_utilization_access_denied():
     assert result["instance_id"] == "i-1234567890"
     assert "AccessDenied" in result["error"]
 
+
 def test_network_objects_api_success():
     client = TestClient(app)
 
@@ -924,6 +931,7 @@ def test_network_objects_api_access_denied():
     assert response.status_code == 403
     assert "AccessDenied" in response.json()["detail"]
 
+
 def test_get_ec2_instance_status():
     fake_response = {
         "InstanceStatuses": [
@@ -968,6 +976,7 @@ def test_get_ec2_instance_status():
 def test_get_ec2_instance_status_when_no_status():
     with patch("services.aws_service.boto3.client") as mock_client:
         mock_ec2 = mock_client.return_value
+
         mock_ec2.describe_instance_status.return_value = {
             "InstanceStatuses": []
         }
@@ -1008,3 +1017,207 @@ def test_get_ec2_instance_status_access_denied():
     assert result["status"] == "unhealthy"
     assert result["instance_id"] == "i-1234567890"
     assert "AccessDenied" in result["error"]
+
+
+def test_get_ec2_metrics():
+    cpu_response = {
+        "Datapoints": [
+            {
+                "Average": 24.5,
+                "Timestamp": datetime(2026, 9, 1, 10, 0, 0),
+            }
+        ]
+    }
+
+    network_responses = [
+        {
+            "Datapoints": [
+                {
+                    "Average": 12345.0,
+                    "Timestamp": datetime(2026, 9, 1, 10, 0, 0),
+                }
+            ]
+        },
+        {
+            "Datapoints": [
+                {
+                    "Average": 67890.0,
+                    "Timestamp": datetime(2026, 9, 1, 10, 0, 0),
+                }
+            ]
+        },
+    ]
+
+    status_response = {
+        "InstanceStatuses": [
+            {
+                "InstanceId": "i-1234567890",
+                "InstanceState": {
+                    "Name": "running"
+                },
+                "InstanceStatus": {
+                    "Status": "ok"
+                },
+                "SystemStatus": {
+                    "Status": "ok"
+                },
+            }
+        ]
+    }
+
+    cpu_client = MagicMock()
+    cpu_client.get_metric_statistics.return_value = cpu_response
+
+    network_client = MagicMock()
+    network_client.get_metric_statistics.side_effect = network_responses
+
+    ec2_client = MagicMock()
+    ec2_client.describe_instance_status.return_value = status_response
+
+    with patch(
+        "services.aws_service.boto3.client",
+        side_effect=[
+            cpu_client,
+            network_client,
+            ec2_client,
+        ],
+    ):
+        result = AWSService().get_ec2_metrics(
+            "i-1234567890"
+        )
+
+    assert result["service"] == "ec2"
+    assert result["status"] == "healthy"
+    assert result["instance_id"] == "i-1234567890"
+
+    assert result["cpu"]["service"] == "cloudwatch"
+    assert result["cpu"]["value"] == 24.5
+
+    assert result["network"]["service"] == "cloudwatch"
+    assert result["network"]["metrics"]["NetworkIn"] == 12345.0
+    assert result["network"]["metrics"]["NetworkOut"] == 67890.0
+
+    assert result["instance_status"]["service"] == "ec2"
+    assert result["instance_status"]["instance_status"] == "ok"
+    assert result["instance_status"]["system_status"] == "ok"
+    assert result["instance_status"]["state"] == "running"
+
+
+def test_get_ec2_metrics_when_one_metric_is_unhealthy():
+    with patch.object(
+        AWSService,
+        "get_ec2_cpu_utilization",
+        return_value={
+            "service": "cloudwatch",
+            "status": "healthy",
+            "instance_id": "i-1234567890",
+            "metric": "CPUUtilization",
+            "value": 24.5,
+            "timestamp": "2026-09-01T10:00:00",
+        },
+    ), patch.object(
+        AWSService,
+        "get_ec2_network_utilization",
+        return_value={
+            "service": "cloudwatch",
+            "status": "unhealthy",
+            "instance_id": "i-1234567890",
+            "error": "AccessDenied",
+        },
+    ), patch.object(
+        AWSService,
+        "get_ec2_instance_status",
+        return_value={
+            "service": "ec2",
+            "status": "healthy",
+            "instance_id": "i-1234567890",
+            "instance_status": "ok",
+            "system_status": "ok",
+            "state": "running",
+        },
+    ):
+        result = AWSService().get_ec2_metrics(
+            "i-1234567890"
+        )
+
+    assert result["service"] == "ec2"
+    assert result["status"] == "unhealthy"
+    assert result["instance_id"] == "i-1234567890"
+    assert result["network"]["status"] == "unhealthy"
+
+
+def test_ec2_metrics_api_success():
+    fake_result = {
+        "service": "ec2",
+        "status": "healthy",
+        "instance_id": "i-1234567890",
+        "cpu": {
+            "service": "cloudwatch",
+            "status": "healthy",
+            "instance_id": "i-1234567890",
+            "metric": "CPUUtilization",
+            "value": 24.5,
+            "timestamp": "2026-09-01T10:00:00",
+        },
+        "network": {
+            "service": "cloudwatch",
+            "status": "healthy",
+            "instance_id": "i-1234567890",
+            "metrics": {
+                "NetworkIn": 12345.0,
+                "NetworkOut": 67890.0,
+            },
+        },
+        "instance_status": {
+            "service": "ec2",
+            "status": "healthy",
+            "instance_id": "i-1234567890",
+            "instance_status": "ok",
+            "system_status": "ok",
+            "state": "running",
+        },
+    }
+
+    with patch(
+        "main.aws_service.get_ec2_metrics",
+        return_value=fake_result,
+    ):
+        client = TestClient(app)
+
+        response = client.get(
+            "/cloud/aws/ec2/instances/i-1234567890/metrics"
+        )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["service"] == "ec2"
+    assert data["status"] == "healthy"
+    assert data["instance_id"] == "i-1234567890"
+    assert data["cpu"]["value"] == 24.5
+    assert data["network"]["metrics"]["NetworkIn"] == 12345.0
+    assert data["network"]["metrics"]["NetworkOut"] == 67890.0
+    assert data["instance_status"]["state"] == "running"
+
+
+def test_ec2_metrics_api_access_denied():
+    fake_result = {
+        "service": "ec2",
+        "status": "unhealthy",
+        "instance_id": "i-1234567890",
+        "error": "AccessDenied",
+    }
+
+    with patch(
+        "main.aws_service.get_ec2_metrics",
+        return_value=fake_result,
+    ):
+        client = TestClient(app)
+
+        response = client.get(
+            "/cloud/aws/ec2/instances/i-1234567890/metrics"
+        )
+
+    assert response.status_code == 403
+    assert "AccessDenied" in response.json()["detail"]

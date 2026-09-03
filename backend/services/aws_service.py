@@ -438,6 +438,43 @@ class AWSService:
                 "error": str(error),
             }
 
+    def get_ec2_metrics(self, instance_id):
+        try:
+            cpu = self.get_ec2_cpu_utilization(instance_id)
+            network = self.get_ec2_network_utilization(instance_id)
+            status = self.get_ec2_instance_status(instance_id)
+
+            if (
+                cpu["status"] == "unhealthy"
+                or network["status"] == "unhealthy"
+                or status["status"] == "unhealthy"
+            ):
+                return {
+                    "service": "ec2",
+                    "status": "unhealthy",
+                    "instance_id": instance_id,
+                    "cpu": cpu,
+                    "network": network,
+                    "instance_status": status,
+                }
+
+            return {
+                "service": "ec2",
+                "status": "healthy",
+                "instance_id": instance_id,
+                "cpu": cpu,
+                "network": network,
+                "instance_status": status,
+            }
+
+        except (BotoCoreError, ClientError) as error:
+            return {
+                "service": "ec2",
+                "status": "unhealthy",
+                "instance_id": instance_id,
+                "error": str(error),
+            }
+
     def get_ec2_instance_status(self, instance_id):
         try:
             ec2 = boto3.client("ec2")

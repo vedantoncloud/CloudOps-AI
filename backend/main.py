@@ -108,6 +108,7 @@ def aws_s3_objects(
 
     return result
 
+
 @app.get("/cloud/aws/ec2/instances/{instance_id}/cpu")
 def aws_ec2_cpu(instance_id: str):
     result = aws_service.get_ec2_cpu_utilization(instance_id)
@@ -119,6 +120,7 @@ def aws_ec2_cpu(instance_id: str):
         )
 
     return result
+
 
 @app.get("/cloud/aws/ec2/instances/{instance_id}/network")
 def aws_ec2_network_utilization(instance_id: str):
@@ -132,9 +134,23 @@ def aws_ec2_network_utilization(instance_id: str):
 
     return result
 
+
 @app.get("/cloud/aws/ec2/instances/{instance_id}/status")
 def aws_ec2_instance_status(instance_id: str):
     result = aws_service.get_ec2_instance_status(instance_id)
+
+    if result["status"] == "unhealthy":
+        raise HTTPException(
+            status_code=403,
+            detail=result["error"],
+        )
+
+    return result
+
+
+@app.get("/cloud/aws/ec2/instances/{instance_id}/metrics")
+def aws_ec2_metrics(instance_id: str):
+    result = aws_service.get_ec2_metrics(instance_id)
 
     if result["status"] == "unhealthy":
         raise HTTPException(
