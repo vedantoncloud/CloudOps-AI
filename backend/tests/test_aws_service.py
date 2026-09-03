@@ -2032,3 +2032,210 @@ def test_s3_bucket_optimization_api_rejects_invalid_max_keys():
     assert response.json()["detail"] == "max_keys must be between 1 and 1000"
 
     mock_get_optimization.assert_not_called()
+
+
+def test_get_ec2_insights():
+    metrics = {
+        "service": "ec2",
+        "status": "healthy",
+        "instance_id": "i-1234567890",
+        "cpu": {
+            "service": "cloudwatch",
+            "status": "healthy",
+            "instance_id": "i-1234567890",
+            "metric": "CPUUtilization",
+            "value": 24.5,
+        },
+        "network": {
+            "service": "cloudwatch",
+            "status": "healthy",
+            "instance_id": "i-1234567890",
+            "metrics": {
+                "NetworkIn": 12345.0,
+                "NetworkOut": 67890.0,
+            },
+        },
+        "instance_status": {
+            "service": "ec2",
+            "status": "healthy",
+            "instance_id": "i-1234567890",
+            "instance_status": "ok",
+            "system_status": "ok",
+            "state": "running",
+        },
+    }
+
+    with patch.object(
+        AWSService,
+        "get_ec2_metrics",
+        return_value=metrics,
+    ):
+        result = AWSService().get_ec2_insights("i-1234567890")
+
+    assert result["service"] == "ec2"
+    assert result["status"] == "healthy"
+    assert result["instance_id"] == "i-1234567890"
+    assert result["health"] == "healthy"
+    assert result["insight_count"] == 0
+    assert result["insights"] == []
+
+
+def test_get_ec2_insights_high_cpu():
+    metrics = {
+        "service": "ec2",
+        "status": "healthy",
+        "instance_id": "i-1234567890",
+        "cpu": {
+            "service": "cloudwatch",
+            "status": "healthy",
+            "instance_id": "i-1234567890",
+            "metric": "CPUUtilization",
+            "value": 85.0,
+        },
+        "network": {
+            "service": "cloudwatch",
+            "status": "healthy",
+            "instance_id": "i-1234567890",
+            "metrics": {
+                "NetworkIn": 12345.0,
+                "NetworkOut": 67890.0,
+            },
+        },
+        "instance_status": {
+            "service": "ec2",
+            "status": "healthy",
+            "instance_id": "i-1234567890",
+            "instance_status": "ok",
+            "system_status": "ok",
+            "state": "running",
+        },
+    }
+
+    with patch.object(
+        AWSService,
+        "get_ec2_metrics",
+        return_value=metrics,
+    ):
+        result = AWSService().get_ec2_insights("i-1234567890")
+
+    assert result["health"] == "warning"
+    assert result["insight_count"] == 1
+    assert result["insights"][0]["type"] == "high_cpu_utilization"
+    assert result["insights"][0]["severity"] == "high"
+
+
+def test_get_ec2_insights_instance_status_issue():
+    metrics = {
+        "service": "ec2",
+        "status": "healthy",
+        "instance_id": "i-1234567890",
+        "cpu": {
+            "service": "cloudwatch",
+            "status": "healthy",
+            "instance_id": "i-1234567890",
+            "metric": "CPUUtilization",
+            "value": 25.0,
+        },
+        "network": {
+            "service": "cloudwatch",
+            "status": "healthy",
+            "instance_id": "i-1234567890",
+            "metrics": {
+                "NetworkIn": 12345.0,
+                "NetworkOut": 67890.0,
+            },
+        },
+        "instance_status": {
+            "service": "ec2",
+            "status": "healthy",
+            "instance_id": "i-1234567890",
+            "instance_status": "impaired",
+            "system_status": "ok",
+            "state": "running",
+        },
+    }
+
+    with patch.object(
+        AWSService,
+        "get_ec2_metrics",
+        return_value=metrics,
+    ):
+        result = AWSService().get_ec2_insights("i-1234567890")
+
+    assert result["health"] == "warning"
+    assert result["insight_count"] == 1
+    assert result["insights"][0]["type"] == "instance_status_issue"
+    assert result["insights"][0]["severity"] == "high"
+
+
+def test_ec2_insights_api_success():
+    fake_result = {
+        "service": "ec2",
+        "status": "healthy",
+        "instance_id": "i-1234567890",
+        "health": "warning",
+        "insight_count": 1,
+        "insights": [
+            {
+                "type": "high_cpu_utilization",
+                "severity": "high",
+                "message": "EC2 instance CPU utilization is 80% or higher.",
+                "recommendation": "Investigate CPU-intensive workloads and consider scaling or workload optimization.",
+            }
+        ],
+    }
+
+    with patch(
+        "main.aws_service.get_ec2_insights",
+        return_value=fake_result,
+    ) as mock_get_insights:
+        client = TestClient(app)
+
+        response = client.get(
+            "/cloud/aws/ec2/instances/i-1234567890/insights"
+        )
+
+    assert response.status_code == 200
+    assert response.json()["service"] == "ec2"
+    assert response.json()["status"] == "healthy"
+    assert response.json()["instance_id"] == "i-1234567890"
+    assert response.json()["health"] == "warning"
+    assert response.json()["insight_count"] == 1
+    assert response.json()["insights"][0]["type"] == "high_cpu_utilization"
+
+    mock_get_insights.assert_called_once_with("i-1234567890")
+
+
+def test_ec2_insights_api_access_denied():
+    fake_result = {
+        "service": "ec2",
+        "status": "unhealthy",
+        "instance_id": "i-1234567890",
+        "error": "AccessDenied",
+    }
+
+    with patch(
+        "main.aws_service.get_ec2_insights",
+        return_value=fake_result,
+    ):
+        client = TestClient(app)
+
+        response = client.get(
+            "/cloud/aws/ec2/instances/i-1234567890/insights"
+        )
+
+    assert response.status_code == 403
+    assert "AccessDenied" in response.json()["detail"]
+
+
+def test_ec2_insights_api_rejects_invalid_instance_id():
+    with patch("main.aws_service.get_ec2_insights") as mock_get_insights:
+        client = TestClient(app)
+
+        response = client.get(
+            "/cloud/aws/ec2/instances/not-an-instance/insights"
+        )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid EC2 instance ID"
+    mock_get_insights.assert_not_called()

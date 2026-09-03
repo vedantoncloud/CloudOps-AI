@@ -815,6 +815,103 @@ class AWSService:
                 "error": str(error),
             }
 
+
+    def get_ec2_insights(self, instance_id):
+        try:
+            metrics = self.get_ec2_metrics(instance_id)
+
+            if metrics["status"] == "unhealthy":
+                return metrics
+
+            cpu = metrics["cpu"]
+            network = metrics["network"]
+            instance_status = metrics["instance_status"]
+
+            insights = []
+
+            cpu_value = cpu.get("value")
+            if cpu_value is None:
+                insights.append({
+                    "type": "cpu_data_missing",
+                    "severity": "low",
+                    "message": "No recent CPU utilization datapoint is available.",
+                    "recommendation": "Verify CloudWatch monitoring and confirm that the instance is reporting metrics.",
+                })
+            elif cpu_value >= 80:
+                insights.append({
+                    "type": "high_cpu_utilization",
+                    "severity": "high",
+                    "message": "EC2 instance CPU utilization is 80% or higher.",
+                    "recommendation": "Investigate CPU-intensive workloads and consider scaling or workload optimization.",
+                })
+            elif cpu_value >= 60:
+                insights.append({
+                    "type": "elevated_cpu_utilization",
+                    "severity": "medium",
+                    "message": "EC2 instance CPU utilization is elevated.",
+                    "recommendation": "Review recent workload changes and monitor CPU usage for sustained growth.",
+                })
+
+            state = instance_status.get("state")
+            if state is not None and state != "running":
+                insights.append({
+                    "type": "instance_not_running",
+                    "severity": "low",
+                    "message": f"EC2 instance is currently {state}.",
+                    "recommendation": "Confirm that the current instance state is expected for this workload.",
+                })
+
+            instance_check = instance_status.get("instance_status")
+            if instance_check is not None and instance_check != "ok":
+                insights.append({
+                    "type": "instance_status_issue",
+                    "severity": "high",
+                    "message": f"EC2 instance status check is {instance_check}.",
+                    "recommendation": "Investigate the instance status check failure and review AWS system or instance events.",
+                })
+
+            system_check = instance_status.get("system_status")
+            if system_check is not None and system_check != "ok":
+                insights.append({
+                    "type": "system_status_issue",
+                    "severity": "high",
+                    "message": f"EC2 system status check is {system_check}.",
+                    "recommendation": "Investigate the underlying host or AWS infrastructure status affecting the instance.",
+                })
+
+            if (
+                network.get("metrics", {}).get("NetworkIn") is None
+                or network.get("metrics", {}).get("NetworkOut") is None
+            ):
+                insights.append({
+                    "type": "network_data_missing",
+                    "severity": "low",
+                    "message": "One or more recent network utilization datapoints are unavailable.",
+                    "recommendation": "Verify CloudWatch network metric reporting for the instance.",
+                })
+
+            health = "warning" if insights else "healthy"
+
+            return {
+                "service": "ec2",
+                "status": "healthy",
+                "instance_id": instance_id,
+                "health": health,
+                "insight_count": len(insights),
+                "insights": insights,
+                "cpu": cpu,
+                "network": network,
+                "instance_status": instance_status,
+            }
+
+        except (BotoCoreError, ClientError) as error:
+            return {
+                "service": "ec2",
+                "status": "unhealthy",
+                "instance_id": instance_id,
+                "error": str(error),
+            }
+
     def get_ec2_instance_status(self, instance_id):
         try:
             ec2 = boto3.client("ec2")

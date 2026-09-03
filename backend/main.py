@@ -253,6 +253,25 @@ def aws_s3_bucket_optimization(
     return result
 
 
+@app.get("/cloud/aws/ec2/instances/{instance_id}/insights")
+def aws_ec2_insights(instance_id: str):
+    if not re.fullmatch(r"i-[0-9a-fA-F]{8,17}", instance_id):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid EC2 instance ID",
+        )
+
+    result = aws_service.get_ec2_insights(instance_id)
+
+    if result["status"] == "unhealthy":
+        raise HTTPException(
+            status_code=403,
+            detail=result["error"],
+        )
+
+    return result
+
+
 @app.get("/cloud/aws/ec2/instances/{instance_id}/cpu")
 def aws_ec2_cpu(instance_id: str):
     result = aws_service.get_ec2_cpu_utilization(instance_id)
