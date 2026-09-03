@@ -512,6 +512,81 @@ class AWSService:
                 "error": str(error),
             }
 
+    def get_s3_bucket_insights(self, bucket_name, prefix=None, max_keys=None):
+        try:
+            storage = self.get_s3_largest_objects(
+                bucket_name,
+                prefix=prefix,
+                max_keys=max_keys,
+                top_n=1,
+            )
+
+            if storage["status"] == "unhealthy":
+                return storage
+
+            total_objects = storage["total_objects"]
+            total_size_bytes = storage["total_size_bytes"]
+            average_object_size_bytes = storage["average_object_size_bytes"]
+            largest_object = storage["largest_object"]
+
+            insights = []
+
+            if total_objects == 0:
+                insights.append({
+                    "type": "empty_bucket",
+                    "severity": "low",
+                    "message": "Bucket contains no objects.",
+                    "recommendation": "Verify whether this bucket is still required.",
+                })
+
+            if largest_object and largest_object["size"] >= 1024 ** 3:
+                insights.append({
+                    "type": "large_object",
+                    "severity": "medium",
+                    "message": "Bucket contains an object larger than 1 GB.",
+                    "recommendation": "Review the object and consider compression or lifecycle policies.",
+                })
+
+            if total_objects >= 100000:
+                insights.append({
+                    "type": "high_object_count",
+                    "severity": "medium",
+                    "message": "Bucket contains a very large number of objects.",
+                    "recommendation": "Review object lifecycle and prefix organization to reduce management overhead.",
+                })
+
+            if total_objects >= 1000 and average_object_size_bytes <= 128 * 1024:
+                insights.append({
+                    "type": "many_small_objects",
+                    "severity": "low",
+                    "message": "Bucket contains many relatively small objects.",
+                    "recommendation": "Consider combining small files where practical and review storage access patterns.",
+                })
+
+            health = "warning" if insights else "healthy"
+
+            return {
+                "service": "s3",
+                "status": "healthy",
+                "bucket": bucket_name,
+                "prefix": prefix,
+                "health": health,
+                "insight_count": len(insights),
+                "insights": insights,
+                "total_objects": total_objects,
+                "total_size_bytes": total_size_bytes,
+                "average_object_size_bytes": average_object_size_bytes,
+                "largest_object": largest_object,
+            }
+
+        except (BotoCoreError, ClientError) as error:
+            return {
+                "service": "s3",
+                "status": "unhealthy",
+                "bucket": bucket_name,
+                "error": str(error),
+            }
+
     def get_ec2_cpu_utilization(self, instance_id):
         try:
             cloudwatch = boto3.client("cloudwatch")

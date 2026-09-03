@@ -1724,3 +1724,93 @@ def test_s3_bucket_health_api_access_denied():
     assert response.status_code == 403
     assert "AccessDenied" in response.json()["detail"]
 
+def test_s3_bucket_insights_api_success():
+    fake_result = {
+        "service": "s3",
+        "status": "healthy",
+        "bucket": "cloudops-test",
+        "prefix": "logs/",
+        "health": "healthy",
+        "risk_count": 1,
+        "risks": [
+            {
+                "type": "large_object",
+                "severity": "medium",
+                "message": "Large object detected.",
+            }
+        ],
+        "total_objects": 10,
+        "total_size_bytes": 500000000,
+        "average_object_size_bytes": 50000000,
+        "largest_object": {
+            "key": "logs/large.zip",
+            "size": 200000000,
+            "last_modified": "2026-09-01T12:00:00",
+        },
+    }
+
+    with patch(
+        "main.aws_service.get_s3_bucket_insights",
+        return_value=fake_result,
+    ) as mock_get_insights:
+        client = TestClient(app)
+
+        response = client.get(
+            "/cloud/aws/s3/buckets/cloudops-test/insights"
+            "?prefix=logs/&max_keys=100"
+        )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["service"] == "s3"
+    assert data["status"] == "healthy"
+    assert data["bucket"] == "cloudops-test"
+    assert data["prefix"] == "logs/"
+    assert data["risk_count"] == 1
+    assert data["total_objects"] == 10
+    assert data["largest_object"]["key"] == "logs/large.zip"
+
+    mock_get_insights.assert_called_once_with(
+        "cloudops-test",
+        prefix="logs/",
+        max_keys=100,
+    )
+
+
+def test_s3_bucket_insights_api_access_denied():
+    fake_result = {
+        "service": "s3",
+        "status": "unhealthy",
+        "bucket": "private-bucket",
+        "error": "AccessDenied",
+    }
+
+    with patch(
+        "main.aws_service.get_s3_bucket_insights",
+        return_value=fake_result,
+    ):
+        client = TestClient(app)
+
+        response = client.get(
+            "/cloud/aws/s3/buckets/private-bucket/insights"
+        )
+
+    assert response.status_code == 403
+    assert "AccessDenied" in response.json()["detail"]
+
+
+def test_s3_bucket_insights_api_rejects_invalid_max_keys():
+    with patch("main.aws_service.get_s3_bucket_insights") as mock_get_insights:
+        client = TestClient(app)
+
+        response = client.get(
+            "/cloud/aws/s3/buckets/cloudops-test/insights?max_keys=1001"
+        )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "max_keys must be between 1 and 1000"
+
+    mock_get_insights.assert_not_called()
+
