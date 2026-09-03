@@ -226,6 +226,33 @@ def aws_s3_bucket_insights(
     return result
 
 
+@app.get("/cloud/aws/s3/buckets/{bucket_name}/optimization")
+def aws_s3_bucket_optimization(
+    bucket_name: str,
+    prefix: str = None,
+    max_keys: int = None,
+):
+    if max_keys is not None and (max_keys <= 0 or max_keys > 1000):
+        raise HTTPException(
+            status_code=400,
+            detail="max_keys must be between 1 and 1000",
+        )
+
+    result = aws_service.get_s3_bucket_optimization(
+        bucket_name,
+        prefix=prefix,
+        max_keys=max_keys,
+    )
+
+    if result["status"] == "unhealthy":
+        raise HTTPException(
+            status_code=403,
+            detail=result["error"],
+        )
+
+    return result
+
+
 @app.get("/cloud/aws/ec2/instances/{instance_id}/cpu")
 def aws_ec2_cpu(instance_id: str):
     result = aws_service.get_ec2_cpu_utilization(instance_id)

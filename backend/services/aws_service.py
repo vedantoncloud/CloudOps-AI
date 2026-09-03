@@ -587,6 +587,86 @@ class AWSService:
                 "error": str(error),
             }
 
+    def get_s3_bucket_optimization(self, bucket_name, prefix=None, max_keys=None):
+        try:
+            storage = self.get_s3_largest_objects(
+                bucket_name,
+                prefix=prefix,
+                max_keys=max_keys,
+                top_n=1,
+            )
+
+            if storage["status"] == "unhealthy":
+                return storage
+
+            total_objects = storage["total_objects"]
+            total_size_bytes = storage["total_size_bytes"]
+            average_object_size_bytes = storage["average_object_size_bytes"]
+            largest_object = storage["largest_object"]
+
+            recommendations = []
+
+            if total_objects == 0:
+                recommendations.append({
+                    "type": "empty_bucket",
+                    "priority": "low",
+                    "message": "Bucket contains no objects.",
+                    "recommendation": "Review whether the bucket is still required and remove unused buckets when appropriate.",
+                })
+
+            if largest_object and largest_object["size"] >= 5 * 1024 ** 3:
+                recommendations.append({
+                    "type": "very_large_object",
+                    "priority": "medium",
+                    "message": "Bucket contains an object larger than 5 GB.",
+                    "recommendation": "Review large objects and consider compression, multipart-aware workflows, or lifecycle transitions where appropriate.",
+                })
+
+            if total_objects >= 1000 and average_object_size_bytes <= 128 * 1024:
+                recommendations.append({
+                    "type": "small_object_optimization",
+                    "priority": "low",
+                    "message": "Bucket contains many relatively small objects.",
+                    "recommendation": "Consider consolidating small files where practical to reduce object-management overhead.",
+                })
+
+            if total_objects >= 100000:
+                recommendations.append({
+                    "type": "object_count_optimization",
+                    "priority": "medium",
+                    "message": "Bucket contains a very large number of objects.",
+                    "recommendation": "Review lifecycle rules, retention requirements, and prefix organization to manage object growth.",
+                })
+
+            if total_size_bytes >= 100 * 1024 ** 3:
+                recommendations.append({
+                    "type": "large_storage_footprint",
+                    "priority": "medium",
+                    "message": "Bucket storage footprint exceeds 100 GB.",
+                    "recommendation": "Review lifecycle policies and transition infrequently accessed data to appropriate storage classes.",
+                })
+
+            return {
+                "service": "s3",
+                "status": "healthy",
+                "bucket": bucket_name,
+                "prefix": prefix,
+                "recommendation_count": len(recommendations),
+                "recommendations": recommendations,
+                "total_objects": total_objects,
+                "total_size_bytes": total_size_bytes,
+                "average_object_size_bytes": average_object_size_bytes,
+                "largest_object": largest_object,
+            }
+
+        except (BotoCoreError, ClientError) as error:
+            return {
+                "service": "s3",
+                "status": "unhealthy",
+                "bucket": bucket_name,
+                "error": str(error),
+            }
+
     def get_ec2_cpu_utilization(self, instance_id):
         try:
             cloudwatch = boto3.client("cloudwatch")

@@ -1814,3 +1814,221 @@ def test_s3_bucket_insights_api_rejects_invalid_max_keys():
 
     mock_get_insights.assert_not_called()
 
+
+
+def test_get_s3_bucket_optimization():
+    fake_result = {
+        "service": "s3",
+        "status": "healthy",
+        "bucket": "cloudops-test",
+        "prefix": None,
+        "recommendation_count": 2,
+        "recommendations": [
+            {
+                "type": "very_large_object",
+                "priority": "medium",
+                "message": "Bucket contains an object larger than 5 GB.",
+                "recommendation": "Review large objects and consider compression, multipart-aware workflows, or lifecycle transitions where appropriate.",
+            },
+            {
+                "type": "large_storage_footprint",
+                "priority": "medium",
+                "message": "Bucket storage footprint exceeds 100 GB.",
+                "recommendation": "Review lifecycle policies and transition infrequently accessed data to appropriate storage classes.",
+            },
+        ],
+        "total_objects": 10,
+        "total_size_bytes": 150 * 1024 ** 3,
+        "average_object_size_bytes": 15 * 1024 ** 3,
+        "largest_object": {
+            "key": "backup.tar",
+            "size": 6 * 1024 ** 3,
+            "last_modified": "2026-09-01T12:00:00",
+        },
+    }
+
+    with patch.object(
+        AWSService,
+        "get_s3_largest_objects",
+        return_value={
+            "service": "s3",
+            "status": "healthy",
+            "bucket": "cloudops-test",
+            "prefix": None,
+            "top_n": 1,
+            "total_objects": 10,
+            "total_size_bytes": 150 * 1024 ** 3,
+            "average_object_size_bytes": 15 * 1024 ** 3,
+            "largest_object": {
+                "key": "backup.tar",
+                "size": 6 * 1024 ** 3,
+                "last_modified": "2026-09-01T12:00:00",
+            },
+            "objects": [],
+        },
+    ) as mock_get_largest:
+        result = AWSService().get_s3_bucket_optimization("cloudops-test")
+
+    assert result["service"] == "s3"
+    assert result["status"] == "healthy"
+    assert result["bucket"] == "cloudops-test"
+    assert result["recommendation_count"] == 2
+    assert result["recommendations"][0]["type"] == "very_large_object"
+    assert result["recommendations"][0]["priority"] == "medium"
+    assert result["recommendations"][1]["type"] == "large_storage_footprint"
+    assert result["total_objects"] == 10
+    assert result["total_size_bytes"] == 150 * 1024 ** 3
+    assert result["largest_object"]["key"] == "backup.tar"
+
+    mock_get_largest.assert_called_once_with(
+        "cloudops-test",
+        prefix=None,
+        max_keys=None,
+        top_n=1,
+    )
+
+
+def test_get_s3_bucket_optimization_empty_bucket():
+    fake_result = {
+        "service": "s3",
+        "status": "healthy",
+        "bucket": "empty-bucket",
+        "prefix": None,
+        "top_n": 1,
+        "total_objects": 0,
+        "total_size_bytes": 0,
+        "average_object_size_bytes": 0,
+        "largest_object": None,
+        "objects": [],
+    }
+
+    with patch.object(
+        AWSService,
+        "get_s3_largest_objects",
+        return_value=fake_result,
+    ):
+        result = AWSService().get_s3_bucket_optimization("empty-bucket")
+
+    assert result["status"] == "healthy"
+    assert result["recommendation_count"] == 1
+    assert result["recommendations"][0]["type"] == "empty_bucket"
+    assert result["recommendations"][0]["priority"] == "low"
+
+
+def test_get_s3_bucket_optimization_access_denied():
+    fake_result = {
+        "service": "s3",
+        "status": "unhealthy",
+        "bucket": "private-bucket",
+        "error": "AccessDenied",
+    }
+
+    with patch.object(
+        AWSService,
+        "get_s3_largest_objects",
+        return_value=fake_result,
+    ) as mock_get_largest:
+        result = AWSService().get_s3_bucket_optimization("private-bucket")
+
+    assert result["service"] == "s3"
+    assert result["status"] == "unhealthy"
+    assert result["bucket"] == "private-bucket"
+    assert "AccessDenied" in result["error"]
+
+    mock_get_largest.assert_called_once_with(
+        "private-bucket",
+        prefix=None,
+        max_keys=None,
+        top_n=1,
+    )
+
+
+def test_s3_bucket_optimization_api_success():
+    fake_result = {
+        "service": "s3",
+        "status": "healthy",
+        "bucket": "cloudops-test",
+        "prefix": "logs/",
+        "recommendation_count": 1,
+        "recommendations": [
+            {
+                "type": "small_object_optimization",
+                "priority": "low",
+                "message": "Bucket contains many relatively small objects.",
+                "recommendation": "Consider consolidating small files where practical to reduce object-management overhead.",
+            }
+        ],
+        "total_objects": 1000,
+        "total_size_bytes": 100000000,
+        "average_object_size_bytes": 100000,
+        "largest_object": {
+            "key": "logs/app.log",
+            "size": 500000,
+            "last_modified": "2026-09-01T12:00:00",
+        },
+    }
+
+    with patch(
+        "main.aws_service.get_s3_bucket_optimization",
+        return_value=fake_result,
+    ) as mock_get_optimization:
+        client = TestClient(app)
+
+        response = client.get(
+            "/cloud/aws/s3/buckets/cloudops-test/optimization"
+            "?prefix=logs/&max_keys=100"
+        )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["service"] == "s3"
+    assert data["status"] == "healthy"
+    assert data["bucket"] == "cloudops-test"
+    assert data["prefix"] == "logs/"
+    assert data["recommendation_count"] == 1
+    assert data["recommendations"][0]["type"] == "small_object_optimization"
+    assert data["total_objects"] == 1000
+
+    mock_get_optimization.assert_called_once_with(
+        "cloudops-test",
+        prefix="logs/",
+        max_keys=100,
+    )
+
+
+def test_s3_bucket_optimization_api_access_denied():
+    fake_result = {
+        "service": "s3",
+        "status": "unhealthy",
+        "bucket": "private-bucket",
+        "error": "AccessDenied",
+    }
+
+    with patch(
+        "main.aws_service.get_s3_bucket_optimization",
+        return_value=fake_result,
+    ):
+        client = TestClient(app)
+
+        response = client.get(
+            "/cloud/aws/s3/buckets/private-bucket/optimization"
+        )
+
+    assert response.status_code == 403
+    assert "AccessDenied" in response.json()["detail"]
+
+
+def test_s3_bucket_optimization_api_rejects_invalid_max_keys():
+    with patch("main.aws_service.get_s3_bucket_optimization") as mock_get_optimization:
+        client = TestClient(app)
+
+        response = client.get(
+            "/cloud/aws/s3/buckets/cloudops-test/optimization?max_keys=1001"
+        )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "max_keys must be between 1 and 1000"
+
+    mock_get_optimization.assert_not_called()
