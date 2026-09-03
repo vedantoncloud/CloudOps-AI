@@ -1221,3 +1221,506 @@ def test_ec2_metrics_api_access_denied():
 
     assert response.status_code == 403
     assert "AccessDenied" in response.json()["detail"]
+
+
+def test_ec2_metrics_api_rejects_invalid_instance_id():
+    client = TestClient(app)
+
+    response = client.get(
+        "/cloud/aws/ec2/instances/invalid-instance-id/metrics"
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid EC2 instance ID"
+
+
+def test_ec2_metrics_api_accepts_valid_instance_id():
+    fake_result = {
+        "service": "ec2",
+        "status": "healthy",
+        "instance_id": "i-1234567890",
+        "cpu": {},
+        "network": {},
+        "instance_status": {},
+    }
+
+    with patch(
+        "main.aws_service.get_ec2_metrics",
+        return_value=fake_result,
+    ) as mock_get_metrics:
+        client = TestClient(app)
+
+        response = client.get(
+            "/cloud/aws/ec2/instances/i-1234567890/metrics"
+        )
+
+    assert response.status_code == 200
+    assert response.json()["instance_id"] == "i-1234567890"
+    mock_get_metrics.assert_called_once_with("i-1234567890")
+
+
+
+def test_get_s3_bucket_health_healthy():
+    fake_result = {
+        "service": "s3",
+        "status": "healthy",
+        "bucket": "cloudops-test",
+        "prefix": None,
+        "top_n": 1,
+        "total_objects": 3,
+        "total_size_bytes": 6000,
+        "average_object_size_bytes": 2000,
+        "largest_object": {
+            "key": "large.zip",
+            "size": 4000,
+            "last_modified": "2026-09-01T12:00:00",
+        },
+        "objects": [
+            {
+                "key": "large.zip",
+                "size": 4000,
+                "last_modified": "2026-09-01T12:00:00",
+            }
+        ],
+    }
+
+    with patch.object(
+        AWSService,
+        "get_s3_largest_objects",
+        return_value=fake_result,
+    ) as mock_get_largest:
+        result = AWSService().get_s3_bucket_health("cloudops-test")
+
+    assert result["service"] == "s3"
+    assert result["status"] == "healthy"
+    assert result["bucket"] == "cloudops-test"
+    assert result["health"] == "healthy"
+    assert result["risk_count"] == 0
+    assert result["risks"] == []
+    assert result["total_objects"] == 3
+    assert result["total_size_bytes"] == 6000
+    assert result["average_object_size_bytes"] == 2000
+    assert result["largest_object"]["key"] == "large.zip"
+
+    mock_get_largest.assert_called_once_with(
+        "cloudops-test",
+        prefix=None,
+        max_keys=None,
+        top_n=1,
+    )
+
+
+def test_get_s3_bucket_health_empty_bucket():
+    fake_result = {
+        "service": "s3",
+        "status": "healthy",
+        "bucket": "empty-bucket",
+        "prefix": "logs/",
+        "top_n": 1,
+        "total_objects": 0,
+        "total_size_bytes": 0,
+        "average_object_size_bytes": 0,
+        "largest_object": None,
+        "objects": [],
+    }
+
+    with patch.object(
+        AWSService,
+        "get_s3_largest_objects",
+        return_value=fake_result,
+    ):
+        result = AWSService().get_s3_bucket_health(
+            "empty-bucket",
+            prefix="logs/",
+            max_keys=100,
+        )
+
+    assert result["status"] == "healthy"
+    assert result["health"] == "warning"
+    assert result["risk_count"] == 1
+    assert result["risks"][0]["type"] == "empty_bucket"
+    assert result["risks"][0]["severity"] == "low"
+    assert result["total_objects"] == 0
+    assert result["largest_object"] is None
+
+
+def test_get_s3_bucket_health_access_denied():
+    fake_result = {
+        "service": "s3",
+        "status": "unhealthy",
+        "bucket": "private-bucket",
+        "error": "AccessDenied",
+    }
+
+    with patch.object(
+        AWSService,
+        "get_s3_largest_objects",
+        return_value=fake_result,
+    ) as mock_get_largest:
+        result = AWSService().get_s3_bucket_health("private-bucket")
+
+    assert result["service"] == "s3"
+    assert result["status"] == "unhealthy"
+    assert result["bucket"] == "private-bucket"
+    assert "AccessDenied" in result["error"]
+
+    mock_get_largest.assert_called_once_with(
+        "private-bucket",
+        prefix=None,
+        max_keys=None,
+        top_n=1,
+    )
+
+
+def test_get_s3_largest_objects():
+    fake_response = {
+        "Contents": [
+            {
+                "Key": "small.txt",
+                "Size": 100,
+                "LastModified": datetime(2026, 9, 1, 12, 0, 0),
+            },
+            {
+                "Key": "large.zip",
+                "Size": 5000,
+                "LastModified": datetime(2026, 9, 1, 12, 5, 0),
+            },
+            {
+                "Key": "medium.log",
+                "Size": 1000,
+                "LastModified": datetime(2026, 9, 1, 12, 10, 0),
+            },
+        ],
+        "IsTruncated": False,
+    }
+
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_s3 = mock_client.return_value
+        mock_s3.list_objects_v2.return_value = fake_response
+
+        result = AWSService().get_s3_largest_objects(
+            "cloudops-test"
+        )
+
+    assert result["service"] == "s3"
+    assert result["status"] == "healthy"
+    assert result["bucket"] == "cloudops-test"
+    assert result["prefix"] is None
+    assert result["top_n"] == 5
+    assert result["total_objects"] == 3
+    assert result["total_size_bytes"] == 6100
+    assert result["average_object_size_bytes"] == 6100 / 3
+    assert result["largest_object"]["key"] == "large.zip"
+    assert result["largest_object"]["size"] == 5000
+    assert len(result["objects"]) == 3
+    assert result["objects"][0]["key"] == "large.zip"
+    assert result["objects"][0]["size"] == 5000
+    assert result["objects"][1]["key"] == "medium.log"
+    assert result["objects"][2]["key"] == "small.txt"
+
+
+def test_get_s3_largest_objects_with_top_n():
+    fake_response = {
+        "Contents": [
+            {
+                "Key": "file1.txt",
+                "Size": 100,
+                "LastModified": datetime(2026, 9, 1, 12, 0, 0),
+            },
+            {
+                "Key": "file2.txt",
+                "Size": 500,
+                "LastModified": datetime(2026, 9, 1, 12, 5, 0),
+            },
+            {
+                "Key": "file3.txt",
+                "Size": 300,
+                "LastModified": datetime(2026, 9, 1, 12, 10, 0),
+            },
+        ],
+        "IsTruncated": False,
+    }
+
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_s3 = mock_client.return_value
+        mock_s3.list_objects_v2.return_value = fake_response
+
+        result = AWSService().get_s3_largest_objects(
+            "cloudops-test",
+            top_n=2,
+        )
+
+    assert result["status"] == "healthy"
+    assert result["top_n"] == 2
+    assert result["total_objects"] == 3
+    assert result["total_size_bytes"] == 900
+    assert result["average_object_size_bytes"] == 300
+    assert result["largest_object"]["key"] == "file2.txt"
+    assert result["largest_object"]["size"] == 500
+    assert len(result["objects"]) == 2
+    assert result["objects"][0]["key"] == "file2.txt"
+    assert result["objects"][1]["key"] == "file3.txt"
+
+
+def test_get_s3_largest_objects_with_prefix():
+    fake_response = {
+        "Contents": [
+            {
+                "Key": "logs/app.log",
+                "Size": 200,
+                "LastModified": datetime(2026, 9, 1, 12, 0, 0),
+            },
+            {
+                "Key": "logs/error.log",
+                "Size": 800,
+                "LastModified": datetime(2026, 9, 1, 12, 5, 0),
+            },
+        ],
+        "IsTruncated": False,
+    }
+
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_s3 = mock_client.return_value
+        mock_s3.list_objects_v2.return_value = fake_response
+
+        result = AWSService().get_s3_largest_objects(
+            "cloudops-test",
+            prefix="logs/",
+        )
+
+    assert result["status"] == "healthy"
+    assert result["prefix"] == "logs/"
+    assert result["objects"][0]["key"] == "logs/error.log"
+    assert result["objects"][0]["size"] == 800
+
+    mock_s3.list_objects_v2.assert_called_once_with(
+        Bucket="cloudops-test",
+        Prefix="logs/",
+    )
+
+
+def test_get_s3_largest_objects_with_max_keys():
+    fake_response = {
+        "Contents": [
+            {
+                "Key": "file1.txt",
+                "Size": 100,
+                "LastModified": datetime(2026, 9, 1, 12, 0, 0),
+            },
+            {
+                "Key": "file2.txt",
+                "Size": 500,
+                "LastModified": datetime(2026, 9, 1, 12, 5, 0),
+            },
+            {
+                "Key": "file3.txt",
+                "Size": 300,
+                "LastModified": datetime(2026, 9, 1, 12, 10, 0),
+            },
+        ],
+        "IsTruncated": False,
+    }
+
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_s3 = mock_client.return_value
+        mock_s3.list_objects_v2.return_value = fake_response
+
+        result = AWSService().get_s3_largest_objects(
+            "cloudops-test",
+            max_keys=2,
+        )
+
+    assert result["status"] == "healthy"
+    assert len(result["objects"]) == 2
+    assert result["objects"][0]["key"] == "file2.txt"
+    assert result["objects"][1]["key"] == "file1.txt"
+
+    mock_s3.list_objects_v2.assert_called_once_with(
+        Bucket="cloudops-test",
+        MaxKeys=2,
+    )
+
+
+def test_get_s3_largest_objects_access_denied():
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_s3 = mock_client.return_value
+        mock_s3.list_objects_v2.side_effect = ClientError(
+            {
+                "Error": {
+                    "Code": "AccessDenied",
+                    "Message": "Access Denied",
+                }
+            },
+            "ListObjectsV2",
+        )
+
+        result = AWSService().get_s3_largest_objects(
+            "private-bucket"
+        )
+
+    assert result["service"] == "s3"
+    assert result["status"] == "unhealthy"
+    assert result["bucket"] == "private-bucket"
+    assert "AccessDenied" in result["error"]
+
+
+def test_s3_largest_objects_api_success():
+    fake_result = {
+        "service": "s3",
+        "status": "healthy",
+        "bucket": "cloudops-test",
+        "prefix": "logs/",
+        "top_n": 3,
+        "total_objects": 1,
+        "total_size_bytes": 5000,
+        "average_object_size_bytes": 5000,
+        "largest_object": {
+            "key": "logs/large.zip",
+            "size": 5000,
+            "last_modified": "2026-09-01T12:00:00",
+        },
+        "objects": [
+            {
+                "key": "logs/large.zip",
+                "size": 5000,
+                "last_modified": "2026-09-01T12:00:00",
+            },
+        ],
+    }
+
+    with patch(
+        "main.aws_service.get_s3_largest_objects",
+        return_value=fake_result,
+    ) as mock_get_largest:
+        client = TestClient(app)
+
+        response = client.get(
+            "/cloud/aws/s3/buckets/cloudops-test/largest-objects"
+            "?prefix=logs/&max_keys=10&top_n=3"
+        )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["service"] == "s3"
+    assert data["status"] == "healthy"
+    assert data["bucket"] == "cloudops-test"
+    assert data["prefix"] == "logs/"
+    assert data["top_n"] == 3
+    assert data["total_objects"] == 1
+    assert data["total_size_bytes"] == 5000
+    assert data["average_object_size_bytes"] == 5000
+    assert data["largest_object"]["key"] == "logs/large.zip"
+    assert data["largest_object"]["size"] == 5000
+    assert data["objects"][0]["key"] == "logs/large.zip"
+
+    mock_get_largest.assert_called_once_with(
+        "cloudops-test",
+        prefix="logs/",
+        max_keys=10,
+        top_n=3,
+    )
+
+
+def test_s3_largest_objects_api_rejects_invalid_top_n():
+    client = TestClient(app)
+
+    response = client.get(
+        "/cloud/aws/s3/buckets/cloudops-test/largest-objects?top_n=0"
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "top_n must be between 1 and 100"
+    )
+
+
+def test_s3_largest_objects_api_access_denied():
+    fake_result = {
+        "service": "s3",
+        "status": "unhealthy",
+        "bucket": "private-bucket",
+        "error": "AccessDenied",
+    }
+
+    with patch(
+        "main.aws_service.get_s3_largest_objects",
+        return_value=fake_result,
+    ):
+        client = TestClient(app)
+
+        response = client.get(
+            "/cloud/aws/s3/buckets/private-bucket/largest-objects"
+        )
+
+    assert response.status_code == 403
+    assert "AccessDenied" in response.json()["detail"]
+
+def test_s3_bucket_health_api_success():
+    fake_result = {
+        "service": "s3",
+        "status": "healthy",
+        "bucket": "cloudops-test",
+        "prefix": "logs/",
+        "health": "healthy",
+        "risk_count": 0,
+        "risks": [],
+        "total_objects": 3,
+        "total_size_bytes": 6000,
+        "average_object_size_bytes": 2000,
+        "largest_object": {
+            "key": "logs/large.zip",
+            "size": 4000,
+            "last_modified": "2026-09-01T12:00:00",
+        },
+    }
+
+    with patch(
+        "main.aws_service.get_s3_bucket_health",
+        return_value=fake_result,
+    ) as mock_get_health:
+        client = TestClient(app)
+        response = client.get(
+            "/cloud/aws/s3/buckets/cloudops-test/health"
+            "?prefix=logs/&max_keys=100"
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["service"] == "s3"
+    assert data["status"] == "healthy"
+    assert data["bucket"] == "cloudops-test"
+    assert data["prefix"] == "logs/"
+    assert data["health"] == "healthy"
+    assert data["risk_count"] == 0
+    assert data["total_objects"] == 3
+    assert data["largest_object"]["key"] == "logs/large.zip"
+
+    mock_get_health.assert_called_once_with(
+        "cloudops-test",
+        prefix="logs/",
+        max_keys=100,
+    )
+
+
+def test_s3_bucket_health_api_access_denied():
+    fake_result = {
+        "service": "s3",
+        "status": "unhealthy",
+        "bucket": "private-bucket",
+        "error": "AccessDenied",
+    }
+
+    with patch(
+        "main.aws_service.get_s3_bucket_health",
+        return_value=fake_result,
+    ):
+        client = TestClient(app)
+        response = client.get(
+            "/cloud/aws/s3/buckets/private-bucket/health"
+        )
+
+    assert response.status_code == 403
+    assert "AccessDenied" in response.json()["detail"]
+

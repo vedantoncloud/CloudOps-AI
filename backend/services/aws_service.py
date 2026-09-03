@@ -189,7 +189,9 @@ class AWSService:
                         "name": name,
                         "state": instance.get("State", {}).get("Name"),
                         "instance_type": instance.get("InstanceType"),
-                        "availability_zone": instance.get("Placement", {}).get("AvailabilityZone"),
+                        "availability_zone": instance.get("Placement", {}).get(
+                            "AvailabilityZone"
+                        ),
                         "private_ip": instance.get("PrivateIpAddress"),
                         "tags": tags,
                     })
@@ -317,6 +319,189 @@ class AWSService:
                 "bucket": bucket_name,
                 "prefix": prefix,
                 "objects": objects,
+            }
+
+        except (BotoCoreError, ClientError) as error:
+            return {
+                "service": "s3",
+                "status": "unhealthy",
+                "bucket": bucket_name,
+                "error": str(error),
+            }
+
+    def get_s3_object_statistics(self, bucket_name, prefix=None, max_keys=None):
+        try:
+            s3 = boto3.client("s3")
+
+            total_objects = 0
+            total_size = 0
+            continuation_token = None
+
+            while True:
+                params = {
+                    "Bucket": bucket_name,
+                }
+
+                if prefix:
+                    params["Prefix"] = prefix
+
+                if max_keys:
+                    params["MaxKeys"] = min(max_keys, 1000)
+
+                if continuation_token:
+                    params["ContinuationToken"] = continuation_token
+
+                response = s3.list_objects_v2(**params)
+
+                for obj in response.get("Contents", []):
+                    total_objects += 1
+                    total_size += obj.get("Size", 0) or 0
+
+                    if max_keys and total_objects >= max_keys:
+                        break
+
+                if max_keys and total_objects >= max_keys:
+                    break
+
+                if not response.get("IsTruncated"):
+                    break
+
+                continuation_token = response.get("NextContinuationToken")
+
+            return {
+                "service": "s3",
+                "status": "healthy",
+                "bucket": bucket_name,
+                "prefix": prefix,
+                "total_objects": total_objects,
+                "total_size_bytes": total_size,
+            }
+
+        except (BotoCoreError, ClientError) as error:
+            return {
+                "service": "s3",
+                "status": "unhealthy",
+                "bucket": bucket_name,
+                "error": str(error),
+            }
+
+    def get_s3_largest_objects(self, bucket_name, prefix=None, max_keys=None, top_n=5):
+        try:
+            s3 = boto3.client("s3")
+
+            objects = []
+            continuation_token = None
+
+            while True:
+                params = {
+                    "Bucket": bucket_name,
+                }
+
+                if prefix:
+                    params["Prefix"] = prefix
+
+                if max_keys:
+                    params["MaxKeys"] = min(max_keys, 1000)
+
+                if continuation_token:
+                    params["ContinuationToken"] = continuation_token
+
+                response = s3.list_objects_v2(**params)
+
+                for obj in response.get("Contents", []):
+                    objects.append({
+                        "key": obj.get("Key"),
+                        "size": obj.get("Size", 0) or 0,
+                        "last_modified": (
+                            obj.get("LastModified").isoformat()
+                            if obj.get("LastModified")
+                            else None
+                        ),
+                    })
+
+                if max_keys and len(objects) >= max_keys:
+                    objects = objects[:max_keys]
+                    break
+
+                if not response.get("IsTruncated"):
+                    break
+
+                continuation_token = response.get("NextContinuationToken")
+
+            objects.sort(
+                key=lambda obj: obj["size"],
+                reverse=True,
+            )
+
+            largest_objects = objects[:top_n]
+
+            total_objects = len(objects)
+            total_size_bytes = sum(obj["size"] for obj in objects)
+            average_object_size_bytes = (
+                total_size_bytes / total_objects
+                if total_objects
+                else 0
+            )
+
+            largest_object = largest_objects[0] if largest_objects else None
+
+            return {
+                "service": "s3",
+                "status": "healthy",
+                "bucket": bucket_name,
+                "prefix": prefix,
+                "top_n": top_n,
+                "total_objects": total_objects,
+                "total_size_bytes": total_size_bytes,
+                "average_object_size_bytes": average_object_size_bytes,
+                "largest_object": largest_object,
+                "objects": largest_objects,
+            }
+
+        except (BotoCoreError, ClientError) as error:
+            return {
+                "service": "s3",
+                "status": "unhealthy",
+                "bucket": bucket_name,
+                "error": str(error),
+            }
+
+    def get_s3_bucket_health(self, bucket_name, prefix=None, max_keys=None):
+        try:
+            insights = self.get_s3_largest_objects(
+                bucket_name,
+                prefix=prefix,
+                max_keys=max_keys,
+                top_n=1,
+            )
+
+            if insights["status"] == "unhealthy":
+                return insights
+
+            total_objects = insights["total_objects"]
+            risks = []
+
+            if total_objects == 0:
+                risks.append({
+                    "type": "empty_bucket",
+                    "severity": "low",
+                    "message": "Bucket contains no objects.",
+                })
+
+            health = "warning" if risks else "healthy"
+
+            return {
+                "service": "s3",
+                "status": "healthy",
+                "bucket": bucket_name,
+                "prefix": prefix,
+                "health": health,
+                "risk_count": len(risks),
+                "risks": risks,
+                "total_objects": total_objects,
+                "total_size_bytes": insights["total_size_bytes"],
+                "average_object_size_bytes": insights["average_object_size_bytes"],
+                "largest_object": insights["largest_object"],
             }
 
         except (BotoCoreError, ClientError) as error:
