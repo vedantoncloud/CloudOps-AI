@@ -974,6 +974,55 @@ class AWSService:
                 "error": str(error),
             }
 
+
+    def get_ec2_cost_insights(self):
+        try:
+            efficiency = self.get_ec2_efficiency_insights()
+
+            if efficiency["status"] != "healthy":
+                return efficiency
+
+            cost_insights = []
+
+            for insight in efficiency.get("insights", []):
+                insight_type = insight.get("type")
+
+                if insight_type == "stopped_instance":
+                    cost_insights.append({
+                        "type": "stopped_instance_cost_risk",
+                        "severity": "medium",
+                        "instance_id": insight.get("instance_id"),
+                        "instance_name": insight.get("instance_name"),
+                        "message": "A stopped EC2 instance may represent an avoidable resource cost if it is no longer required.",
+                        "recommendation": "Confirm the instance is intentionally retained; terminate unused instances and review associated EBS resources when appropriate.",
+                    })
+                elif insight_type == "low_cpu_utilization":
+                    cost_insights.append({
+                        "type": "underutilized_instance_cost_risk",
+                        "severity": "low",
+                        "instance_id": insight.get("instance_id"),
+                        "instance_name": insight.get("instance_name"),
+                        "message": "EC2 instance CPU utilization is below 10%, indicating possible overprovisioning.",
+                        "recommendation": "Review sustained workload demand and consider rightsizing or scheduling the instance to reduce unnecessary compute usage.",
+                    })
+
+            return {
+                "service": "ec2",
+                "status": "healthy",
+                "health": "warning" if cost_insights else "healthy",
+                "insight_count": len(cost_insights),
+                "insights": cost_insights,
+                "instance_count": efficiency.get("instance_count", 0),
+                "note": "Cost insights are qualitative; actual AWS charges require billing and pricing data.",
+            }
+
+        except (BotoCoreError, ClientError) as error:
+            return {
+                "service": "ec2",
+                "status": "unhealthy",
+                "error": str(error),
+            }
+
     def get_ec2_instance_status(self, instance_id):
         try:
             ec2 = boto3.client("ec2")

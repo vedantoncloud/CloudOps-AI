@@ -2365,3 +2365,118 @@ def test_ec2_efficiency_insights_api_access_denied():
 
     assert response.status_code == 403
     assert "AccessDenied" in response.json()["detail"]
+
+
+def test_get_ec2_cost_insights():
+    efficiency = {
+        "service": "ec2",
+        "status": "healthy",
+        "health": "warning",
+        "insight_count": 2,
+        "insights": [
+            {
+                "type": "low_cpu_utilization",
+                "instance_id": "i-1234567890",
+                "instance_name": "web-server",
+            },
+            {
+                "type": "stopped_instance",
+                "instance_id": "i-0987654321",
+                "instance_name": "old-server",
+            },
+        ],
+        "instance_count": 2,
+    }
+
+    with patch.object(
+        AWSService,
+        "get_ec2_efficiency_insights",
+        return_value=efficiency,
+    ):
+        result = AWSService().get_ec2_cost_insights()
+
+    assert result["status"] == "healthy"
+    assert result["health"] == "warning"
+    assert result["insight_count"] == 2
+    assert result["insights"][0]["type"] == "underutilized_instance_cost_risk"
+    assert result["insights"][1]["type"] == "stopped_instance_cost_risk"
+    assert result["instance_count"] == 2
+    assert "qualitative" in result["note"]
+
+
+def test_get_ec2_cost_insights_healthy():
+    with patch.object(
+        AWSService,
+        "get_ec2_efficiency_insights",
+        return_value={
+            "service": "ec2",
+            "status": "healthy",
+            "health": "healthy",
+            "insight_count": 0,
+            "insights": [],
+            "instance_count": 1,
+        },
+    ):
+        result = AWSService().get_ec2_cost_insights()
+
+    assert result["health"] == "healthy"
+    assert result["insight_count"] == 0
+    assert result["insights"] == []
+
+
+def test_get_ec2_cost_insights_inventory_failure():
+    with patch.object(
+        AWSService,
+        "get_ec2_efficiency_insights",
+        return_value={
+            "service": "ec2",
+            "status": "unhealthy",
+            "error": "AccessDenied",
+        },
+    ):
+        result = AWSService().get_ec2_cost_insights()
+
+    assert result["status"] == "unhealthy"
+    assert "AccessDenied" in result["error"]
+
+
+def test_ec2_cost_insights_api_success():
+    fake_result = {
+        "service": "ec2",
+        "status": "healthy",
+        "health": "warning",
+        "insight_count": 1,
+        "insights": [{"type": "stopped_instance_cost_risk", "severity": "medium"}],
+        "instance_count": 2,
+    }
+
+    with patch(
+        "main.aws_service.get_ec2_cost_insights",
+        return_value=fake_result,
+    ) as mock_get_insights:
+        client = TestClient(app)
+        response = client.get("/cloud/aws/ec2/cost-insights")
+
+    assert response.status_code == 200
+    assert response.json()["service"] == "ec2"
+    assert response.json()["health"] == "warning"
+    assert response.json()["insight_count"] == 1
+    mock_get_insights.assert_called_once_with()
+
+
+def test_ec2_cost_insights_api_access_denied():
+    fake_result = {
+        "service": "ec2",
+        "status": "unhealthy",
+        "error": "AccessDenied",
+    }
+
+    with patch(
+        "main.aws_service.get_ec2_cost_insights",
+        return_value=fake_result,
+    ):
+        client = TestClient(app)
+        response = client.get("/cloud/aws/ec2/cost-insights")
+
+    assert response.status_code == 403
+    assert "AccessDenied" in response.json()["detail"]
