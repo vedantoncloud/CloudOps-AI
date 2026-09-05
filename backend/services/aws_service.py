@@ -1023,6 +1023,93 @@ class AWSService:
                 "error": str(error),
             }
 
+    def get_ec2_rightsizing_insights(self):
+        try:
+            inventory = self.get_ec2_instances()
+
+            if inventory["status"] != "healthy":
+                return inventory
+
+            instances = inventory.get("instances", [])
+            insights = []
+
+            for instance in instances:
+                instance_id = instance.get("instance_id")
+                instance_name = instance.get("name")
+                instance_type = instance.get("instance_type")
+                state = instance.get("state")
+
+                if state in {"stopped", "stopping"}:
+                    insights.append({
+                        "type": "stopped_instance_lifecycle",
+                        "severity": "medium",
+                        "instance_id": instance_id,
+                        "instance_name": instance_name,
+                        "instance_type": instance_type,
+                        "message": f"EC2 instance is currently {state} and cannot be evaluated for active right-sizing.",
+                        "recommendation": "Confirm the instance is intentionally retained and remove it if it is no longer required.",
+                    })
+                    continue
+
+                if state != "running":
+                    continue
+
+                cpu = self.get_ec2_cpu_utilization(instance_id)
+
+                if cpu["status"] != "healthy":
+                    continue
+
+                cpu_value = cpu.get("value")
+
+                if cpu_value is None:
+                    insights.append({
+                        "type": "insufficient_cpu_data",
+                        "severity": "low",
+                        "instance_id": instance_id,
+                        "instance_name": instance_name,
+                        "instance_type": instance_type,
+                        "message": "Recent CPU utilization data is unavailable for right-sizing evaluation.",
+                        "recommendation": "Wait for CloudWatch CPU metrics and evaluate sustained utilization before changing the instance size.",
+                    })
+                elif cpu_value < 10:
+                    insights.append({
+                        "type": "consider_downsizing",
+                        "severity": "low",
+                        "instance_id": instance_id,
+                        "instance_name": instance_name,
+                        "instance_type": instance_type,
+                        "cpu_utilization": cpu_value,
+                        "message": "EC2 instance CPU utilization is below 10%.",
+                        "recommendation": "Review sustained workload demand and consider moving to a smaller instance type if capacity remains sufficient.",
+                    })
+                elif cpu_value >= 60:
+                    insights.append({
+                        "type": "avoid_downsizing",
+                        "severity": "medium",
+                        "instance_id": instance_id,
+                        "instance_name": instance_name,
+                        "instance_type": instance_type,
+                        "cpu_utilization": cpu_value,
+                        "message": "EC2 instance CPU utilization is 60% or higher.",
+                        "recommendation": "Avoid downsizing based on CPU alone and review workload demand before reducing capacity.",
+                    })
+
+            return {
+                "service": "ec2",
+                "status": "healthy",
+                "health": "warning" if insights else "healthy",
+                "insight_count": len(insights),
+                "insights": insights,
+                "instance_count": len(instances),
+            }
+
+        except (BotoCoreError, ClientError) as error:
+            return {
+                "service": "ec2",
+                "status": "unhealthy",
+                "error": str(error),
+            }
+
     def get_ec2_instance_status(self, instance_id):
         try:
             ec2 = boto3.client("ec2")

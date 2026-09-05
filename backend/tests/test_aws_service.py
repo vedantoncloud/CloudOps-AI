@@ -2480,3 +2480,178 @@ def test_ec2_cost_insights_api_access_denied():
 
     assert response.status_code == 403
     assert "AccessDenied" in response.json()["detail"]
+
+
+
+def test_get_ec2_rightsizing_insights():
+    instances = [
+        {
+            "instance_id": "i-1234567890",
+            "name": "low-usage",
+            "state": "running",
+            "instance_type": "t3.large",
+        },
+        {
+            "instance_id": "i-0987654321",
+            "name": "high-usage",
+            "state": "running",
+            "instance_type": "t3.medium",
+        },
+        {
+            "instance_id": "i-1122334455",
+            "name": "old-server",
+            "state": "stopped",
+            "instance_type": "t3.micro",
+        },
+    ]
+
+    cpu_values = {
+        "i-1234567890": 5.0,
+        "i-0987654321": 75.0,
+    }
+
+    def fake_cpu(instance_id):
+        return {
+            "service": "cloudwatch",
+            "status": "healthy",
+            "instance_id": instance_id,
+            "metric": "CPUUtilization",
+            "value": cpu_values[instance_id],
+        }
+
+    with patch.object(
+        AWSService,
+        "get_ec2_instances",
+        return_value={"service": "ec2", "status": "healthy", "instances": instances},
+    ), patch.object(
+        AWSService,
+        "get_ec2_cpu_utilization",
+        side_effect=fake_cpu,
+    ):
+        result = AWSService().get_ec2_rightsizing_insights()
+
+    assert result["status"] == "healthy"
+    assert result["health"] == "warning"
+    assert result["insight_count"] == 3
+    assert result["insights"][0]["type"] == "consider_downsizing"
+    assert result["insights"][1]["type"] == "avoid_downsizing"
+    assert result["insights"][2]["type"] == "stopped_instance_lifecycle"
+
+
+def test_get_ec2_rightsizing_insights_healthy():
+    instances = [{
+        "instance_id": "i-1234567890",
+        "name": "web-server",
+        "state": "running",
+        "instance_type": "t3.medium",
+    }]
+
+    with patch.object(
+        AWSService,
+        "get_ec2_instances",
+        return_value={"service": "ec2", "status": "healthy", "instances": instances},
+    ), patch.object(
+        AWSService,
+        "get_ec2_cpu_utilization",
+        return_value={
+            "service": "cloudwatch",
+            "status": "healthy",
+            "instance_id": "i-1234567890",
+            "metric": "CPUUtilization",
+            "value": 35.0,
+        },
+    ):
+        result = AWSService().get_ec2_rightsizing_insights()
+
+    assert result["health"] == "healthy"
+    assert result["insight_count"] == 0
+    assert result["insights"] == []
+
+
+def test_get_ec2_rightsizing_insights_missing_cpu_data():
+    instances = [{
+        "instance_id": "i-1234567890",
+        "name": "web-server",
+        "state": "running",
+        "instance_type": "t3.medium",
+    }]
+
+    with patch.object(
+        AWSService,
+        "get_ec2_instances",
+        return_value={"service": "ec2", "status": "healthy", "instances": instances},
+    ), patch.object(
+        AWSService,
+        "get_ec2_cpu_utilization",
+        return_value={
+            "service": "cloudwatch",
+            "status": "healthy",
+            "instance_id": "i-1234567890",
+            "metric": "CPUUtilization",
+            "value": None,
+        },
+    ):
+        result = AWSService().get_ec2_rightsizing_insights()
+
+    assert result["health"] == "warning"
+    assert result["insight_count"] == 1
+    assert result["insights"][0]["type"] == "insufficient_cpu_data"
+    assert result["insights"][0]["severity"] == "low"
+
+
+def test_get_ec2_rightsizing_insights_inventory_failure():
+    with patch.object(
+        AWSService,
+        "get_ec2_instances",
+        return_value={
+            "service": "ec2",
+            "status": "unhealthy",
+            "error": "AccessDenied",
+        },
+    ):
+        result = AWSService().get_ec2_rightsizing_insights()
+
+    assert result["status"] == "unhealthy"
+    assert "AccessDenied" in result["error"]
+
+
+def test_ec2_rightsizing_insights_api_success():
+    fake_result = {
+        "service": "ec2",
+        "status": "healthy",
+        "health": "warning",
+        "insight_count": 1,
+        "insights": [{"type": "consider_downsizing", "severity": "low"}],
+        "instance_count": 2,
+    }
+
+    with patch(
+        "main.aws_service.get_ec2_rightsizing_insights",
+        return_value=fake_result,
+    ) as mock_get_insights:
+        client = TestClient(app)
+        response = client.get("/cloud/aws/ec2/rightsizing-insights")
+
+    assert response.status_code == 200
+    assert response.json()["service"] == "ec2"
+    assert response.json()["health"] == "warning"
+    assert response.json()["insight_count"] == 1
+    mock_get_insights.assert_called_once_with()
+
+
+def test_ec2_rightsizing_insights_api_access_denied():
+    fake_result = {
+        "service": "ec2",
+        "status": "unhealthy",
+        "error": "AccessDenied",
+    }
+
+    with patch(
+        "main.aws_service.get_ec2_rightsizing_insights",
+        return_value=fake_result,
+    ):
+        client = TestClient(app)
+        response = client.get("/cloud/aws/ec2/rightsizing-insights")
+
+    assert response.status_code == 403
+    assert "AccessDenied" in response.json()["detail"]

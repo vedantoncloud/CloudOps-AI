@@ -298,6 +298,19 @@ def aws_ec2_cost_insights():
     return result
 
 
+@app.get("/cloud/aws/ec2/rightsizing-insights")
+def aws_ec2_rightsizing_insights():
+    result = aws_service.get_ec2_rightsizing_insights()
+
+    if result["status"] == "unhealthy":
+        raise HTTPException(
+            status_code=403,
+            detail=result["error"],
+        )
+
+    return result
+
+
 @app.get("/cloud/aws/ec2/instances/{instance_id}/cpu")
 def aws_ec2_cpu(instance_id: str):
     result = aws_service.get_ec2_cpu_utilization(instance_id)
