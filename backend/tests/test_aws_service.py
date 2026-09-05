@@ -2239,3 +2239,129 @@ def test_ec2_insights_api_rejects_invalid_instance_id():
     assert response.status_code == 400
     assert response.json()["detail"] == "Invalid EC2 instance ID"
     mock_get_insights.assert_not_called()
+
+
+def test_get_ec2_efficiency_insights():
+    instances = [
+        {
+            "instance_id": "i-1234567890",
+            "name": "web-server",
+            "state": "running",
+            "instance_type": "t3.micro",
+        },
+        {
+            "instance_id": "i-0987654321",
+            "name": "old-server",
+            "state": "stopped",
+            "instance_type": "t3.micro",
+        },
+    ]
+
+    with patch.object(
+        AWSService,
+        "get_ec2_instances",
+        return_value={"service": "ec2", "status": "healthy", "instances": instances},
+    ), patch.object(
+        AWSService,
+        "get_ec2_cpu_utilization",
+        return_value={
+            "service": "cloudwatch",
+            "status": "healthy",
+            "instance_id": "i-1234567890",
+            "metric": "CPUUtilization",
+            "value": 5.0,
+        },
+    ):
+        result = AWSService().get_ec2_efficiency_insights()
+
+    assert result["status"] == "healthy"
+    assert result["health"] == "warning"
+    assert result["insight_count"] == 2
+    assert result["insights"][0]["type"] == "low_cpu_utilization"
+    assert result["insights"][1]["type"] == "stopped_instance"
+
+
+def test_get_ec2_efficiency_insights_healthy():
+    instances = [{
+        "instance_id": "i-1234567890",
+        "name": "web-server",
+        "state": "running",
+    }]
+
+    with patch.object(
+        AWSService,
+        "get_ec2_instances",
+        return_value={"service": "ec2", "status": "healthy", "instances": instances},
+    ), patch.object(
+        AWSService,
+        "get_ec2_cpu_utilization",
+        return_value={
+            "service": "cloudwatch",
+            "status": "healthy",
+            "instance_id": "i-1234567890",
+            "metric": "CPUUtilization",
+            "value": 35.0,
+        },
+    ):
+        result = AWSService().get_ec2_efficiency_insights()
+
+    assert result["health"] == "healthy"
+    assert result["insight_count"] == 0
+    assert result["insights"] == []
+
+
+def test_get_ec2_efficiency_insights_inventory_failure():
+    with patch.object(
+        AWSService,
+        "get_ec2_instances",
+        return_value={
+            "service": "ec2",
+            "status": "unhealthy",
+            "error": "AccessDenied",
+        },
+    ):
+        result = AWSService().get_ec2_efficiency_insights()
+
+    assert result["status"] == "unhealthy"
+    assert "AccessDenied" in result["error"]
+
+
+def test_ec2_efficiency_insights_api_success():
+    fake_result = {
+        "service": "ec2",
+        "status": "healthy",
+        "health": "warning",
+        "insight_count": 1,
+        "insights": [{"type": "stopped_instance", "severity": "medium"}],
+        "instance_count": 2,
+    }
+
+    with patch(
+        "main.aws_service.get_ec2_efficiency_insights",
+        return_value=fake_result,
+    ) as mock_get_insights:
+        client = TestClient(app)
+        response = client.get("/cloud/aws/ec2/efficiency-insights")
+
+    assert response.status_code == 200
+    assert response.json()["service"] == "ec2"
+    assert response.json()["insight_count"] == 1
+    mock_get_insights.assert_called_once_with()
+
+
+def test_ec2_efficiency_insights_api_access_denied():
+    fake_result = {
+        "service": "ec2",
+        "status": "unhealthy",
+        "error": "AccessDenied",
+    }
+
+    with patch(
+        "main.aws_service.get_ec2_efficiency_insights",
+        return_value=fake_result,
+    ):
+        client = TestClient(app)
+        response = client.get("/cloud/aws/ec2/efficiency-insights")
+
+    assert response.status_code == 403
+    assert "AccessDenied" in response.json()["detail"]

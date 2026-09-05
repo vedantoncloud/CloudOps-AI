@@ -912,6 +912,68 @@ class AWSService:
                 "error": str(error),
             }
 
+    def get_ec2_efficiency_insights(self):
+        try:
+            inventory = self.get_ec2_instances()
+
+            if inventory["status"] != "healthy":
+                return inventory
+
+            instances = inventory.get("instances", [])
+            insights = []
+
+            for instance in instances:
+                instance_id = instance.get("instance_id")
+                state = instance.get("state")
+                instance_name = instance.get("name")
+
+                if state in {"stopped", "stopping"}:
+                    insights.append({
+                        "type": "stopped_instance",
+                        "severity": "medium",
+                        "instance_id": instance_id,
+                        "instance_name": instance_name,
+                        "message": f"EC2 instance is currently {state}.",
+                        "recommendation": "Confirm the instance is intentionally stopped and remove it if it is no longer required.",
+                    })
+                    continue
+
+                if state != "running":
+                    continue
+
+                cpu = self.get_ec2_cpu_utilization(instance_id)
+
+                if cpu["status"] != "healthy":
+                    continue
+
+                cpu_value = cpu.get("value")
+
+                if cpu_value is not None and cpu_value < 10:
+                    insights.append({
+                        "type": "low_cpu_utilization",
+                        "severity": "low",
+                        "instance_id": instance_id,
+                        "instance_name": instance_name,
+                        "message": "EC2 instance CPU utilization is below 10%.",
+                        "recommendation": "Review workload demand and consider rightsizing or scheduling the instance if low usage is sustained.",
+                    })
+
+            return {
+                "service": "ec2",
+                "status": "healthy",
+                "health": "warning" if insights else "healthy",
+                "insight_count": len(insights),
+                "insights": insights,
+                "instance_count": len(instances),
+            }
+
+        except (BotoCoreError, ClientError) as error:
+            return {
+                "service": "ec2",
+                "status": "unhealthy",
+                "error": str(error),
+            }
+
     def get_ec2_instance_status(self, instance_id):
         try:
             ec2 = boto3.client("ec2")
