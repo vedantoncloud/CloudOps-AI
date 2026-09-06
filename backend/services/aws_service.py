@@ -1294,6 +1294,92 @@ class AWSService:
                 "error": str(error),
             }
 
+    def get_s3_cost_insights(self, bucket_name, prefix=None, max_keys=None):
+        try:
+            storage = self.get_s3_largest_objects(
+                bucket_name,
+                prefix=prefix,
+                max_keys=max_keys,
+                top_n=1,
+            )
+
+            if storage["status"] != "healthy":
+                return storage
+
+            insights = []
+            total_objects = storage.get("total_objects", 0)
+            total_size_bytes = storage.get("total_size_bytes", 0)
+            average_object_size_bytes = storage.get("average_object_size_bytes", 0)
+            largest_object = storage.get("largest_object")
+
+            if total_objects == 0:
+                insights.append({
+                    "type": "empty_bucket_cost_opportunity",
+                    "severity": "low",
+                    "message": "Bucket contains no objects and may not be contributing useful storage value.",
+                    "recommendation": "Review whether the bucket is still required and remove unused buckets when appropriate.",
+                })
+
+            if total_size_bytes >= 100 * 1024 * 1024 * 1024:
+                insights.append({
+                    "type": "large_storage_cost_risk",
+                    "severity": "medium",
+                    "total_size_bytes": total_size_bytes,
+                    "message": "Bucket has a large storage footprint that may contribute materially to storage charges.",
+                    "recommendation": "Review retention, lifecycle, storage classes, and stale data to identify cost optimization opportunities.",
+                })
+
+            if total_objects >= 100000:
+                insights.append({
+                    "type": "high_object_count_cost_risk",
+                    "severity": "medium",
+                    "total_objects": total_objects,
+                    "message": "Bucket contains a very large number of objects, which can increase request and management overhead.",
+                    "recommendation": "Review object lifecycle, retention, and object layout to reduce unnecessary object and request overhead.",
+                })
+
+            if total_objects >= 1000 and average_object_size_bytes <= 128 * 1024:
+                insights.append({
+                    "type": "small_object_cost_optimization",
+                    "severity": "low",
+                    "total_objects": total_objects,
+                    "average_object_size_bytes": average_object_size_bytes,
+                    "message": "Bucket contains many relatively small objects, which may increase request and metadata overhead.",
+                    "recommendation": "Review whether objects can be aggregated or lifecycle-managed more efficiently where application requirements allow.",
+                })
+
+            if largest_object and largest_object.get("size", 0) >= 5 * 1024 * 1024 * 1024:
+                insights.append({
+                    "type": "very_large_object_cost_opportunity",
+                    "severity": "low",
+                    "largest_object": largest_object,
+                    "message": "Bucket contains a very large object that may benefit from storage-class or lifecycle review.",
+                    "recommendation": "Review access frequency and retention for the largest object and consider an appropriate storage class or lifecycle policy.",
+                })
+
+            return {
+                "service": "s3",
+                "status": "healthy",
+                "bucket": bucket_name,
+                "prefix": prefix,
+                "health": "warning" if insights else "healthy",
+                "insight_count": len(insights),
+                "insights": insights,
+                "total_objects": total_objects,
+                "total_size_bytes": total_size_bytes,
+                "average_object_size_bytes": average_object_size_bytes,
+                "largest_object": largest_object,
+                "note": "Cost insights are qualitative; actual AWS charges require billing and pricing data.",
+            }
+
+        except (BotoCoreError, ClientError) as error:
+            return {
+                "service": "s3",
+                "status": "unhealthy",
+                "bucket": bucket_name,
+                "error": str(error),
+            }
+
     def get_ec2_instance_status(self, instance_id):
         try:
             ec2 = boto3.client("ec2")

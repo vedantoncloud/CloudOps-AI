@@ -2989,3 +2989,165 @@ def test_s3_security_insights_api_access_denied():
 
     assert response.status_code == 403
     assert "AccessDenied" in response.json()["detail"]
+
+
+# S3 cost awareness insights
+def test_get_s3_cost_insights_empty_bucket():
+    fake_result = {
+        "service": "s3",
+        "status": "healthy",
+        "bucket": "test-bucket",
+        "prefix": None,
+        "total_objects": 0,
+        "total_size_bytes": 0,
+        "average_object_size_bytes": 0,
+        "largest_object": None,
+    }
+
+    with patch.object(AWSService, "get_s3_largest_objects", return_value=fake_result):
+        result = AWSService().get_s3_cost_insights("test-bucket")
+
+    assert result["health"] == "warning"
+    assert result["insight_count"] == 1
+    assert result["insights"][0]["type"] == "empty_bucket_cost_opportunity"
+
+
+def test_get_s3_cost_insights_large_storage():
+    fake_result = {
+        "service": "s3",
+        "status": "healthy",
+        "bucket": "test-bucket",
+        "prefix": "logs/",
+        "total_objects": 10,
+        "total_size_bytes": 100 * 1024 * 1024 * 1024,
+        "average_object_size_bytes": 10 * 1024 * 1024 * 1024,
+        "largest_object": {"key": "large.bin", "size": 10 * 1024 * 1024 * 1024},
+    }
+
+    with patch.object(AWSService, "get_s3_largest_objects", return_value=fake_result) as mock_get: 
+        result = AWSService().get_s3_cost_insights("test-bucket", prefix="logs/", max_keys=500)
+
+    assert result["health"] == "warning"
+    assert result["insight_count"] == 2
+    assert result["insights"][0]["type"] == "large_storage_cost_risk"
+    assert result["insights"][1]["type"] == "very_large_object_cost_opportunity"
+    mock_get.assert_called_once_with("test-bucket", prefix="logs/", max_keys=500, top_n=1)
+
+
+def test_get_s3_cost_insights_high_object_count():
+    fake_result = {
+        "service": "s3",
+        "status": "healthy",
+        "bucket": "test-bucket",
+        "prefix": None,
+        "total_objects": 100000,
+        "total_size_bytes": 500 * 1024 * 1024,
+        "average_object_size_bytes": 5 * 1024,
+        "largest_object": {"key": "file.txt", "size": 1024},
+    }
+
+    with patch.object(AWSService, "get_s3_largest_objects", return_value=fake_result):
+        result = AWSService().get_s3_cost_insights("test-bucket")
+
+    types = {insight["type"] for insight in result["insights"]}
+    assert "high_object_count_cost_risk" in types
+    assert "small_object_cost_optimization" in types
+
+
+def test_get_s3_cost_insights_healthy():
+    fake_result = {
+        "service": "s3",
+        "status": "healthy",
+        "bucket": "test-bucket",
+        "prefix": None,
+        "total_objects": 10,
+        "total_size_bytes": 1024 * 1024,
+        "average_object_size_bytes": 100 * 1024,
+        "largest_object": {"key": "file.txt", "size": 200 * 1024},
+    }
+
+    with patch.object(AWSService, "get_s3_largest_objects", return_value=fake_result):
+        result = AWSService().get_s3_cost_insights("test-bucket")
+
+    assert result["health"] == "healthy"
+    assert result["insight_count"] == 0
+    assert result["insights"] == []
+    assert "actual AWS charges" in result["note"]
+
+
+def test_get_s3_cost_insights_storage_failure():
+    fake_result = {
+        "service": "s3",
+        "status": "unhealthy",
+        "bucket": "test-bucket",
+        "error": "AccessDenied",
+    }
+
+    with patch.object(AWSService, "get_s3_largest_objects", return_value=fake_result):
+        result = AWSService().get_s3_cost_insights("test-bucket")
+
+    assert result == fake_result
+
+
+def test_s3_cost_insights_api_success():
+    fake_result = {
+        "service": "s3",
+        "status": "healthy",
+        "bucket": "test-bucket",
+        "prefix": "logs/",
+        "health": "healthy",
+        "insight_count": 0,
+        "insights": [],
+        "total_objects": 10,
+        "total_size_bytes": 1024,
+        "average_object_size_bytes": 100,
+        "largest_object": {"key": "a", "size": 100},
+        "note": "Cost insights are qualitative; actual AWS charges require billing and pricing data.",
+    }
+
+    with patch(
+        "main.aws_service.get_s3_cost_insights",
+        return_value=fake_result,
+    ) as mock_get_insights:
+        client = TestClient(app)
+        response = client.get(
+            "/cloud/aws/s3/buckets/test-bucket/cost-insights",
+            params={"prefix": "logs/", "max_keys": 500},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["service"] == "s3"
+    assert response.json()["health"] == "healthy"
+    mock_get_insights.assert_called_once_with(
+        "test-bucket", prefix="logs/", max_keys=500
+    )
+
+
+def test_s3_cost_insights_api_invalid_max_keys():
+    client = TestClient(app)
+    response = client.get(
+        "/cloud/aws/s3/buckets/test-bucket/cost-insights",
+        params={"max_keys": 1001},
+    )
+
+    assert response.status_code == 400
+    assert "max_keys must be between 1 and 1000" in response.json()["detail"]
+
+
+def test_s3_cost_insights_api_access_denied():
+    fake_result = {
+        "service": "s3",
+        "status": "unhealthy",
+        "bucket": "test-bucket",
+        "error": "AccessDenied",
+    }
+
+    with patch(
+        "main.aws_service.get_s3_cost_insights",
+        return_value=fake_result,
+    ):
+        client = TestClient(app)
+        response = client.get("/cloud/aws/s3/buckets/test-bucket/cost-insights")
+
+    assert response.status_code == 403
+    assert "AccessDenied" in response.json()["detail"]

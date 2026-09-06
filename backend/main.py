@@ -363,6 +363,29 @@ def aws_s3_bucket_security_insights(bucket_name: str):
     return result
 
 
+@app.get("/cloud/aws/s3/buckets/{bucket_name}/cost-insights")
+def aws_s3_bucket_cost_insights(bucket_name: str, prefix: str | None = None, max_keys: int | None = None):
+    if max_keys is not None and not 1 <= max_keys <= 1000:
+        raise HTTPException(
+            status_code=400,
+            detail="max_keys must be between 1 and 1000",
+        )
+
+    result = aws_service.get_s3_cost_insights(
+        bucket_name,
+        prefix=prefix,
+        max_keys=max_keys,
+    )
+
+    if result["status"] == "unhealthy":
+        raise HTTPException(
+            status_code=403,
+            detail=result["error"],
+        )
+
+    return result
+
+
 @app.get("/cloud/aws/ec2/instances/{instance_id}/status")
 def aws_ec2_instance_status(instance_id: str):
     result = aws_service.get_ec2_instance_status(instance_id)
