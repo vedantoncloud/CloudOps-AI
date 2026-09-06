@@ -2795,3 +2795,197 @@ def test_ec2_security_insights_api_access_denied():
 
     assert response.status_code == 403
     assert "AccessDenied" in response.json()["detail"]
+
+
+def test_get_s3_security_insights_secure_bucket():
+    mock_s3 = MagicMock()
+    mock_s3.get_bucket_encryption.return_value = {
+        "ServerSideEncryptionConfiguration": {
+            "Rules": [{
+                "ApplyServerSideEncryptionByDefault": {
+                    "SSEAlgorithm": "AES256",
+                }
+            }]
+        }
+    }
+    mock_s3.get_public_access_block.return_value = {
+        "PublicAccessBlockConfiguration": {
+            "BlockPublicAcls": True,
+            "IgnorePublicAcls": True,
+            "BlockPublicPolicy": True,
+            "RestrictPublicBuckets": True,
+        }
+    }
+
+    with patch("boto3.client", return_value=mock_s3):
+        result = AWSService().get_s3_security_insights("secure-bucket")
+
+    assert result["status"] == "healthy"
+    assert result["health"] == "healthy"
+    assert result["insight_count"] == 0
+    assert result["configuration"]["encryption"]["algorithm"] == "AES256"
+
+
+def test_get_s3_security_insights_detects_missing_encryption():
+    mock_s3 = MagicMock()
+    mock_s3.get_bucket_encryption.side_effect = ClientError(
+        {"Error": {"Code": "ServerSideEncryptionConfigurationNotFoundError", "Message": "Not configured"}},
+        "GetBucketEncryption",
+    )
+    mock_s3.get_public_access_block.return_value = {
+        "PublicAccessBlockConfiguration": {
+            "BlockPublicAcls": True,
+            "IgnorePublicAcls": True,
+            "BlockPublicPolicy": True,
+            "RestrictPublicBuckets": True,
+        }
+    }
+
+    with patch("boto3.client", return_value=mock_s3):
+        result = AWSService().get_s3_security_insights("test-bucket")
+
+    assert result["health"] == "warning"
+    assert result["insight_count"] == 1
+    assert result["insights"][0]["type"] == "encryption_not_configured"
+    assert result["insights"][0]["severity"] == "medium"
+
+
+def test_get_s3_security_insights_detects_incomplete_public_access_block():
+    mock_s3 = MagicMock()
+    mock_s3.get_bucket_encryption.return_value = {
+        "ServerSideEncryptionConfiguration": {
+            "Rules": [{
+                "ApplyServerSideEncryptionByDefault": {
+                    "SSEAlgorithm": "AES256",
+                }
+            }]
+        }
+    }
+    mock_s3.get_public_access_block.return_value = {
+        "PublicAccessBlockConfiguration": {
+            "BlockPublicAcls": True,
+            "IgnorePublicAcls": True,
+            "BlockPublicPolicy": False,
+            "RestrictPublicBuckets": False,
+        }
+    }
+
+    with patch("boto3.client", return_value=mock_s3):
+        result = AWSService().get_s3_security_insights("test-bucket")
+
+    assert result["health"] == "warning"
+    assert result["insight_count"] == 1
+    assert result["insights"][0]["type"] == "public_access_protection_incomplete"
+    assert result["insights"][0]["severity"] == "high"
+    assert set(result["insights"][0]["missing_controls"]) == {
+        "BlockPublicPolicy",
+        "RestrictPublicBuckets",
+    }
+
+
+def test_get_s3_security_insights_handles_missing_public_access_block():
+    mock_s3 = MagicMock()
+    mock_s3.get_bucket_encryption.return_value = {
+        "ServerSideEncryptionConfiguration": {
+            "Rules": [{
+                "ApplyServerSideEncryptionByDefault": {
+                    "SSEAlgorithm": "aws:kms",
+                    "KMSMasterKeyID": "key-123",
+                }
+            }]
+        }
+    }
+    mock_s3.get_public_access_block.side_effect = ClientError(
+        {"Error": {"Code": "NoSuchPublicAccessBlockConfiguration", "Message": "Not configured"}},
+        "GetPublicAccessBlock",
+    )
+
+    with patch("boto3.client", return_value=mock_s3):
+        result = AWSService().get_s3_security_insights("test-bucket")
+
+    assert result["health"] == "warning"
+    assert result["insight_count"] == 1
+    assert result["insights"][0]["type"] == "public_access_protection_missing"
+    assert result["insights"][0]["severity"] == "high"
+
+
+def test_get_s3_security_insights_permission_limited():
+    mock_s3 = MagicMock()
+    access_denied = ClientError(
+        {"Error": {"Code": "AccessDenied", "Message": "Access denied"}},
+        "GetBucketEncryption",
+    )
+    mock_s3.get_bucket_encryption.side_effect = access_denied
+    mock_s3.get_public_access_block.side_effect = ClientError(
+        {"Error": {"Code": "AccessDenied", "Message": "Access denied"}},
+        "GetPublicAccessBlock",
+    )
+
+    with patch("boto3.client", return_value=mock_s3):
+        result = AWSService().get_s3_security_insights("test-bucket")
+
+    assert result["status"] == "healthy"
+    assert result["health"] == "unknown"
+    assert result["insight_count"] == 1
+    assert result["insights"][0]["type"] == "security_configuration_unavailable"
+    assert set(result["insights"][0]["checks"]) == {
+        "encryption",
+        "public_access_block",
+    }
+
+
+def test_get_s3_security_insights_bucket_failure():
+    with patch(
+        "boto3.client",
+        side_effect=ClientError(
+            {"Error": {"Code": "AccessDenied", "Message": "Access denied"}},
+            "GetBucketEncryption",
+        ),
+    ):
+        result = AWSService().get_s3_security_insights("test-bucket")
+
+    assert result["status"] == "unhealthy"
+    assert "Access denied" in result["error"]
+
+
+def test_s3_security_insights_api_success():
+    fake_result = {
+        "service": "s3",
+        "status": "healthy",
+        "bucket": "test-bucket",
+        "health": "healthy",
+        "insight_count": 0,
+        "insights": [],
+        "configuration": {"encryption": {"algorithm": "AES256"}, "public_access_block": {}},
+    }
+
+    with patch(
+        "main.aws_service.get_s3_security_insights",
+        return_value=fake_result,
+    ) as mock_get_insights:
+        client = TestClient(app)
+        response = client.get("/cloud/aws/s3/buckets/test-bucket/security-insights")
+
+    assert response.status_code == 200
+    assert response.json()["service"] == "s3"
+    assert response.json()["health"] == "healthy"
+    mock_get_insights.assert_called_once_with("test-bucket")
+
+
+def test_s3_security_insights_api_access_denied():
+    fake_result = {
+        "service": "s3",
+        "status": "unhealthy",
+        "bucket": "test-bucket",
+        "error": "AccessDenied",
+    }
+
+    with patch(
+        "main.aws_service.get_s3_security_insights",
+        return_value=fake_result,
+    ):
+        client = TestClient(app)
+        response = client.get("/cloud/aws/s3/buckets/test-bucket/security-insights")
+
+    assert response.status_code == 403
+    assert "AccessDenied" in response.json()["detail"]

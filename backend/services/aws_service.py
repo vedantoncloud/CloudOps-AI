@@ -1166,6 +1166,134 @@ class AWSService:
                 "error": str(error),
             }
 
+    def get_s3_security_insights(self, bucket_name):
+        try:
+            s3 = boto3.client("s3")
+
+            insights = []
+            configuration = {
+                "encryption": None,
+                "public_access_block": None,
+            }
+            unavailable_checks = []
+
+            try:
+                encryption_response = s3.get_bucket_encryption(
+                    Bucket=bucket_name,
+                )
+
+                rules = encryption_response.get("ServerSideEncryptionConfiguration", {}).get(
+                    "Rules",
+                    [],
+                )
+
+                if rules:
+                    default_encryption = rules[0].get("ApplyServerSideEncryptionByDefault", {})
+                    configuration["encryption"] = {
+                        "algorithm": default_encryption.get("SSEAlgorithm"),
+                        "kms_key_id": default_encryption.get("KMSMasterKeyID"),
+                    }
+
+                if not configuration["encryption"] or not configuration["encryption"].get("algorithm"):
+                    insights.append({
+                        "type": "encryption_not_configured",
+                        "severity": "medium",
+                        "message": "Bucket default server-side encryption configuration was not detected.",
+                        "recommendation": "Review the bucket encryption configuration and enable default server-side encryption where appropriate.",
+                    })
+
+            except ClientError as error:
+                error_code = error.response.get("Error", {}).get("Code")
+                if error_code in {"AccessDenied", "AllAccessDisabled"}:
+                    unavailable_checks.append("encryption")
+                elif error_code in {"ServerSideEncryptionConfigurationNotFoundError", "NoSuchBucket"}:
+                    if error_code == "ServerSideEncryptionConfigurationNotFoundError":
+                        insights.append({
+                            "type": "encryption_not_configured",
+                            "severity": "medium",
+                            "message": "Bucket does not have a default server-side encryption configuration.",
+                            "recommendation": "Enable default server-side encryption for new objects where appropriate.",
+                        })
+                    else:
+                        raise
+                else:
+                    raise
+
+            try:
+                public_access_response = s3.get_public_access_block(
+                    Bucket=bucket_name,
+                )
+
+                public_access = public_access_response.get("PublicAccessBlockConfiguration", {})
+                configuration["public_access_block"] = public_access
+
+                required_flags = {
+                    "BlockPublicAcls",
+                    "IgnorePublicAcls",
+                    "BlockPublicPolicy",
+                    "RestrictPublicBuckets",
+                }
+
+                missing_flags = [
+                    flag for flag in required_flags
+                    if public_access.get(flag) is not True
+                ]
+
+                if missing_flags:
+                    insights.append({
+                        "type": "public_access_protection_incomplete",
+                        "severity": "high",
+                        "message": "S3 Public Access Block is not fully enabled for the bucket.",
+                        "missing_controls": sorted(missing_flags),
+                        "recommendation": "Review whether public access is required and enable all Public Access Block controls when public access is not needed.",
+                    })
+
+            except ClientError as error:
+                error_code = error.response.get("Error", {}).get("Code")
+                if error_code in {"AccessDenied", "AllAccessDisabled"}:
+                    unavailable_checks.append("public_access_block")
+                elif error_code == "NoSuchPublicAccessBlockConfiguration":
+                    insights.append({
+                        "type": "public_access_protection_missing",
+                        "severity": "high",
+                        "message": "Bucket has no Public Access Block configuration detected.",
+                        "recommendation": "Review whether public access is required and configure S3 Public Access Block when it is not needed.",
+                    })
+                else:
+                    raise
+
+            if unavailable_checks:
+                insights.append({
+                    "type": "security_configuration_unavailable",
+                    "severity": "low",
+                    "message": "Some S3 security configuration checks could not be read with the current AWS permissions.",
+                    "checks": sorted(unavailable_checks),
+                    "recommendation": "Grant the minimum required read permissions if these security checks are needed by CloudOps AI.",
+                })
+
+            health = "warning" if any(
+                insight["severity"] in {"high", "medium"}
+                for insight in insights
+            ) else ("unknown" if unavailable_checks else "healthy")
+
+            return {
+                "service": "s3",
+                "status": "healthy",
+                "bucket": bucket_name,
+                "health": health,
+                "insight_count": len(insights),
+                "insights": insights,
+                "configuration": configuration,
+            }
+
+        except (BotoCoreError, ClientError) as error:
+            return {
+                "service": "s3",
+                "status": "unhealthy",
+                "bucket": bucket_name,
+                "error": str(error),
+            }
+
     def get_ec2_instance_status(self, instance_id):
         try:
             ec2 = boto3.client("ec2")
