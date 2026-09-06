@@ -2655,3 +2655,143 @@ def test_ec2_rightsizing_insights_api_access_denied():
 
     assert response.status_code == 403
     assert "AccessDenied" in response.json()["detail"]
+
+
+
+def test_get_ec2_security_insights():
+    instances = [
+        {
+            "instance_id": "i-public12345678",
+            "name": "public-app",
+            "state": "running",
+            "instance_type": "t3.micro",
+            "public_ip": "203.0.113.10",
+            "security_groups": ["sg-12345678"],
+        },
+        {
+            "instance_id": "i-private1234567",
+            "name": "private-app",
+            "state": "running",
+            "instance_type": "t3.micro",
+            "public_ip": None,
+            "security_groups": ["sg-87654321"],
+        },
+    ]
+
+    with patch.object(
+        AWSService,
+        "get_ec2_instances",
+        return_value={"service": "ec2", "status": "healthy", "instances": instances},
+    ):
+        result = AWSService().get_ec2_security_insights()
+
+    assert result["health"] == "warning"
+    assert result["insight_count"] == 1
+    assert result["insights"][0]["type"] == "public_ip_exposure"
+    assert result["insights"][0]["severity"] == "medium"
+    assert result["insights"][0]["public_ip"] == "203.0.113.10"
+
+
+def test_get_ec2_security_insights_healthy():
+    instances = [
+        {
+            "instance_id": "i-private1234567",
+            "name": "private-app",
+            "state": "running",
+            "instance_type": "t3.micro",
+            "public_ip": None,
+            "security_groups": ["sg-87654321"],
+        },
+    ]
+
+    with patch.object(
+        AWSService,
+        "get_ec2_instances",
+        return_value={"service": "ec2", "status": "healthy", "instances": instances},
+    ):
+        result = AWSService().get_ec2_security_insights()
+
+    assert result["health"] == "healthy"
+    assert result["insight_count"] == 0
+    assert result["insights"] == []
+
+
+def test_get_ec2_security_insights_ignores_terminated_instances():
+    instances = [
+        {
+            "instance_id": "i-term12345678",
+            "name": "old-app",
+            "state": "terminated",
+            "instance_type": "t3.micro",
+            "public_ip": "203.0.113.20",
+            "security_groups": ["sg-12345678"],
+        },
+    ]
+
+    with patch.object(
+        AWSService,
+        "get_ec2_instances",
+        return_value={"service": "ec2", "status": "healthy", "instances": instances},
+    ):
+        result = AWSService().get_ec2_security_insights()
+
+    assert result["health"] == "healthy"
+    assert result["insight_count"] == 0
+
+
+def test_get_ec2_security_insights_inventory_failure():
+    with patch.object(
+        AWSService,
+        "get_ec2_instances",
+        return_value={
+            "service": "ec2",
+            "status": "unhealthy",
+            "error": "AccessDenied",
+        },
+    ):
+        result = AWSService().get_ec2_security_insights()
+
+    assert result["status"] == "unhealthy"
+    assert "AccessDenied" in result["error"]
+
+
+def test_ec2_security_insights_api_success():
+    fake_result = {
+        "service": "ec2",
+        "status": "healthy",
+        "health": "warning",
+        "insight_count": 1,
+        "insights": [{"type": "public_ip_exposure", "severity": "medium"}],
+        "instance_count": 1,
+    }
+
+    with patch(
+        "main.aws_service.get_ec2_security_insights",
+        return_value=fake_result,
+    ) as mock_get_insights:
+        client = TestClient(app)
+        response = client.get("/cloud/aws/ec2/security-insights")
+
+    assert response.status_code == 200
+    assert response.json()["service"] == "ec2"
+    assert response.json()["health"] == "warning"
+    assert response.json()["insight_count"] == 1
+    mock_get_insights.assert_called_once_with()
+
+
+def test_ec2_security_insights_api_access_denied():
+    fake_result = {
+        "service": "ec2",
+        "status": "unhealthy",
+        "error": "AccessDenied",
+    }
+
+    with patch(
+        "main.aws_service.get_ec2_security_insights",
+        return_value=fake_result,
+    ):
+        client = TestClient(app)
+        response = client.get("/cloud/aws/ec2/security-insights")
+
+    assert response.status_code == 403
+    assert "AccessDenied" in response.json()["detail"]

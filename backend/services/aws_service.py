@@ -193,6 +193,12 @@ class AWSService:
                             "AvailabilityZone"
                         ),
                         "private_ip": instance.get("PrivateIpAddress"),
+                        "public_ip": instance.get("PublicIpAddress"),
+                        "security_groups": [
+                            group.get("GroupId")
+                            for group in instance.get("SecurityGroups", [])
+                            if group.get("GroupId")
+                        ],
                         "tags": tags,
                     })
 
@@ -1092,6 +1098,56 @@ class AWSService:
                         "cpu_utilization": cpu_value,
                         "message": "EC2 instance CPU utilization is 60% or higher.",
                         "recommendation": "Avoid downsizing based on CPU alone and review workload demand before reducing capacity.",
+                    })
+
+            return {
+                "service": "ec2",
+                "status": "healthy",
+                "health": "warning" if insights else "healthy",
+                "insight_count": len(insights),
+                "insights": insights,
+                "instance_count": len(instances),
+            }
+
+        except (BotoCoreError, ClientError) as error:
+            return {
+                "service": "ec2",
+                "status": "unhealthy",
+                "error": str(error),
+            }
+
+    def get_ec2_security_insights(self):
+        try:
+            inventory = self.get_ec2_instances()
+
+            if inventory["status"] != "healthy":
+                return inventory
+
+            instances = inventory.get("instances", [])
+            insights = []
+
+            for instance in instances:
+                instance_id = instance.get("instance_id")
+                instance_name = instance.get("name")
+                instance_type = instance.get("instance_type")
+                state = instance.get("state")
+                public_ip = instance.get("public_ip")
+                security_groups = instance.get("security_groups", [])
+
+                if state in {"terminated", "shutting-down"}:
+                    continue
+
+                if public_ip:
+                    insights.append({
+                        "type": "public_ip_exposure",
+                        "severity": "medium",
+                        "instance_id": instance_id,
+                        "instance_name": instance_name,
+                        "instance_type": instance_type,
+                        "public_ip": public_ip,
+                        "security_group_count": len(security_groups),
+                        "message": "EC2 instance has a public IPv4 address and is potentially reachable from the internet.",
+                        "recommendation": "Confirm public exposure is required and review security group and network access controls for the instance.",
                     })
 
             return {
