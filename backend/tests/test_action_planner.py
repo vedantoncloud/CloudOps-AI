@@ -235,3 +235,172 @@ def test_multiple_ec2_insights_create_multiple_plans():
     assert plans[0].risk == RiskLevel.HIGH
     assert plans[1].action_type == "verify_cloudwatch_network_monitoring"
     assert plans[1].risk == RiskLevel.LOW
+
+
+def test_empty_bucket_insight_creates_low_risk_s3_plan():
+    planner = ActionPlanner()
+
+    insight = {
+        "type": "empty_bucket",
+        "severity": "low",
+        "message": "Bucket contains no objects.",
+        "recommendation": "Verify whether this bucket is still required.",
+    }
+
+    plan = planner.plan_from_s3_insight(
+        bucket_name="example-bucket",
+        insight=insight,
+    )
+
+    assert plan is not None
+    assert plan.action_type == "review_bucket_usage"
+    assert plan.target.resource_type == "s3_bucket"
+    assert plan.target.resource_id == "example-bucket"
+    assert plan.risk == RiskLevel.LOW
+    assert plan.requires_approval is True
+    assert plan.target.metadata["insight_type"] == "empty_bucket"
+
+
+def test_large_object_insight_creates_medium_risk_s3_plan():
+    planner = ActionPlanner()
+
+    insight = {
+        "type": "large_object",
+        "severity": "medium",
+        "message": "Bucket contains an object larger than 1 GB.",
+        "recommendation": "Review the object and consider compression or lifecycle policies.",
+    }
+
+    plan = planner.plan_from_s3_insight(
+        bucket_name="data-bucket",
+        insight=insight,
+    )
+
+    assert plan is not None
+    assert plan.action_type == "review_large_object"
+    assert plan.risk == RiskLevel.MEDIUM
+    assert plan.requires_approval is True
+
+
+def test_high_object_count_insight_creates_medium_risk_s3_plan():
+    planner = ActionPlanner()
+
+    insight = {
+        "type": "high_object_count",
+        "severity": "medium",
+        "message": "Bucket contains a very large number of objects.",
+        "recommendation": "Review object lifecycle and prefix organization to reduce management overhead.",
+    }
+
+    plan = planner.plan_from_s3_insight(
+        bucket_name="logs-bucket",
+        insight=insight,
+    )
+
+    assert plan is not None
+    assert plan.action_type == "review_object_lifecycle"
+    assert plan.risk == RiskLevel.MEDIUM
+
+
+def test_many_small_objects_insight_creates_low_risk_s3_plan():
+    planner = ActionPlanner()
+
+    insight = {
+        "type": "many_small_objects",
+        "severity": "low",
+        "message": "Bucket contains many relatively small objects.",
+        "recommendation": "Consider combining small files where practical and review storage access patterns.",
+    }
+
+    plan = planner.plan_from_s3_insight(
+        bucket_name="data-bucket",
+        insight=insight,
+    )
+
+    assert plan is not None
+    assert plan.action_type == "review_small_object_optimization"
+    assert plan.risk == RiskLevel.LOW
+
+
+def test_s3_insight_preserves_prefix():
+    planner = ActionPlanner()
+
+    insight = {
+        "type": "large_object",
+        "severity": "medium",
+        "message": "Bucket contains an object larger than 1 GB.",
+        "recommendation": "Review the object and consider compression or lifecycle policies.",
+    }
+
+    plan = planner.plan_from_s3_insight(
+        bucket_name="data-bucket",
+        insight=insight,
+        prefix="logs/2026/",
+    )
+
+    assert plan is not None
+    assert plan.target.metadata["prefix"] == "logs/2026/"
+
+
+def test_unsupported_s3_insight_does_not_create_action():
+    planner = ActionPlanner()
+
+    insight = {
+        "type": "unknown_future_insight",
+        "severity": "medium",
+        "message": "Future insight.",
+        "recommendation": "Future recommendation.",
+    }
+
+    plan = planner.plan_from_s3_insight(
+        bucket_name="example-bucket",
+        insight=insight,
+    )
+
+    assert plan is None
+
+
+def test_invalid_s3_insight_does_not_create_action():
+    planner = ActionPlanner()
+
+    insight = {
+        "type": "large_object",
+        "severity": "medium",
+    }
+
+    plan = planner.plan_from_s3_insight(
+        bucket_name="example-bucket",
+        insight=insight,
+    )
+
+    assert plan is None
+
+
+def test_multiple_s3_insights_create_multiple_plans():
+    planner = ActionPlanner()
+
+    insights = [
+        {
+            "type": "empty_bucket",
+            "severity": "low",
+            "message": "Bucket contains no objects.",
+            "recommendation": "Verify whether this bucket is still required.",
+        },
+        {
+            "type": "large_object",
+            "severity": "medium",
+            "message": "Bucket contains an object larger than 1 GB.",
+            "recommendation": "Review the object and consider compression or lifecycle policies.",
+        },
+    ]
+
+    plans = planner.plan_from_s3_insights(
+        bucket_name="example-bucket",
+        insights=insights,
+    )
+
+    assert len(plans) == 2
+    assert plans[0].action_type == "review_bucket_usage"
+    assert plans[0].risk == RiskLevel.LOW
+    assert plans[1].action_type == "review_large_object"
+    assert plans[1].risk == RiskLevel.MEDIUM

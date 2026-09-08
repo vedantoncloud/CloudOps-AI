@@ -133,3 +133,83 @@ class ActionPlanner:
                 plans.append(plan)
 
         return plans
+
+    def plan_from_s3_insight(
+        self,
+        bucket_name: str,
+        insight: dict[str, Any],
+        prefix: str | None = None,
+    ) -> ActionPlan | None:
+        """Convert a supported S3 insight into an action plan.
+
+        Unsupported or incomplete insights return None.
+        """
+
+        insight_type = insight.get("type")
+        severity = insight.get("severity")
+        message = insight.get("message")
+        recommendation = insight.get("recommendation")
+
+        if not message or not recommendation:
+            return None
+
+        risk_mapping = {
+            "low": RiskLevel.LOW,
+            "medium": RiskLevel.MEDIUM,
+            "high": RiskLevel.HIGH,
+        }
+
+        risk = risk_mapping.get(severity)
+
+        if risk is None:
+            return None
+
+        action_mapping = {
+            "empty_bucket": "review_bucket_usage",
+            "large_object": "review_large_object",
+            "high_object_count": "review_object_lifecycle",
+            "many_small_objects": "review_small_object_optimization",
+        }
+
+        action_type = action_mapping.get(insight_type)
+
+        if action_type is None:
+            return None
+
+        metadata = {
+            "insight_type": insight_type,
+            "recommendation": recommendation,
+        }
+
+        if prefix is not None:
+            metadata["prefix"] = prefix
+
+        return self.plan_s3_action(
+            bucket_name=bucket_name,
+            action_type=action_type,
+            reason=message,
+            risk=risk,
+            metadata=metadata,
+        )
+
+    def plan_from_s3_insights(
+        self,
+        bucket_name: str,
+        insights: list[dict[str, Any]],
+        prefix: str | None = None,
+    ) -> list[ActionPlan]:
+        """Convert supported S3 insights into action plans."""
+
+        plans = []
+
+        for insight in insights:
+            plan = self.plan_from_s3_insight(
+                bucket_name=bucket_name,
+                insight=insight,
+                prefix=prefix,
+            )
+
+            if plan is not None:
+                plans.append(plan)
+
+        return plans
