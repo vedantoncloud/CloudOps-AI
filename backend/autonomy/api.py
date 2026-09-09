@@ -1,9 +1,12 @@
 from dataclasses import asdict
 from enum import Enum
+from threading import Lock
 
 from fastapi import APIRouter, HTTPException
 
 from autonomy.action_planner import ActionPlanner
+from autonomy.approval import ApprovalManager
+from autonomy.policy_engine import PolicyEngine
 from services.aws_service import AWSService
 
 
@@ -11,6 +14,11 @@ router = APIRouter(prefix="/autonomy", tags=["autonomy"])
 
 aws_service = AWSService()
 action_planner = ActionPlanner()
+policy_engine = PolicyEngine()
+approval_manager = ApprovalManager()
+
+_plan_registry = {}
+_registry_lock = Lock()
 
 
 def _serialize(value):
@@ -35,11 +43,30 @@ def _serialize(value):
     return value
 
 
+def _store_plans(plans):
+    with _registry_lock:
+        for plan in plans:
+            _plan_registry[plan.action_id] = plan
+
+
+def _get_plan(action_id: str):
+    with _registry_lock:
+        return _plan_registry.get(action_id)
+
+
 def _plan_response(plans):
+    _store_plans(plans)
     return {
         "status": "healthy",
         "plan_count": len(plans),
         "plans": [_serialize(plan) for plan in plans],
+    }
+
+
+def _action_response(action):
+    return {
+        "status": "healthy",
+        "action": _serialize(action),
     }
 
 
@@ -86,3 +113,48 @@ def plan_s3_actions(
     )
 
     return _plan_response(plans)
+
+
+@router.post("/plans/{action_id}/evaluate")
+def evaluate_plan(action_id: str):
+    action = _get_plan(action_id)
+
+    if action is None:
+        raise HTTPException(status_code=404, detail="Action plan not found")
+
+    try:
+        evaluated = policy_engine.evaluate(action)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return _action_response(evaluated)
+
+
+@router.post("/plans/{action_id}/approve")
+def approve_plan(action_id: str):
+    action = _get_plan(action_id)
+
+    if action is None:
+        raise HTTPException(status_code=404, detail="Action plan not found")
+
+    try:
+        approved = approval_manager.approve(action)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    return _action_response(approved)
+
+
+@router.post("/plans/{action_id}/cancel")
+def cancel_plan(action_id: str):
+    action = _get_plan(action_id)
+
+    if action is None:
+        raise HTTPException(status_code=404, detail="Action plan not found")
+
+    try:
+        cancelled = approval_manager.cancel(action)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    return _action_response(cancelled)
