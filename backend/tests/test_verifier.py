@@ -6,12 +6,13 @@ from autonomy.action_models import (
     ActionTarget,
     RiskLevel,
 )
+from autonomy.executor import ActionExecutor, ExecutionResult
 from autonomy.verifier import ActionVerifier
 
 
-def create_executing_action() -> ActionPlan:
+def create_approved_action() -> ActionPlan:
     action = ActionPlan(
-        action_type="stop_instance",
+        action_type="review_instance_state",
         target=ActionTarget(
             resource_type="ec2_instance",
             resource_id="i-123456789",
@@ -20,101 +21,112 @@ def create_executing_action() -> ActionPlan:
         risk=RiskLevel.MEDIUM,
     )
 
-    action.status = ActionStatus.EXECUTING
+    action.status = ActionStatus.APPROVED
     return action
 
 
-def test_successful_action_is_marked_succeeded():
-    verifier = ActionVerifier()
+def execute_action(action: ActionPlan) -> ExecutionResult:
+    return ActionExecutor().execute(action)
 
-    action = create_executing_action()
 
-    result = verifier.verify(
-        action,
-        successful=True,
-    )
+def test_successful_execution_is_marked_succeeded():
+    action = create_approved_action()
+    execution_result = execute_action(action)
+
+    result = ActionVerifier().verify(action, execution_result)
 
     assert result.status == ActionStatus.SUCCEEDED
 
 
-def test_failed_action_requires_rollback():
-    verifier = ActionVerifier()
+def test_failed_execution_requires_rollback():
+    action = create_approved_action()
+    execution_result = execute_action(action)
 
-    action = create_executing_action()
-
-    result = verifier.verify(
-        action,
+    failed_result = ExecutionResult(
+        action_id=execution_result.action_id,
+        status=execution_result.status,
+        dry_run=execution_result.dry_run,
+        executed=execution_result.executed,
         successful=False,
+        message="Execution failed.",
+        details=execution_result.details,
     )
+
+    result = ActionVerifier().verify(action, failed_result)
 
     assert result.status == ActionStatus.ROLLBACK_REQUIRED
 
 
-def test_verifier_preserves_action_details():
-    verifier = ActionVerifier()
+def test_verifier_rejects_result_for_different_action():
+    action = create_approved_action()
+    execution_result = execute_action(action)
 
-    action = create_executing_action()
-
-    result = verifier.verify(
-        action,
+    mismatched_result = ExecutionResult(
+        action_id="different-action-id",
+        status=execution_result.status,
+        dry_run=execution_result.dry_run,
+        executed=execution_result.executed,
         successful=True,
-    )
-
-    assert result.action_type == "stop_instance"
-    assert result.target.resource_type == "ec2_instance"
-    assert result.target.resource_id == "i-123456789"
-    assert result.reason == "Test verification."
-    assert result.risk == RiskLevel.MEDIUM
-
-
-def test_verifier_rejects_unexecuted_action():
-    verifier = ActionVerifier()
-
-    action = ActionPlan(
-        action_type="stop_instance",
-        target=ActionTarget(
-            resource_type="ec2_instance",
-            resource_id="i-123456789",
-        ),
-        reason="Test verification.",
-        risk=RiskLevel.MEDIUM,
+        message=execution_result.message,
+        details=execution_result.details,
     )
 
     with pytest.raises(
         ValueError,
-        match="must be executing",
+        match="does not match",
     ):
-        verifier.verify(
-            action,
-            successful=True,
-        )
+        ActionVerifier().verify(action, mismatched_result)
 
 
-def test_verifier_rejects_approved_action():
-    verifier = ActionVerifier()
+def test_verifier_rejects_non_executing_action():
+    action = create_approved_action()
+    execution_result = execute_action(action)
 
-    action = create_executing_action()
     action.status = ActionStatus.APPROVED
 
     with pytest.raises(
         ValueError,
         match="must be executing",
     ):
-        verifier.verify(
-            action,
-            successful=True,
-        )
+        ActionVerifier().verify(action, execution_result)
+
+
+def test_verifier_rejects_invalid_execution_result_status():
+    action = create_approved_action()
+    execution_result = execute_action(action)
+
+    invalid_result = ExecutionResult(
+        action_id=execution_result.action_id,
+        status=ActionStatus.APPROVED,
+        dry_run=execution_result.dry_run,
+        executed=execution_result.executed,
+        successful=True,
+        message=execution_result.message,
+        details=execution_result.details,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="must represent an executing",
+    ):
+        ActionVerifier().verify(action, invalid_result)
 
 
 def test_failed_verification_does_not_mark_action_succeeded():
-    verifier = ActionVerifier()
+    action = create_approved_action()
+    execution_result = execute_action(action)
 
-    action = create_executing_action()
-
-    result = verifier.verify(
-        action,
+    failed_result = ExecutionResult(
+        action_id=execution_result.action_id,
+        status=execution_result.status,
+        dry_run=execution_result.dry_run,
+        executed=execution_result.executed,
         successful=False,
+        message="Execution failed.",
+        details=execution_result.details,
     )
+
+    result = ActionVerifier().verify(action, failed_result)
 
     assert result.status != ActionStatus.SUCCEEDED
     assert result.status == ActionStatus.ROLLBACK_REQUIRED

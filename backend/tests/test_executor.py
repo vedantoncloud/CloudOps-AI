@@ -20,32 +20,26 @@ def create_action(action_type="review_instance_state", status=ActionStatus.APPRO
 
 def test_executor_rejects_unapproved_action():
     with pytest.raises(PermissionError, match="must be approved"):
-        ActionExecutor().execute(
-            create_action(status=ActionStatus.PENDING_APPROVAL)
-        )
+        ActionExecutor().execute(create_action(status=ActionStatus.PENDING_APPROVAL))
 
 
 def test_executor_rejects_planned_action():
     with pytest.raises(PermissionError, match="must be approved"):
-        ActionExecutor().execute(
-            create_action(status=ActionStatus.PLANNED)
-        )
+        ActionExecutor().execute(create_action(status=ActionStatus.PLANNED))
 
 
 def test_executor_rejects_non_allowlisted_action():
     with pytest.raises(ValueError, match="not allowlisted"):
-        ActionExecutor().execute(
-            create_action(action_type="stop_instance")
-        )
+        ActionExecutor().execute(create_action(action_type="stop_instance"))
 
 
 def test_executor_dry_run_does_not_mutate_infrastructure():
     action = create_action()
-
     result = ActionExecutor().execute(action)
 
     assert result.dry_run is True
     assert result.executed is False
+    assert result.successful is True
     assert result.status == ActionStatus.EXECUTING
     assert action.status == ActionStatus.EXECUTING
     assert "no infrastructure mutation" in result.message

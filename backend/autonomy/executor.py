@@ -10,6 +10,7 @@ class ExecutionResult:
     status: ActionStatus
     dry_run: bool
     executed: bool
+    successful: bool
     message: str
     details: dict[str, Any]
 
@@ -66,6 +67,7 @@ class ActionExecutor:
             status=action.status,
             dry_run=True,
             executed=False,
+            successful=True,
             message="Dry-run validated; no infrastructure mutation was performed.",
             details={
                 "action_type": action.action_type,
