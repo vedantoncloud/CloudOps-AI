@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException
 import re
 
 from services.aws_service import AWSService
+from autonomy.api import router as autonomy_router
 
 
 app = FastAPI(
@@ -12,6 +13,8 @@ app = FastAPI(
 
 
 aws_service = AWSService()
+
+app.include_router(autonomy_router)
 
 
 @app.get("/")
