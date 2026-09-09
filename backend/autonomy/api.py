@@ -4,9 +4,13 @@ from threading import Lock
 
 from fastapi import APIRouter, HTTPException
 
+from autonomy.action_models import ActionStatus
 from autonomy.action_planner import ActionPlanner
 from autonomy.approval import ApprovalManager
+from autonomy.executor import ActionExecutor
 from autonomy.policy_engine import PolicyEngine
+from autonomy.recovery import RecoveryCoordinator
+from autonomy.verifier import ActionVerifier
 from services.aws_service import AWSService
 
 
@@ -16,6 +20,9 @@ aws_service = AWSService()
 action_planner = ActionPlanner()
 policy_engine = PolicyEngine()
 approval_manager = ApprovalManager()
+action_executor = ActionExecutor()
+action_verifier = ActionVerifier()
+recovery_coordinator = RecoveryCoordinator(verifier=action_verifier)
 
 _plan_registry = {}
 _registry_lock = Lock()
@@ -32,10 +39,7 @@ def _serialize(value):
         }
 
     if isinstance(value, dict):
-        return {
-            key: _serialize(item)
-            for key, item in value.items()
-        }
+        return {key: _serialize(item) for key, item in value.items()}
 
     if isinstance(value, list):
         return [_serialize(item) for item in value]
@@ -158,3 +162,56 @@ def cancel_plan(action_id: str):
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     return _action_response(cancelled)
+
+
+@router.post("/plans/{action_id}/execute")
+def execute_plan(
+    action_id: str,
+    dry_run: str = "true",
+):
+    action = _get_plan(action_id)
+
+    if action is None:
+        raise HTTPException(status_code=404, detail="Action plan not found")
+
+    normalized_dry_run = dry_run.strip().lower()
+
+    if normalized_dry_run not in {"true", "false"}:
+        raise HTTPException(
+            status_code=400,
+            detail="dry_run must be true or false",
+        )
+
+    if normalized_dry_run != "true":
+        raise HTTPException(
+            status_code=400,
+            detail="Real infrastructure execution is disabled; use dry_run=true.",
+        )
+
+    if action.status != ActionStatus.APPROVED:
+        raise HTTPException(
+            status_code=409,
+            detail="Action must be approved before execution.",
+        )
+
+    try:
+        execution_result = action_executor.execute(
+            action,
+            dry_run=True,
+        )
+
+        final_action = recovery_coordinator.verify_and_recover(
+            action,
+            execution_result,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {
+        "status": "healthy",
+        "action": _serialize(final_action),
+        "execution": _serialize(execution_result),
+    }
+
