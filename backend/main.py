@@ -1,8 +1,9 @@
-from fastapi import FastAPI, HTTPException
+﻿from fastapi import FastAPI, HTTPException
 import re
 
 from services.aws_service import AWSService
 from autonomy.api import router as autonomy_router
+from autonomy.control_loop_api import router as control_loop_router
 
 
 app = FastAPI(
@@ -15,6 +16,7 @@ app = FastAPI(
 aws_service = AWSService()
 
 app.include_router(autonomy_router)
+app.include_router(control_loop_router)
 
 
 @app.get("/")
@@ -419,3 +421,4 @@ def aws_ec2_metrics(instance_id: str):
         )
 
     return result
+
