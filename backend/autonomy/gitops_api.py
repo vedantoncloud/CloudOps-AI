@@ -3,6 +3,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from autonomy.audit_api import audit_trail
 from autonomy.gitops import GitOpsChangeStatus, GitOpsEngine
 from autonomy.gitops_registry import GitOpsChangeSetRegistry
 
@@ -12,7 +13,7 @@ router = APIRouter(
     tags=["autonomy-gitops"],
 )
 
-registry = GitOpsChangeSetRegistry()
+registry = GitOpsChangeSetRegistry(audit_trail=audit_trail)
 engine = GitOpsEngine()
 
 

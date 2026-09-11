@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from autonomy.action_models import ActionPlan, ActionStatus, ActionTarget, RiskLevel
+from autonomy.audit_api import audit_trail
 from autonomy.control_loop import AutonomousControlLoop
 from autonomy.decision_intelligence import DecisionContext
 from autonomy.gitops_api import registry as gitops_registry
@@ -91,6 +92,40 @@ def evaluate_control_loop(
 
                 gitops_change_id = existing.change_id
                 gitops_status = existing.status.value
+
+        audit_event = (
+            "control_loop_blocked"
+            if result.blocked
+            else "control_loop_evaluated"
+        )
+        audit_status = (
+            "blocked"
+            if result.blocked
+            else (
+                gitops_status
+                if gitops_status is not None
+                else result.decision.recommendation.value
+            )
+        )
+
+        audit_trail.record(
+            action_id=result.action.action_id,
+            action_type=audit_event,
+            resource_type=result.action.target.resource_type,
+            resource_id=result.action.target.resource_id,
+            event=audit_event,
+            old_status="pending",
+            new_status=audit_status,
+            details={
+                "recommendation": result.decision.recommendation.value,
+                "risk": result.decision.risk.value,
+                "confidence": result.decision.confidence,
+                "preventive": result.decision.preventive,
+                "requires_human_review": result.decision.requires_human_review,
+                "gitops_created": gitops_created,
+                "gitops_change_id": gitops_change_id,
+            },
+        )
 
         return ControlLoopEvaluateResponse(
             action_id=result.action.action_id,
