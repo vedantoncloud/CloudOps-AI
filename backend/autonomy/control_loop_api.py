@@ -3,15 +3,10 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from autonomy.action_models import (
-    ActionPlan,
-    ActionStatus,
-    ActionTarget,
-    RiskLevel,
-)
+from autonomy.action_models import ActionPlan, ActionStatus, ActionTarget, RiskLevel
 from autonomy.control_loop import AutonomousControlLoop
 from autonomy.decision_intelligence import DecisionContext
-
+from autonomy.gitops_api import registry as gitops_registry
 
 router = APIRouter(
     prefix="/autonomy/control-loop",
@@ -48,10 +43,7 @@ class ControlLoopEvaluateResponse(BaseModel):
     evidence: dict[str, Any]
 
 
-@router.post(
-    "/evaluate",
-    response_model=ControlLoopEvaluateResponse,
-)
+@router.post("/evaluate", response_model=ControlLoopEvaluateResponse)
 def evaluate_control_loop(
     request: ControlLoopEvaluateRequest,
 ) -> ControlLoopEvaluateResponse:
@@ -91,8 +83,14 @@ def evaluate_control_loop(
             gitops_created = result.gitops.created
 
             if result.gitops.change_set is not None:
-                gitops_change_id = result.gitops.change_set.change_id
-                gitops_status = result.gitops.change_set.status.value
+                change_set = result.gitops.change_set
+                existing = gitops_registry.get(change_set.change_id)
+
+                if existing is None:
+                    existing = gitops_registry.register(change_set)
+
+                gitops_change_id = existing.change_id
+                gitops_status = existing.status.value
 
         return ControlLoopEvaluateResponse(
             action_id=result.action.action_id,
@@ -111,7 +109,4 @@ def evaluate_control_loop(
         )
 
     except ValueError as exc:
-        raise HTTPException(
-            status_code=400,
-            detail=str(exc),
-        ) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
