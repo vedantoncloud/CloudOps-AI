@@ -5,6 +5,8 @@ from services.aws_service import AWSService
 from autonomy.api import router as autonomy_router
 from autonomy.control_loop_api import router as control_loop_router
 from autonomy.gitops_api import router as gitops_router
+from autonomy.control_plane_api import router as control_plane_router
+from autonomy.audit_api import router as audit_router
 
 
 app = FastAPI(
@@ -19,6 +21,8 @@ aws_service = AWSService()
 app.include_router(autonomy_router)
 app.include_router(control_loop_router)
 app.include_router(gitops_router)
+app.include_router(control_plane_router)
+app.include_router(audit_router)
 
 
 @app.get("/")
@@ -423,5 +427,6 @@ def aws_ec2_metrics(instance_id: str):
         )
 
     return result
+
 
 
