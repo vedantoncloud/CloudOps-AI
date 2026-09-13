@@ -5,10 +5,10 @@ from pydantic import BaseModel, Field
 
 from autonomy.action_models import ActionPlan, ActionStatus, ActionTarget, RiskLevel
 from autonomy.audit_api import audit_trail
+from autonomy.aws_provider import AWSProvider
 from autonomy.control_loop import AutonomousControlLoop
 from autonomy.decision_intelligence import DecisionContext
 from autonomy.gitops_api import registry as gitops_registry
-from autonomy.aws_provider import AWSProvider
 from autonomy.provider_registry import ProviderRegistry
 
 router = APIRouter(
@@ -21,6 +21,7 @@ provider_registry.register(AWSProvider())
 
 
 class ControlLoopEvaluateRequest(BaseModel):
+    provider: str = Field(default="aws", min_length=1)
     action_id: str = Field(min_length=1)
     action_type: str = Field(min_length=1)
     resource_type: str = Field(min_length=1)
@@ -31,13 +32,12 @@ class ControlLoopEvaluateRequest(BaseModel):
     field: str = Field(min_length=1)
     desired_value: Any = None
     current_value: Any | None = None
-    provider: str = Field(default="aws", min_length=1)
 
 
 class ControlLoopEvaluateResponse(BaseModel):
-    provider: str
     action_id: str
     resource_id: str
+    provider: str
     recommendation: str
     risk: str
     confidence: float
@@ -126,6 +126,7 @@ def evaluate_control_loop(
             old_status="pending",
             new_status=audit_status,
             details={
+                "provider": provider.provider_name,
                 "recommendation": result.decision.recommendation.value,
                 "risk": result.decision.risk.value,
                 "confidence": result.decision.confidence,
@@ -137,9 +138,9 @@ def evaluate_control_loop(
         )
 
         return ControlLoopEvaluateResponse(
-            provider=provider.provider_name,
             action_id=result.action.action_id,
             resource_id=result.action.target.resource_id,
+            provider=provider.provider_name,
             recommendation=result.decision.recommendation.value,
             risk=result.decision.risk.value,
             confidence=result.decision.confidence,
@@ -153,6 +154,5 @@ def evaluate_control_loop(
             evidence=result.decision.evidence,
         )
 
-    except ValueError as exc:
+    except (ValueError, KeyError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-
