@@ -8,11 +8,16 @@ from autonomy.audit_api import audit_trail
 from autonomy.control_loop import AutonomousControlLoop
 from autonomy.decision_intelligence import DecisionContext
 from autonomy.gitops_api import registry as gitops_registry
+from autonomy.aws_provider import AWSProvider
+from autonomy.provider_registry import ProviderRegistry
 
 router = APIRouter(
     prefix="/autonomy/control-loop",
     tags=["autonomy-control-loop"],
 )
+
+provider_registry = ProviderRegistry()
+provider_registry.register(AWSProvider())
 
 
 class ControlLoopEvaluateRequest(BaseModel):
@@ -26,9 +31,11 @@ class ControlLoopEvaluateRequest(BaseModel):
     field: str = Field(min_length=1)
     desired_value: Any = None
     current_value: Any | None = None
+    provider: str = Field(default="aws", min_length=1)
 
 
 class ControlLoopEvaluateResponse(BaseModel):
+    provider: str
     action_id: str
     resource_id: str
     recommendation: str
@@ -49,6 +56,8 @@ def evaluate_control_loop(
     request: ControlLoopEvaluateRequest,
 ) -> ControlLoopEvaluateResponse:
     try:
+        provider = provider_registry.get(request.provider)
+
         action = ActionPlan(
             action_id=request.action_id,
             action_type=request.action_type,
@@ -128,6 +137,7 @@ def evaluate_control_loop(
         )
 
         return ControlLoopEvaluateResponse(
+            provider=provider.provider_name,
             action_id=result.action.action_id,
             resource_id=result.action.target.resource_id,
             recommendation=result.decision.recommendation.value,

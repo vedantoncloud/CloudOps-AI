@@ -1,33 +1,31 @@
 ﻿from typing import Any
 
 from autonomy.provider import CloudProvider
-from services.aws_service import AWSService
 
 
 class AWSProvider(CloudProvider):
-    """
-    AWS implementation of the provider-independent interface.
+    """Read-only AWS provider adapter foundation."""
 
-    This adapter intentionally delegates to the existing AWSService.
-    It does not introduce infrastructure mutation operations.
-    """
+    provider_name = "aws"
 
-    def __init__(self, service: AWSService | None = None) -> None:
-        self.service = service if service is not None else AWSService()
+    def __init__(self, client: Any = None) -> None:
+        self.client = client
 
-    @property
-    def provider_name(self) -> str:
-        return "aws"
-
-    def get_ec2_instances(
+    def get_resource(
         self,
-        state: str | None = None,
-        tag: str | None = None,
-    ) -> Any:
-        return self.service.get_ec2_instances(state, tag)
+        resource_type: str,
+        resource_id: str,
+    ) -> dict[str, Any]:
+        if not resource_type.strip():
+            raise ValueError("resource_type cannot be empty")
 
-    def get_ec2_summary(self) -> Any:
-        return self.service.get_ec2_summary()
+        if not resource_id.strip():
+            raise ValueError("resource_id cannot be empty")
 
-    def get_s3_buckets(self) -> Any:
-        return self.service.get_s3_buckets()
+        # Provider adapter foundation is intentionally read-only.
+        # Actual AWS resource reads can be added behind this interface.
+        return {
+            "provider": self.provider_name,
+            "resource_type": resource_type,
+            "resource_id": resource_id,
+        }
