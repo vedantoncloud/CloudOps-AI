@@ -71,20 +71,10 @@ def evaluate_control_loop(
             status=ActionStatus.PENDING_APPROVAL,
         )
 
-        resource_observation = {
-            "provider": provider.provider_name,
-            "resource_type": request.resource_type,
-            "resource_id": request.resource_id,
-            "read_only": True,
-        }
-        get_resource = getattr(provider, "get_resource", None)
-        if callable(get_resource):
-            provider_observation = get_resource(
-                resource_type=request.resource_type,
-                resource_id=request.resource_id,
-            )
-            if isinstance(provider_observation, dict):
-                resource_observation.update(provider_observation)
+        resource_observation = provider.get_resource(
+            resource_type=request.resource_type,
+            resource_id=request.resource_id,
+        )
 
         resource_context = ResourceContext(
             provider=provider.provider_name,
