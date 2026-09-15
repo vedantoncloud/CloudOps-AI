@@ -68,3 +68,4 @@ def test_aws_provider_is_read_only_foundation():
     assert result["provider"] == "aws"
     assert result["resource_type"] == "ec2"
     assert result["resource_id"] == "i-test-123"
+    assert result["read_only"] is True

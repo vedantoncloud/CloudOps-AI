@@ -7,7 +7,7 @@ from autonomy.action_models import ActionPlan, ActionStatus, ActionTarget, RiskL
 from autonomy.audit_api import audit_trail
 from autonomy.aws_provider import AWSProvider
 from autonomy.control_loop import AutonomousControlLoop
-from autonomy.decision_intelligence import DecisionContext
+from autonomy.decision_intelligence import DecisionContext, ResourceContext
 from autonomy.gitops_api import registry as gitops_registry
 from autonomy.provider_registry import ProviderRegistry
 
@@ -71,10 +71,34 @@ def evaluate_control_loop(
             status=ActionStatus.PENDING_APPROVAL,
         )
 
+        resource_observation = {
+            "provider": provider.provider_name,
+            "resource_type": request.resource_type,
+            "resource_id": request.resource_id,
+            "read_only": True,
+        }
+        get_resource = getattr(provider, "get_resource", None)
+        if callable(get_resource):
+            provider_observation = get_resource(
+                resource_type=request.resource_type,
+                resource_id=request.resource_id,
+            )
+            if isinstance(provider_observation, dict):
+                resource_observation.update(provider_observation)
+
+        resource_context = ResourceContext(
+            provider=provider.provider_name,
+            resource_id=request.resource_id,
+            resource_type=request.resource_type,
+            observation=resource_observation,
+        )
+
         context = DecisionContext(
             resource_id=request.resource_id,
             resource_type=request.resource_type,
             action=action,
+            provider=provider.provider_name,
+            resource_context=resource_context,
         )
 
         result = AutonomousControlLoop().evaluate(

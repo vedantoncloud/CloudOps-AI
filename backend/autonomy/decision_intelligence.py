@@ -8,7 +8,7 @@ from autonomy.cost_optimizer import CostOpportunity
 from autonomy.dependency_planner import DependencyAction
 from autonomy.operational_memory import OperationalMemory
 from autonomy.predictive import PredictionResult
-from autonomy.security_remediation import SecurityFinding, SecurityRemediationEngine
+from autonomy.security_remediation import SecurityFinding
 from autonomy.simulator import SimulationResult
 
 
@@ -20,10 +20,20 @@ class DecisionRecommendation(str, Enum):
 
 
 @dataclass(frozen=True)
+class ResourceContext:
+    provider: str
+    resource_id: str
+    resource_type: str
+    observation: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class DecisionContext:
     resource_id: str
     resource_type: str
     action: ActionPlan
+    provider: str = "aws"
+    resource_context: ResourceContext | None = None
     blast_radius: BlastRadius | None = None
     dependency: DependencyAction | None = None
     prediction: PredictionResult | None = None
@@ -56,11 +66,33 @@ class DecisionIntelligenceEngine:
         if not context.resource_type.strip():
             raise ValueError("resource_type cannot be empty")
 
+        if not context.provider.strip():
+            raise ValueError("provider cannot be empty")
+
         if context.action.target.resource_id != context.resource_id:
             raise ValueError("action target does not match resource_id")
 
+        if context.resource_context is not None:
+            if context.resource_context.provider != context.provider:
+                raise ValueError("resource context provider does not match provider")
+            if context.resource_context.resource_id != context.resource_id:
+                raise ValueError("resource context resource_id does not match resource_id")
+            if context.resource_context.resource_type != context.resource_type:
+                raise ValueError("resource context resource_type does not match resource_type")
+
         reasons: list[str] = []
-        evidence: dict[str, Any] = {}
+        evidence: dict[str, Any] = {
+            "provider": context.provider,
+        }
+
+        if context.resource_context is not None:
+            evidence["resource_context"] = {
+                "provider": context.resource_context.provider,
+                "resource_id": context.resource_context.resource_id,
+                "resource_type": context.resource_context.resource_type,
+                "observation": dict(context.resource_context.observation),
+            }
+
         risk = context.action.risk
         recommendation = DecisionRecommendation.PROCEED
         preventive = False
@@ -213,4 +245,3 @@ class DecisionIntelligenceEngine:
             requires_human_review=requires_human_review,
             evidence=evidence,
         )
-
