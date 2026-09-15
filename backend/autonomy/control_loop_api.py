@@ -10,6 +10,7 @@ from autonomy.control_loop import AutonomousControlLoop
 from autonomy.decision_intelligence import DecisionContext, ResourceContext
 from autonomy.gitops_api import registry as gitops_registry
 from autonomy.provider_registry import ProviderRegistry
+from autonomy.resource_observer import ResourceObserver
 
 router = APIRouter(
     prefix="/autonomy/control-loop",
@@ -18,6 +19,7 @@ router = APIRouter(
 
 provider_registry = ProviderRegistry()
 provider_registry.register(AWSProvider())
+resource_observer = ResourceObserver()
 
 
 class ControlLoopEvaluateRequest(BaseModel):
@@ -71,16 +73,17 @@ def evaluate_control_loop(
             status=ActionStatus.PENDING_APPROVAL,
         )
 
-        resource_observation = provider.get_resource(
+        observation = resource_observer.observe(
+            provider=provider,
             resource_type=request.resource_type,
             resource_id=request.resource_id,
         )
 
         resource_context = ResourceContext(
-            provider=provider.provider_name,
-            resource_id=request.resource_id,
-            resource_type=request.resource_type,
-            observation=resource_observation,
+            provider=observation.provider,
+            resource_id=observation.resource_id,
+            resource_type=observation.resource_type,
+            observation=observation.as_dict(),
         )
 
         context = DecisionContext(
