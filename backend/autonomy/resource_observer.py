@@ -24,7 +24,7 @@ class ResourceObservation:
 
 
 class ResourceObserver:
-    """Collects read-only resource observations through provider adapters."""
+    """Collects and normalizes read-only resource observations."""
 
     def observe(
         self,
@@ -42,11 +42,52 @@ class ResourceObserver:
             resource_id=resource_id,
         )
 
-        data = dict(raw) if isinstance(raw, dict) else {}
+        source = dict(raw) if isinstance(raw, dict) else {}
+
+        normalized = {
+            "state": source.get("state", "unknown"),
+            "health": source.get("health", "unknown"),
+            "tags": self._normalize_tags(source.get("tags")),
+            "metadata": self._normalize_metadata(source),
+        }
 
         return ResourceObservation(
             provider=provider.provider_name,
             resource_type=resource_type,
             resource_id=resource_id,
-            data=data,
+            data=normalized,
         )
+
+    @staticmethod
+    def _normalize_tags(value: Any) -> dict[str, str]:
+        if isinstance(value, dict):
+            return {
+                str(key): str(item)
+                for key, item in value.items()
+            }
+
+        if isinstance(value, list):
+            result: dict[str, str] = {}
+            for item in value:
+                if isinstance(item, dict) and "Key" in item and "Value" in item:
+                    result[str(item["Key"])] = str(item["Value"])
+            return result
+
+        return {}
+
+    @staticmethod
+    def _normalize_metadata(source: dict[str, Any]) -> dict[str, Any]:
+        excluded = {
+            "provider",
+            "resource_type",
+            "resource_id",
+            "read_only",
+            "state",
+            "health",
+            "tags",
+        }
+        return {
+            key: value
+            for key, value in source.items()
+            if key not in excluded
+        }

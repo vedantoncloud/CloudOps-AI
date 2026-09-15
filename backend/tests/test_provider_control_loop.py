@@ -126,3 +126,97 @@ def test_control_loop_exposes_provider_resource_context():
     assert data["evidence"]["resource_context"]["resource_id"] == "i-context-123"
     assert data["evidence"]["resource_context"]["resource_type"] == "ec2"
     assert data["evidence"]["resource_context"]["observation"]["read_only"] is True
+
+
+def test_resource_observer_normalizes_provider_neutral_state():
+    from autonomy.aws_provider import AWSProvider
+    from autonomy.resource_observer import ResourceObserver
+
+    class FakeAWSService:
+        def get_ec2_instances(self, state=None, tag_filter=None):
+            return {}
+
+        def get_ec2_summary(self):
+            return {}
+
+        def get_s3_buckets(self):
+            return {}
+
+    provider = AWSProvider(FakeAWSService())
+    provider.get_resource = lambda resource_type, resource_id: {
+        "provider": "aws",
+        "resource_type": resource_type,
+        "resource_id": resource_id,
+        "read_only": True,
+        "state": "running",
+        "health": "healthy",
+        "tags": [
+            {"Key": "Environment", "Value": "prod"},
+            {"Key": "Team", "Value": "platform"},
+        ],
+        "instance_type": "t3.medium",
+    }
+
+    observation = ResourceObserver().observe(provider, "ec2", "i-normalized-1")
+
+    assert observation.provider == "aws"
+    assert observation.resource_type == "ec2"
+    assert observation.resource_id == "i-normalized-1"
+    assert observation.data["state"] == "running"
+    assert observation.data["health"] == "healthy"
+    assert observation.data["tags"] == {
+        "Environment": "prod",
+        "Team": "platform",
+    }
+    assert observation.data["metadata"]["instance_type"] == "t3.medium"
+    assert observation.as_dict()["read_only"] is True
+
+
+def test_resource_observer_defaults_missing_state_health_and_tags():
+    from autonomy.aws_provider import AWSProvider
+    from autonomy.resource_observer import ResourceObserver
+
+    class FakeAWSService:
+        def get_ec2_instances(self, state=None, tag_filter=None):
+            return {}
+
+        def get_ec2_summary(self):
+            return {}
+
+        def get_s3_buckets(self):
+            return {}
+
+    provider = AWSProvider(FakeAWSService())
+    provider.get_resource = lambda resource_type, resource_id: {
+        "provider": "aws",
+        "resource_type": resource_type,
+        "resource_id": resource_id,
+        "read_only": True,
+    }
+
+    observation = ResourceObserver().observe(provider, "ec2", "i-normalized-2")
+
+    assert observation.data["state"] == "unknown"
+    assert observation.data["health"] == "unknown"
+    assert observation.data["tags"] == {}
+    assert observation.data["metadata"] == {}
+
+
+def test_resource_observer_rejects_empty_resource_identity():
+    from autonomy.aws_provider import AWSProvider
+    from autonomy.resource_observer import ResourceObserver
+
+    provider = AWSProvider(object())
+    observer = ResourceObserver()
+
+    try:
+        observer.observe(provider, "", "resource-1")
+        assert False
+    except ValueError as exc:
+        assert str(exc) == "resource_type cannot be empty"
+
+    try:
+        observer.observe(provider, "ec2", "")
+        assert False
+    except ValueError as exc:
+        assert str(exc) == "resource_id cannot be empty"
