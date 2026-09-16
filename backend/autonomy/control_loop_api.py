@@ -7,10 +7,10 @@ from autonomy.action_models import ActionPlan, ActionStatus, ActionTarget, RiskL
 from autonomy.audit_api import audit_trail
 from autonomy.aws_provider import AWSProvider
 from autonomy.control_loop import AutonomousControlLoop
+from autonomy.control_loop_governance import ControlLoopGovernanceGate
 from autonomy.decision_intelligence import DecisionContext, ResourceContext
 from autonomy.gitops_api import registry as gitops_registry
 from autonomy.provider_registry import ProviderRegistry
-from autonomy.resource_observer import ResourceObserver
 
 router = APIRouter(
     prefix="/autonomy/control-loop",
@@ -19,7 +19,9 @@ router = APIRouter(
 
 provider_registry = ProviderRegistry()
 provider_registry.register(AWSProvider())
-resource_observer = ResourceObserver()
+
+# Shared governance gate. Tests and callers can inject a custom governance engine.
+governance_gate = ControlLoopGovernanceGate()
 
 
 class ControlLoopEvaluateRequest(BaseModel):
@@ -53,10 +55,57 @@ class ControlLoopEvaluateResponse(BaseModel):
     evidence: dict[str, Any]
 
 
+def _audit_gate_result(action: ActionPlan, provider_name: str, gate_result: Any) -> None:
+    decision = gate_result.decision.value
+    event = (
+        "control_loop_governance_blocked"
+        if gate_result.blocked
+        else (
+            "control_loop_governance_review"
+            if gate_result.requires_human_review
+            else "control_loop_governance_allowed"
+        )
+    )
+    audit_trail.record(
+        action_id=action.action_id,
+        action_type=event,
+        resource_type=action.target.resource_type,
+        resource_id=action.target.resource_id,
+        event=event,
+        old_status="pending",
+        new_status=decision,
+        details={
+            "provider": provider_name,
+            "policy_decision": decision,
+            "governance_gate": gate_result.evidence.get("governance_gate"),
+            "requires_human_review": gate_result.requires_human_review,
+            "blocked": gate_result.blocked,
+            "evidence": dict(gate_result.evidence),
+        },
+    )
+
+    # Preserve the legacy lifecycle event for existing audit consumers.
+    if gate_result.blocked:
+        audit_trail.record(
+            action_id=action.action_id,
+            action_type="control_loop_blocked",
+            resource_type=action.target.resource_type,
+            resource_id=action.target.resource_id,
+            event="control_loop_blocked",
+            old_status="pending",
+            new_status="blocked",
+            details={
+                "provider": provider_name,
+                "policy_decision": decision,
+                "governance_gate": gate_result.evidence.get("governance_gate"),
+                "blocked": True,
+                "evidence": dict(gate_result.evidence),
+            },
+        )
+
+
 @router.post("/evaluate", response_model=ControlLoopEvaluateResponse)
-def evaluate_control_loop(
-    request: ControlLoopEvaluateRequest,
-) -> ControlLoopEvaluateResponse:
+def evaluate_control_loop(request: ControlLoopEvaluateRequest) -> ControlLoopEvaluateResponse:
     try:
         provider = provider_registry.get(request.provider)
 
@@ -73,12 +122,43 @@ def evaluate_control_loop(
             status=ActionStatus.PENDING_APPROVAL,
         )
 
-        observation = resource_observer.observe(
+        # Governance is the first decision gate after provider resolution.
+        gate = governance_gate.evaluate(
             provider=provider,
             resource_type=request.resource_type,
             resource_id=request.resource_id,
         )
 
+        governance_evidence = dict(gate.evidence)
+        governance_evidence["policy_decision"] = gate.decision.value
+        governance_evidence["allowed_for_decision"] = gate.allowed
+
+        # REVIEW and DENY stop the normal decision/GitOps flow.
+        if not gate.allowed:
+            _audit_gate_result(action, provider.provider_name, gate)
+            recommendation = "deny" if gate.blocked else "review"
+
+            return ControlLoopEvaluateResponse(
+                action_id=action.action_id,
+                resource_id=action.target.resource_id,
+                provider=provider.provider_name,
+                recommendation=recommendation,
+                risk=request.risk.value,
+                confidence=1.0,
+                preventive=False,
+                requires_human_review=gate.requires_human_review,
+                blocked=gate.blocked,
+                gitops_created=False,
+                gitops_change_id=None,
+                gitops_status=None,
+                reasons=list(gate.resource.policy.reasons),
+                evidence={
+                    "provider": provider.provider_name,
+                    "governance": governance_evidence,
+                },
+            )
+
+        observation = gate.resource.observation
         resource_context = ResourceContext(
             provider=observation.provider,
             resource_id=observation.resource_id,
@@ -108,22 +188,15 @@ def evaluate_control_loop(
 
         if result.gitops is not None:
             gitops_created = result.gitops.created
-
             if result.gitops.change_set is not None:
                 change_set = result.gitops.change_set
                 existing = gitops_registry.get(change_set.change_id)
-
                 if existing is None:
                     existing = gitops_registry.register(change_set)
-
                 gitops_change_id = existing.change_id
                 gitops_status = existing.status.value
 
-        audit_event = (
-            "control_loop_blocked"
-            if result.blocked
-            else "control_loop_evaluated"
-        )
+        audit_event = "control_loop_blocked" if result.blocked else "control_loop_evaluated"
         audit_status = (
             "blocked"
             if result.blocked
@@ -151,6 +224,7 @@ def evaluate_control_loop(
                 "requires_human_review": result.decision.requires_human_review,
                 "gitops_created": gitops_created,
                 "gitops_change_id": gitops_change_id,
+                "governance": governance_evidence,
             },
         )
 
@@ -168,7 +242,10 @@ def evaluate_control_loop(
             gitops_change_id=gitops_change_id,
             gitops_status=gitops_status,
             reasons=result.decision.reasons,
-            evidence=result.decision.evidence,
+            evidence={
+                **dict(result.decision.evidence),
+                "governance": governance_evidence,
+            },
         )
 
     except (ValueError, KeyError) as exc:
