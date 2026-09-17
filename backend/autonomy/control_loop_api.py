@@ -1,4 +1,4 @@
-﻿from typing import Any
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -8,9 +8,11 @@ from autonomy.audit_api import audit_trail
 from autonomy.aws_provider import AWSProvider
 from autonomy.control_loop import AutonomousControlLoop
 from autonomy.control_loop_governance import ControlLoopGovernanceGate
-from autonomy.decision_intelligence import DecisionContext, ResourceContext
+from autonomy.decision_intelligence import DecisionContext
 from autonomy.gitops_api import registry as gitops_registry
 from autonomy.provider_registry import ProviderRegistry
+from autonomy.resource_context_pipeline import ResourceContextPipeline
+from autonomy.resource_discovery import ResourceDiscovery
 
 router = APIRouter(
     prefix="/autonomy/control-loop",
@@ -22,6 +24,11 @@ provider_registry.register(AWSProvider())
 
 # Shared governance gate. Tests and callers can inject a custom governance engine.
 governance_gate = ControlLoopGovernanceGate()
+resource_discovery = ResourceDiscovery(provider_registry)
+resource_context_pipeline = ResourceContextPipeline(
+    discovery=resource_discovery,
+    governance_gate=governance_gate,
+)
 
 
 class ControlLoopEvaluateRequest(BaseModel):
@@ -84,7 +91,6 @@ def _audit_gate_result(action: ActionPlan, provider_name: str, gate_result: Any)
         },
     )
 
-    # Preserve the legacy lifecycle event for existing audit consumers.
     if gate_result.blocked:
         audit_trail.record(
             action_id=action.action_id,
@@ -122,21 +128,25 @@ def evaluate_control_loop(request: ControlLoopEvaluateRequest) -> ControlLoopEva
             status=ActionStatus.PENDING_APPROVAL,
         )
 
-        # Governance is the first decision gate after provider resolution.
-        gate = governance_gate.evaluate(
+        # Unified resource pipeline: discovery + observation + governance.
+        pipeline = resource_context_pipeline.build(
             provider=provider,
             resource_type=request.resource_type,
             resource_id=request.resource_id,
         )
 
-        governance_evidence = dict(gate.evidence)
-        governance_evidence["policy_decision"] = gate.decision.value
-        governance_evidence["allowed_for_decision"] = gate.allowed
+        governance = pipeline.governance
+        governance_evidence = {
+            **dict(governance.evidence),
+            "policy_decision": governance.decision.value,
+            "allowed_for_decision": governance.allowed,
+        }
 
-        # REVIEW and DENY stop the normal decision/GitOps flow.
-        if not gate.allowed:
-            _audit_gate_result(action, provider.provider_name, gate)
-            recommendation = "deny" if gate.blocked else "review"
+        pipeline_evidence = dict(pipeline.evidence)
+
+        if not pipeline.allowed_for_decision:
+            _audit_gate_result(action, provider.provider_name, governance)
+            recommendation = "deny" if pipeline.blocked else "review"
 
             return ControlLoopEvaluateResponse(
                 action_id=action.action_id,
@@ -146,32 +156,26 @@ def evaluate_control_loop(request: ControlLoopEvaluateRequest) -> ControlLoopEva
                 risk=request.risk.value,
                 confidence=1.0,
                 preventive=False,
-                requires_human_review=gate.requires_human_review,
-                blocked=gate.blocked,
+                requires_human_review=pipeline.requires_human_review,
+                blocked=pipeline.blocked,
                 gitops_created=False,
                 gitops_change_id=None,
                 gitops_status=None,
-                reasons=list(gate.resource.policy.reasons),
+                reasons=list(governance.resource.policy.reasons),
                 evidence={
                     "provider": provider.provider_name,
+                    "resource_pipeline": pipeline_evidence,
+                    "resource_context": { "provider": getattr(pipeline.resource_context, "provider", pipeline.resource_context.observation.get("provider", provider.provider_name)), "resource_id": getattr(pipeline.resource_context, "resource_id", pipeline.resource_context.observation.get("resource_id", request.resource_id)), "resource_type": getattr(pipeline.resource_context, "resource_type", pipeline.resource_context.observation.get("resource_type", request.resource_type)), "observation": pipeline.resource_context.observation },
                     "governance": governance_evidence,
                 },
             )
-
-        observation = gate.resource.observation
-        resource_context = ResourceContext(
-            provider=observation.provider,
-            resource_id=observation.resource_id,
-            resource_type=observation.resource_type,
-            observation=observation.as_dict(),
-        )
 
         context = DecisionContext(
             resource_id=request.resource_id,
             resource_type=request.resource_type,
             action=action,
             provider=provider.provider_name,
-            resource_context=resource_context,
+            resource_context=pipeline.resource_context,
         )
 
         result = AutonomousControlLoop().evaluate(
@@ -224,6 +228,8 @@ def evaluate_control_loop(request: ControlLoopEvaluateRequest) -> ControlLoopEva
                 "requires_human_review": result.decision.requires_human_review,
                 "gitops_created": gitops_created,
                 "gitops_change_id": gitops_change_id,
+                "resource_pipeline": pipeline_evidence,
+                "resource_context": { "provider": getattr(pipeline.resource_context, "provider", pipeline.resource_context.observation.get("provider", provider.provider_name)), "resource_id": getattr(pipeline.resource_context, "resource_id", pipeline.resource_context.observation.get("resource_id", request.resource_id)), "resource_type": getattr(pipeline.resource_context, "resource_type", pipeline.resource_context.observation.get("resource_type", request.resource_type)), "observation": pipeline.resource_context.observation },
                 "governance": governance_evidence,
             },
         )
@@ -244,9 +250,13 @@ def evaluate_control_loop(request: ControlLoopEvaluateRequest) -> ControlLoopEva
             reasons=result.decision.reasons,
             evidence={
                 **dict(result.decision.evidence),
+                "resource_pipeline": pipeline_evidence,
+                "resource_context": { "provider": getattr(pipeline.resource_context, "provider", pipeline.resource_context.observation.get("provider", provider.provider_name)), "resource_id": getattr(pipeline.resource_context, "resource_id", pipeline.resource_context.observation.get("resource_id", request.resource_id)), "resource_type": getattr(pipeline.resource_context, "resource_type", pipeline.resource_context.observation.get("resource_type", request.resource_type)), "observation": pipeline.resource_context.observation },
                 "governance": governance_evidence,
             },
         )
 
     except (ValueError, KeyError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
