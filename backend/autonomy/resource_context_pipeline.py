@@ -38,9 +38,9 @@ class ResourceContextPipelineResult:
 class ResourceContextPipeline:
     """Build a governed ResourceContext for the control loop.
 
-    Discovery establishes whether the resource is present in the provider
-    inventory. The governance gate remains authoritative for whether the
-    resource may proceed to Decision Intelligence.
+    Discovery is best-effort because provider adapters used by the control
+    loop may expose observation/get_resource without inventory-list methods.
+    Governance remains authoritative for whether a resource may proceed.
     """
 
     def __init__(
@@ -59,15 +59,24 @@ class ResourceContextPipeline:
         resource_type: str,
         resource_id: str,
     ) -> ResourceContextPipelineResult:
-        discovered_resources = self.discovery.list_resources(
-            provider=provider,
-            resource_type=resource_type,
-        )
+        discovery_error: str | None = None
 
-        discovered = any(
-            resource.resource_id == resource_id
-            for resource in discovered_resources
-        )
+        try:
+            discovered_resources = self.discovery.list_resources(
+                provider=provider.provider_name,
+                resource_type=resource_type,
+            )
+            discovered = any(
+                resource.resource_id == resource_id
+                for resource in discovered_resources
+            )
+        except (AttributeError, KeyError, ValueError) as exc:
+            # Some provider test doubles / adapters intentionally implement
+            # only read-only observation. Do not let optional inventory
+            # capabilities prevent governance and decision evaluation.
+            discovered_resources = []
+            discovered = False
+            discovery_error = str(exc)
 
         governance = self.governance_gate.evaluate(
             provider=provider,
@@ -76,6 +85,7 @@ class ResourceContextPipeline:
         )
 
         observation = governance.resource.observation
+
         resource_context = ResourceContext(
             provider=observation.provider,
             resource_id=observation.resource_id,
@@ -83,13 +93,12 @@ class ResourceContextPipeline:
             observation=observation.as_dict(),
         )
 
-        outcome = (
-            "blocked"
-            if governance.blocked
-            else "review"
-            if governance.requires_human_review
-            else "allowed"
-        )
+        if governance.blocked:
+            outcome = "blocked"
+        elif governance.requires_human_review:
+            outcome = "review"
+        else:
+            outcome = "allowed"
 
         evidence = {
             "provider": provider.provider_name,
@@ -102,6 +111,13 @@ class ResourceContextPipeline:
             "blocked": governance.blocked,
             "pipeline_outcome": outcome,
         }
+
+        if discovery_error is not None:
+            evidence["discovery_available"] = False
+            evidence["discovery_error"] = discovery_error
+        else:
+            evidence["discovery_available"] = True
+            evidence["discovered_resource_count"] = len(discovered_resources)
 
         return ResourceContextPipelineResult(
             provider=provider.provider_name,

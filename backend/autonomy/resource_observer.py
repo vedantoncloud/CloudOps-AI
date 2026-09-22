@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from autonomy.provider import CloudProvider
@@ -6,25 +6,30 @@ from autonomy.provider import CloudProvider
 
 @dataclass(frozen=True)
 class ResourceObservation:
-    """Normalized, provider-neutral observation of a cloud resource."""
+    """Provider-neutral, read-only resource observation."""
 
     provider: str
     resource_type: str
     resource_id: str
-    data: dict[str, Any]
+    data: dict[str, Any] = field(default_factory=dict)
+    read_only: bool = True
+
+    @property
+    def attributes(self) -> dict[str, Any]:
+        return dict(self.data)
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "provider": self.provider,
             "resource_type": self.resource_type,
             "resource_id": self.resource_id,
-            "read_only": True,
-            "data": dict(self.data),
+            "read_only": self.read_only,
+            **dict(self.data),
         }
 
 
 class ResourceObserver:
-    """Collects and normalizes read-only resource observations."""
+    """Normalize provider resource reads into a stable provider-neutral contract."""
 
     def observe(
         self,
@@ -37,47 +42,50 @@ class ResourceObserver:
         if not resource_id.strip():
             raise ValueError("resource_id cannot be empty")
 
-        raw = provider.get_resource(
+        get_resource = getattr(provider, "get_resource", None)
+        if not callable(get_resource):
+            raise ValueError(
+                f"provider '{provider.provider_name}' does not support resource observation"
+            )
+
+        raw = get_resource(
             resource_type=resource_type,
             resource_id=resource_id,
         )
 
-        source = dict(raw) if isinstance(raw, dict) else {}
+        if not isinstance(raw, dict):
+            raise ValueError("provider resource observation must be a dictionary")
 
-        normalized = {
-            "state": source.get("state", "unknown"),
-            "health": source.get("health", "unknown"),
-            "tags": self._normalize_tags(source.get("tags")),
-            "metadata": self._normalize_metadata(source),
-        }
+        observed_provider = str(raw.get("provider") or provider.provider_name)
+        observed_type = str(raw.get("resource_type") or resource_type)
+        observed_id = str(raw.get("resource_id") or resource_id)
 
-        return ResourceObservation(
-            provider=provider.provider_name,
-            resource_type=resource_type,
-            resource_id=resource_id,
-            data=normalized,
-        )
+        if observed_provider != provider.provider_name:
+            raise ValueError("provider observation returned mismatched provider")
+        if observed_type != resource_type:
+            raise ValueError("provider observation returned mismatched resource_type")
+        if observed_id != resource_id:
+            raise ValueError("provider observation returned mismatched resource_id")
 
-    @staticmethod
-    def _normalize_tags(value: Any) -> dict[str, str]:
-        if isinstance(value, dict):
-            return {
-                str(key): str(item)
-                for key, item in value.items()
-            }
+        raw_tags = raw.get("tags", {})
+        if isinstance(raw_tags, dict):
+            tags = dict(raw_tags)
+        elif isinstance(raw_tags, list):
+            tags = {}
+            for tag in raw_tags:
+                if isinstance(tag, dict):
+                    key = tag.get("Key", tag.get("key"))
+                    value = tag.get("Value", tag.get("value"))
+                    if key is not None:
+                        tags[str(key)] = value
+        else:
+            tags = {}
 
-        if isinstance(value, list):
-            result: dict[str, str] = {}
-            for item in value:
-                if isinstance(item, dict) and "Key" in item and "Value" in item:
-                    result[str(item["Key"])] = str(item["Value"])
-            return result
+        metadata = dict(raw.get("metadata", {}))
+        if not isinstance(raw.get("metadata", {}), dict):
+            metadata = {}
 
-        return {}
-
-    @staticmethod
-    def _normalize_metadata(source: dict[str, Any]) -> dict[str, Any]:
-        excluded = {
+        reserved = {
             "provider",
             "resource_type",
             "resource_id",
@@ -85,9 +93,24 @@ class ResourceObserver:
             "state",
             "health",
             "tags",
+            "metadata",
         }
-        return {
-            key: value
-            for key, value in source.items()
-            if key not in excluded
+
+        for key, value in raw.items():
+            if key not in reserved:
+                metadata[key] = value
+
+        data = {
+            "state": raw.get("state", "unknown"),
+            "health": raw.get("health", "unknown"),
+            "tags": tags,
+            "metadata": metadata,
         }
+
+        return ResourceObservation(
+            provider=observed_provider,
+            resource_type=observed_type,
+            resource_id=observed_id,
+            data=data,
+            read_only=bool(raw.get("read_only", True)),
+        )

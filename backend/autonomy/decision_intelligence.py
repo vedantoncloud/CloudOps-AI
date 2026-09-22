@@ -86,11 +86,13 @@ class DecisionIntelligenceEngine:
         }
 
         if context.resource_context is not None:
+            resource_observation = dict(context.resource_context.observation)
             evidence["resource_context"] = {
                 "provider": context.resource_context.provider,
                 "resource_id": context.resource_context.resource_id,
                 "resource_type": context.resource_context.resource_type,
-                "observation": dict(context.resource_context.observation),
+                "observation": resource_observation,
+                **resource_observation,
             }
 
         risk = context.action.risk
