@@ -7,6 +7,7 @@ from autonomy.control_loop_api import router as control_loop_router
 from autonomy.gitops_api import router as gitops_router
 from autonomy.control_plane_api import router as control_plane_router
 from autonomy.audit_api import router as audit_router
+from autonomy.autonomous_control_plane_api import router as autonomous_control_plane_router
 
 
 app = FastAPI(
@@ -23,6 +24,7 @@ app.include_router(control_loop_router)
 app.include_router(gitops_router)
 app.include_router(control_plane_router)
 app.include_router(audit_router)
+app.include_router(autonomous_control_plane_router)
 
 
 @app.get("/")
