@@ -1,11 +1,11 @@
-"""FastAPI surface for the unified autonomous control plane."""
+"""Hardened FastAPI surface for the unified autonomous control plane."""
 
 from __future__ import annotations
 
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from autonomy.action_models import ActionPlan, ActionStatus, ActionTarget, RiskLevel
 from autonomy.autonomous_control_plane import AutonomousControlPlane
@@ -61,6 +61,38 @@ class ControlPlaneRunRequest(BaseModel):
     idempotency_seen: bool = False
     dry_run: bool = True
 
+    @field_validator(
+        "provider",
+        "resource_type",
+        "resource_id",
+        "action_type",
+        mode="before",
+    )
+    @classmethod
+    def validate_required_text(cls, value: Any) -> str:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("value cannot be empty")
+        return value.strip()
+
+    @field_validator("reason")
+    @classmethod
+    def normalize_reason(cls, value: str) -> str:
+        value = value.strip()
+        return value or "Autonomous control-plane request"
+
+    @field_validator("risk")
+    @classmethod
+    def normalize_risk(cls, value: str) -> str:
+        return value.strip().lower()
+
+    @field_validator("idempotency_key")
+    @classmethod
+    def normalize_idempotency_key(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        return value or None
+
 
 def _risk(value: str) -> RiskLevel:
     try:
@@ -81,7 +113,7 @@ def _action(payload: ControlPlaneRunRequest) -> ActionPlan:
         action_id=f"api-{payload.resource_type}-{payload.resource_id}",
         action_type=payload.action_type,
         target=_target(payload),
-        reason=payload.reason.strip() or "Autonomous control-plane request",
+        reason=payload.reason,
         risk=_risk(payload.risk),
         status=ActionStatus.PENDING_APPROVAL,
     )
