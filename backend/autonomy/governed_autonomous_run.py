@@ -146,17 +146,40 @@ class GovernedAutonomousRun:
             "resource_id": resource_id,
         }
 
-        lifecycle_result = self.lifecycle.run(
-            action=action,
-            approved_by=approved_by,
-            rejected_by=rejected_by,
-            rejection_reason=rejection_reason,
-            decision=governance.decision,
-            blast_radius=blast_radius,
-            idempotency_key=idempotency_key,
-            idempotency_seen=idempotency_seen,
-            dry_run=dry_run,
-        )
+        try:
+            lifecycle_result = self.lifecycle.run(
+                action=action,
+                approved_by=approved_by,
+                rejected_by=rejected_by,
+                rejection_reason=rejection_reason,
+                decision=governance.decision,
+                blast_radius=blast_radius,
+                idempotency_key=idempotency_key,
+                idempotency_seen=idempotency_seen,
+                dry_run=dry_run,
+            )
+        except Exception as exc:
+            # The run has crossed the lifecycle boundary, so an exception must
+            # become an explicit failed run rather than an apparent success.
+            # No retry is performed here; recovery/rollback remains governed by
+            # the existing lifecycle/recovery components.
+            evidence["execution_flow"] = "lifecycle_failed"
+            evidence["lifecycle_outcome"] = "failed"
+            evidence["failure"] = {
+                "stage": "autonomous_lifecycle",
+                "exception_type": type(exc).__name__,
+                "message": str(exc),
+            }
+            evidence["trace"]["failure_stage"] = "autonomous_lifecycle"
+
+            return GovernedAutonomousRunResult(
+                governance=governance,
+                lifecycle=None,
+                outcome="failed",
+                execution_started=True,
+                run_id=trace_id,
+                evidence=evidence,
+            )
 
         lifecycle_evidence = getattr(lifecycle_result, "evidence", None)
         if isinstance(lifecycle_evidence, dict):
