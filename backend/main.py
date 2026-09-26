@@ -9,6 +9,7 @@ from autonomy.control_plane_api import router as control_plane_router
 from autonomy.audit_api import router as audit_router
 from autonomy.autonomous_control_plane_api import router as autonomous_control_plane_router
 from autonomy.autonomous_run_api import router as autonomous_run_router
+from autonomy.persistent_audit_health_api import router as persistent_audit_health_router
 
 
 app = FastAPI(
@@ -27,6 +28,7 @@ app.include_router(control_plane_router)
 app.include_router(audit_router)
 app.include_router(autonomous_control_plane_router)
 app.include_router(autonomous_run_router)
+app.include_router(persistent_audit_health_router)
 
 
 @app.get("/")
@@ -379,7 +381,11 @@ def aws_s3_bucket_security_insights(bucket_name: str):
 
 
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/cost-insights")
-def aws_s3_bucket_cost_insights(bucket_name: str, prefix: str | None = None, max_keys: int | None = None):
+def aws_s3_bucket_cost_insights(
+    bucket_name: str,
+    prefix: str | None = None,
+    max_keys: int | None = None,
+):
     if max_keys is not None and not 1 <= max_keys <= 1000:
         raise HTTPException(
             status_code=400,
@@ -431,8 +437,3 @@ def aws_ec2_metrics(instance_id: str):
         )
 
     return result
-
-
-
-
-
