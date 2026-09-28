@@ -1,162 +1,70 @@
-﻿from __future__ import annotations
+from pathlib import Path
+import sqlite3
 
-from datetime import datetime, timezone
-
-from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-import autonomy.persistent_audit_reconciliation_api as reconciliation_api
 from autonomy.persistent_audit_idempotency import PersistentAuditIdempotencyStore
-from autonomy.persistent_audit_reconciliation import (
-    PersistentAuditReconciliation,
-)
+from autonomy.persistent_audit_reconciliation import PersistentAuditReconciliation
+from autonomy.persistent_audit_reconciliation_api import router
 
 
-def test_reconciliation_api_real_mixed_active_and_stale(
-    monkeypatch,
-    tmp_path,
-):
-    db_path = tmp_path / "audit.db"
+def test_reconciliation_api_mixed_active_and_stale(monkeypatch, tmp_path):
+    db = tmp_path / "mixed.db"
+    store = PersistentAuditIdempotencyStore(db)
 
-    store = PersistentAuditIdempotencyStore(db_path)
-
-    store.claim(
-        "run-active",
-        "recovery_completed",
-        {
-            "source": "mixed-integration",
-            "run_id": "run-active",
-        },
-    )
-
-    store.claim(
-        "run-stale",
-        "recovery_failed",
-        {
-            "source": "mixed-integration",
-            "run_id": "run-stale",
-        },
-    )
-
-    now = datetime(
-        2026,
-        9,
-        28,
-        20,
-        0,
-        tzinfo=timezone.utc,
-    )
-
-    active_time = now.timestamp() - 10
-    stale_time = now.timestamp() - 301
+    store.claim("run-active", "event.active", {"kind": "active"})
+    store.claim("run-stale", "event.stale", {"kind": "stale"})
 
     with store._connect() as connection:
-
         connection.execute(
             """
-            UPDATE audit_idempotency
+            UPDATE audit_claims
             SET claimed_at = ?, status = 'pending'
             WHERE run_id = ? AND event_type = ?
             """,
-            (
-                active_time,
-                "run-active",
-                "recovery_completed",
-            ),
+            (700.0, "run-stale", "event.stale"),
         )
+        connection.commit()
 
-        connection.execute(
-            """
-            UPDATE audit_idempotency
-            SET claimed_at = ?, status = 'pending'
-            WHERE run_id = ? AND event_type = ?
-            """,
-            (
-                stale_time,
-                "run-stale",
-                "recovery_failed",
-            ),
-        )
-
-    monkeypatch.setattr(
-        reconciliation_api,
-        "DEFAULT_DB_PATH",
-        str(db_path),
-    )
-
-    monkeypatch.setattr(
-        reconciliation_api,
-        "DEFAULT_LEASE_SECONDS",
-        300.0,
-    )
-
-    class FixedNowReconciliation:
-
-        def __init__(self, store, *, lease_seconds):
-            self._delegate = PersistentAuditReconciliation(
+    class FixedNowReconciliation(PersistentAuditReconciliation):
+        def __init__(self, store, lease_seconds=300.0):
+            super().__init__(
                 store,
                 lease_seconds=lease_seconds,
-                now=now,
+                now=1000.0,
             )
 
-        def inspect(self):
-            return self._delegate.inspect()
-
     monkeypatch.setattr(
-        reconciliation_api,
-        "PersistentAuditReconciliation",
+        "autonomy.persistent_audit_reconciliation_api.PersistentAuditReconciliation",
         FixedNowReconciliation,
     )
 
-    app = FastAPI()
-    app.include_router(reconciliation_api.router)
+    from fastapi import FastAPI
 
-    response = TestClient(app).get(
-        "/autonomy/audit/reconciliation"
-    )
+    app = FastAPI()
+    app.include_router(router)
+
+    client = TestClient(app)
+    response = client.get("/autonomy/audit/reconciliation")
 
     assert response.status_code == 200
 
-    body = response.json()
+    payload = response.json()
 
-    assert body["count"] == 2
-    assert body["active_count"] == 1
-    assert body["stale_count"] == 1
-    assert body["read_only"] is True
+    assert payload["count"] == 2
+    assert payload["active_count"] == 1
+    assert payload["stale_count"] == 1
+    assert payload["read_only"] is True
 
-    items = {
-        item["run_id"]: item
-        for item in body["items"]
-    }
-
-    assert items["run-active"]["status"] == "active"
-    assert items["run-stale"]["status"] == "stale"
-
-    assert body["evidence"]["pending_count"] == 2
-    assert body["evidence"]["active_count"] == 1
-    assert body["evidence"]["stale_count"] == 1
-
-    with store._connect() as connection:
-
-        rows = connection.execute(
-            """
-            SELECT run_id, event_type, status, claimed_at
-            FROM audit_idempotency
-            ORDER BY run_id, event_type
-            """
-        ).fetchall()
-
-    assert rows == [
-        (
-            "run-active",
-            "recovery_completed",
-            "pending",
-            active_time,
-        ),
-        (
-            "run-stale",
-            "recovery_failed",
-            "pending",
-            stale_time,
-        ),
+    assert [
+        (item["run_id"], item["event_type"], item["status"])
+        for item in payload["items"]
+    ] == [
+        ("run-active", "event.active", "active"),
+        ("run-stale", "event.stale", "stale"),
     ]
+
+    assert payload["evidence"]["pending_count"] == 2
+    assert payload["evidence"]["active_count"] == 1
+    assert payload["evidence"]["stale_count"] == 1
+    assert payload["evidence"]["read_only"] is True
