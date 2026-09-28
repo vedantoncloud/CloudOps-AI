@@ -10,19 +10,40 @@ def test_reconciliation_api_mixed_active_and_stale(monkeypatch, tmp_path):
     db_path = tmp_path / "mixed.db"
     store = PersistentAuditIdempotencyStore(db_path)
 
-    store.claim("run-active", "event.active", {"kind": "active"})
-    store.claim("run-stale", "event.stale", {"kind": "stale"})
+    active_claim = store.claim(
+        "run-active",
+        "event.active",
+        {"kind": "active"},
+    )
+    stale_claim = store.claim(
+        "run-stale",
+        "event.stale",
+        {"kind": "stale"},
+    )
 
-    # Ensure the schema is initialized before directly manipulating the
-    # persisted claim timestamps for deterministic classification.
-    store.contains("run-active", "event.active")
-    store.contains("run-stale", "event.stale")
+    assert active_claim.emitted is True
+    assert stale_claim.emitted is True
 
+    # Production schema/table name is audit_idempotency.
     with store._connect() as connection:
+        rows = connection.execute(
+            """
+            SELECT run_id, event_type, status
+            FROM audit_idempotency
+            ORDER BY run_id, event_type
+            """
+        ).fetchall()
+
+        assert rows == [
+            ("run-active", "event.active", "pending"),
+            ("run-stale", "event.stale", "pending"),
+        ]
+
+        # Make only the second claim stale at fixed time 1000.0.
         connection.execute(
             """
-            UPDATE audit_claims
-            SET claimed_at = ?, status = 'pending'
+            UPDATE audit_idempotency
+            SET claimed_at = ?
             WHERE run_id = ? AND event_type = ?
             """,
             (700.0, "run-stale", "event.stale"),
@@ -40,7 +61,15 @@ def test_reconciliation_api_mixed_active_and_stale(monkeypatch, tmp_path):
             super().__init__(
                 store,
                 lease_seconds=lease_seconds,
-                now=1000.0,
+                now=__import__("datetime").datetime(
+                    1970,
+                    1,
+                    1,
+                    0,
+                    16,
+                    40,
+                    tzinfo=__import__("datetime").timezone.utc,
+                ),
             )
 
     monkeypatch.setattr(
@@ -73,7 +102,26 @@ def test_reconciliation_api_mixed_active_and_stale(monkeypatch, tmp_path):
         ("run-stale", "event.stale", "stale"),
     ]
 
-    assert payload["evidence"]["pending_count"] == 2
-    assert payload["evidence"]["active_count"] == 1
-    assert payload["evidence"]["stale_count"] == 1
-    assert payload["evidence"]["read_only"] is True
+    assert payload["evidence"] == {
+        "store": "sqlite",
+        "read_only": True,
+        "lease_seconds": 300.0,
+        "pending_count": 2,
+        "active_count": 1,
+        "stale_count": 1,
+    }
+
+    # Reconciliation must remain read-only.
+    with store._connect() as connection:
+        rows_after = connection.execute(
+            """
+            SELECT run_id, event_type, status, claimed_at
+            FROM audit_idempotency
+            ORDER BY run_id, event_type
+            """
+        ).fetchall()
+
+    assert rows_after == [
+        ("run-active", "event.active", "pending", rows_after[0][3]),
+        ("run-stale", "event.stale", "pending", 700.0),
+    ]
