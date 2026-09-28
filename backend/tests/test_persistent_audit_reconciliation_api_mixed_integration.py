@@ -1,19 +1,22 @@
-from pathlib import Path
-import sqlite3
-
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+import autonomy.persistent_audit_reconciliation_api as reconciliation_api
 from autonomy.persistent_audit_idempotency import PersistentAuditIdempotencyStore
 from autonomy.persistent_audit_reconciliation import PersistentAuditReconciliation
-from autonomy.persistent_audit_reconciliation_api import router
 
 
 def test_reconciliation_api_mixed_active_and_stale(monkeypatch, tmp_path):
-    db = tmp_path / "mixed.db"
-    store = PersistentAuditIdempotencyStore(db)
+    db_path = tmp_path / "mixed.db"
+    store = PersistentAuditIdempotencyStore(db_path)
 
     store.claim("run-active", "event.active", {"kind": "active"})
     store.claim("run-stale", "event.stale", {"kind": "stale"})
+
+    # Ensure the schema is initialized before directly manipulating the
+    # persisted claim timestamps for deterministic classification.
+    store.contains("run-active", "event.active")
+    store.contains("run-stale", "event.stale")
 
     with store._connect() as connection:
         connection.execute(
@@ -26,6 +29,12 @@ def test_reconciliation_api_mixed_active_and_stale(monkeypatch, tmp_path):
         )
         connection.commit()
 
+    monkeypatch.setattr(
+        reconciliation_api,
+        "DEFAULT_DB_PATH",
+        str(db_path),
+    )
+
     class FixedNowReconciliation(PersistentAuditReconciliation):
         def __init__(self, store, lease_seconds=300.0):
             super().__init__(
@@ -35,17 +44,17 @@ def test_reconciliation_api_mixed_active_and_stale(monkeypatch, tmp_path):
             )
 
     monkeypatch.setattr(
-        "autonomy.persistent_audit_reconciliation_api.PersistentAuditReconciliation",
+        reconciliation_api,
+        "PersistentAuditReconciliation",
         FixedNowReconciliation,
     )
 
-    from fastapi import FastAPI
-
     app = FastAPI()
-    app.include_router(router)
+    app.include_router(reconciliation_api.router)
 
-    client = TestClient(app)
-    response = client.get("/autonomy/audit/reconciliation")
+    response = TestClient(app).get(
+        "/autonomy/audit/reconciliation"
+    )
 
     assert response.status_code == 200
 
