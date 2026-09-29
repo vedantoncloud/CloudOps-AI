@@ -7,7 +7,7 @@ import autonomy.persistent_audit_reconciliation_api as reconciliation_api
 from autonomy.persistent_audit_idempotency import PersistentAuditIdempotencyStore
 
 
-def test_reconciliation_api_ignores_completed_claims(
+def test_reconciliation_api_ignores_emitted_claims(
     monkeypatch,
     tmp_path,
 ):
@@ -15,17 +15,19 @@ def test_reconciliation_api_ignores_completed_claims(
     store = PersistentAuditIdempotencyStore(db_path)
 
     claim = store.claim(
-        run_id="run-completed",
+        run_id="run-emitted",
         event_type="recovery_completed",
-        evidence={"source": "completed"},
+        evidence={"source": "emitted"},
     )
 
     assert claim.emitted is True
+    assert claim.claim_token
 
-    store.mark_completed(
-        "run-completed",
+    assert store.mark_emitted(
+        "run-emitted",
         "recovery_completed",
-    )
+        claim.claim_token,
+    ) is True
 
     monkeypatch.setattr(
         reconciliation_api,
@@ -49,3 +51,8 @@ def test_reconciliation_api_ignores_completed_claims(
     assert body["stale_count"] == 0
     assert body["items"] == []
     assert body["evidence"]["pending_count"] == 0
+
+    assert store.contains(
+        "run-emitted",
+        "recovery_completed",
+    ) is True
