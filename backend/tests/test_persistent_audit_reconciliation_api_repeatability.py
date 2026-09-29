@@ -1,6 +1,6 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -27,14 +27,7 @@ def test_reconciliation_api_is_repeatable_for_unchanged_pending_claims(
 
     assert claim.emitted is True
 
-    claimed_at = datetime(
-        2026,
-        9,
-        28,
-        20,
-        0,
-        tzinfo=timezone.utc,
-    ).timestamp()
+    claimed_at = (datetime.now(timezone.utc) - timedelta(seconds=60)).timestamp()
 
     with store._connect() as connection:
         connection.execute(
@@ -78,28 +71,38 @@ def test_reconciliation_api_is_repeatable_for_unchanged_pending_claims(
     assert first.status_code == 200
     assert second.status_code == 200
 
-    assert first.json() == second.json()
+    first_body = first.json()
+    second_body = second.json()
 
-    body = first.json()
+    assert first_body["count"] == second_body["count"] == 1
+    assert first_body["active_count"] == second_body["active_count"] == 1
+    assert first_body["stale_count"] == second_body["stale_count"] == 0
+    assert first_body["read_only"] is True
+    assert second_body["read_only"] is True
 
-    assert body["count"] == 1
-    assert body["active_count"] == 1
-    assert body["stale_count"] == 0
-    assert body["read_only"] is True
+    first_item = first_body["items"][0]
+    second_item = second_body["items"][0]
 
-    assert body["items"][0]["run_id"] == (
-        "run-repeatable"
+    assert first_item["run_id"] == second_item["run_id"] == "run-repeatable"
+    assert (
+        first_item["event_type"]
+        == second_item["event_type"]
+        == "recovery_completed"
     )
-
-    assert body["items"][0]["event_type"] == (
-        "recovery_completed"
-    )
-
-    assert body["items"][0]["status"] == "active"
-
-    assert body["items"][0]["evidence"] == {
+    assert first_item["status"] == second_item["status"] == "active"
+    assert first_item["claimed_at"] == second_item["claimed_at"] == claimed_at
+    assert first_item["evidence"] == second_item["evidence"] == {
         "source": "api-repeatability"
     }
+
+    assert second_item["age_seconds"] >= first_item["age_seconds"]
+
+    assert first_body["evidence"]["store"] == "sqlite"
+    assert second_body["evidence"]["store"] == "sqlite"
+    assert first_body["evidence"]["read_only"] is True
+    assert second_body["evidence"]["read_only"] is True
+    assert first_body["evidence"]["lease_seconds"] == 300.0
+    assert second_body["evidence"]["lease_seconds"] == 300.0
 
     with store._connect() as connection:
         row = connection.execute(
@@ -116,3 +119,4 @@ def test_reconciliation_api_is_repeatable_for_unchanged_pending_claims(
 
     assert row[0] == "pending"
     assert row[1] == claimed_at
+
