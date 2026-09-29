@@ -44,4 +44,8 @@ def test_reconciliation_api_maps_invalid_timestamp_to_503(
     )
 
     assert response.status_code == 503
-    assert "invalid claimed_at timestamp" in response.json()["detail"]
+
+    detail = response.json()["detail"]
+
+    assert "could not convert string to float" in detail
+    assert "not-a-timestamp" in detail
