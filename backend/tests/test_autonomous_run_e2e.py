@@ -91,7 +91,7 @@ def _payload():
 
 
 def test_main_app_exposes_autonomous_run_route():
-    paths = {route.path for route in app.routes if hasattr(route, "path")}
+    paths = set(app.openapi()["paths"])
     assert "/autonomy/run" in paths
 
 
@@ -171,3 +171,4 @@ def test_main_app_rejects_invalid_request_before_runner(monkeypatch):
 
     assert response.status_code == 422
     assert fake.calls == []
+

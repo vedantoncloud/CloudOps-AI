@@ -32,10 +32,9 @@ def test_governance_api_maps_value_error_to_503(monkeypatch):
     provider = ValueErrorProvider()
 
     monkeypatch.setattr(
-        governance_api,
-        "AWSProvider",
-        lambda: provider,
-        raising=False,
+        governance_api.provider_registry,
+        "get",
+        lambda provider_name: provider,
     )
 
     client = TestClient(make_app())
@@ -54,10 +53,9 @@ def test_governance_api_maps_os_error_to_503(monkeypatch):
     provider = OSErrorProvider()
 
     monkeypatch.setattr(
-        governance_api,
-        "AWSProvider",
-        lambda: provider,
-        raising=False,
+        governance_api.provider_registry,
+        "get",
+        lambda provider_name: provider,
     )
 
     client = TestClient(make_app())
