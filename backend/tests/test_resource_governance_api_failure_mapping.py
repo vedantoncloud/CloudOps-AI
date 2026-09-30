@@ -1,20 +1,76 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
-from autonomy.resource_governance_api import router
+import autonomy.resource_governance_api as governance_api
+
+
+class ValueErrorProvider:
+    @property
+    def provider_name(self):
+        return "aws"
+
+    def get_resource(self, resource_type, resource_id):
+        raise ValueError("provider validation failed")
+
+
+class OSErrorProvider:
+    @property
+    def provider_name(self):
+        return "aws"
+
+    def get_resource(self, resource_type, resource_id):
+        raise OSError("provider unavailable")
 
 
 def make_app():
     app = FastAPI()
-    app.include_router(router)
+    app.include_router(governance_api.router)
     return app
 
 
-def test_governance_api_returns_governance_result_for_supported_resource():
+def test_governance_api_maps_value_error_to_503(monkeypatch):
+    monkeypatch.setattr(
+        governance_api,
+        "_get_provider",
+        lambda: ValueErrorProvider(),
+    )
+
     client = TestClient(make_app())
 
     response = client.get(
-        "/autonomy/resources/ec2/i-failure-123/governance"
+        "/autonomy/resources/ec2/i-task23-value-error/governance"
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": "provider validation failed"
+    }
+
+
+def test_governance_api_maps_os_error_to_503(monkeypatch):
+    monkeypatch.setattr(
+        governance_api,
+        "_get_provider",
+        lambda: OSErrorProvider(),
+    )
+
+    client = TestClient(make_app())
+
+    response = client.get(
+        "/autonomy/resources/ec2/i-task23-os-error/governance"
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": "provider unavailable"
+    }
+
+
+def test_governance_api_keeps_success_contract():
+    client = TestClient(make_app())
+
+    response = client.get(
+        "/autonomy/resources/ec2/i-task23-success/governance"
     )
 
     assert response.status_code == 200
@@ -23,6 +79,6 @@ def test_governance_api_returns_governance_result_for_supported_resource():
 
     assert body["provider"] == "aws"
     assert body["resource_type"] == "ec2"
-    assert body["resource_id"] == "i-failure-123"
+    assert body["resource_id"] == "i-task23-success"
     assert body["decision"] == "allow"
     assert body["allowed_for_decision"] is True
