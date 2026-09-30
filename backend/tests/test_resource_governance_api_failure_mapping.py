@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import autonomy.resource_governance_api as governance_api
@@ -29,10 +29,13 @@ def make_app():
 
 
 def test_governance_api_maps_value_error_to_503(monkeypatch):
+    provider = ValueErrorProvider()
+
     monkeypatch.setattr(
         governance_api,
-        "_get_provider",
-        lambda: ValueErrorProvider(),
+        "AWSProvider",
+        lambda: provider,
+        raising=False,
     )
 
     client = TestClient(make_app())
@@ -48,10 +51,13 @@ def test_governance_api_maps_value_error_to_503(monkeypatch):
 
 
 def test_governance_api_maps_os_error_to_503(monkeypatch):
+    provider = OSErrorProvider()
+
     monkeypatch.setattr(
         governance_api,
-        "_get_provider",
-        lambda: OSErrorProvider(),
+        "AWSProvider",
+        lambda: provider,
+        raising=False,
     )
 
     client = TestClient(make_app())
