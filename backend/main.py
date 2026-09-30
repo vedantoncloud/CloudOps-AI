@@ -11,6 +11,7 @@ from autonomy.autonomous_control_plane_api import router as autonomous_control_p
 from autonomy.autonomous_run_api import router as autonomous_run_router
 from autonomy.persistent_audit_health_api import router as persistent_audit_health_router
 from autonomy.persistent_audit_reconciliation_api import router as persistent_audit_reconciliation_router
+from autonomy.resource_governance_api import router as resource_governance_router
 
 
 app = FastAPI(
@@ -31,6 +32,7 @@ app.include_router(autonomous_control_plane_router)
 app.include_router(autonomous_run_router)
 app.include_router(persistent_audit_health_router)
 app.include_router(persistent_audit_reconciliation_router)
+app.include_router(resource_governance_router)
 
 
 @app.get("/")
