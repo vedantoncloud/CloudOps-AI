@@ -1,20 +1,21 @@
-from autonomy.resource_governance_serialization import serialize_governance_summary
-from autonomy.resource_governance_summary import ResourceGovernanceSummary
 
 
-def test_governance_summary_serialization():
-    summary = ResourceGovernanceSummary(
-        decision="review",
-        allowed=False,
-        requires_review=True,
-        blocked=False,
-        reason_count=2,
+def test_governance_report_serialization_is_json_safe_and_deterministic():
+    from autonomy.resource_governance_serialization import (
+        serialize_governance_report,
     )
 
-    assert serialize_governance_summary(summary) == {
-        "decision": "review",
-        "allowed": False,
-        "requires_review": True,
-        "blocked": False,
-        "reason_count": 2,
+    report = {
+        "decision": "allow",
+        "allowed": True,
+        "evidence": {
+            "reason_codes": ["provider_not_allowed"],
+        },
     }
+
+    first = serialize_governance_report(report)
+    second = serialize_governance_report(report)
+
+    assert first == second
+    assert first["decision"] == "allow"
+    assert first["evidence"]["reason_codes"] == ["provider_not_allowed"]

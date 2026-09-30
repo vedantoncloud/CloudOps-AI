@@ -1,9 +1,18 @@
-from dataclasses import asdict
+"""Stable serialization helpers for governance reports."""
 
-from autonomy.resource_governance_summary import ResourceGovernanceSummary
+from __future__ import annotations
+
+import json
+from typing import Any
 
 
-def serialize_governance_summary(
-    summary: ResourceGovernanceSummary,
-) -> dict:
-    return asdict(summary)
+def serialize_governance_report(report: dict[str, Any]) -> dict[str, Any]:
+    """Return a JSON-safe, deterministically ordered governance report."""
+    return json.loads(
+        json.dumps(
+            report,
+            sort_keys=True,
+            default=str,
+            separators=(",", ":"),
+        )
+    )
