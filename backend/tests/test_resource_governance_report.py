@@ -77,3 +77,38 @@ def test_engine_report_integrates_governance_report():
     assert report["requires_human_review"] is False
     assert report["read_only"] is True
     assert "evidence" in report
+
+
+def test_engine_exposes_reason_codes():
+    from autonomy.resource_governance import ResourceGovernanceEngine
+    from autonomy.resource_observer import ResourceObservation
+    from autonomy.resource_policy import ResourcePolicy, ResourcePolicyEngine
+
+    class Provider:
+        provider_name = "gcp"
+
+    class Observer:
+        def observe(self, provider, resource_type, resource_id):
+            return ResourceObservation(
+                provider="gcp",
+                resource_type="ec2",
+                resource_id=resource_id,
+                data={"metadata": {}, "tags": {}},
+                read_only=True,
+            )
+
+    engine = ResourceGovernanceEngine(
+        observer=Observer(),
+        policy_engine=ResourcePolicyEngine(
+            ResourcePolicy(
+                allowed_providers={"aws"},
+                allowed_resource_types={"ec2"},
+                required_metadata={"environment"},
+            )
+        ),
+    )
+
+    result = engine.inspect(Provider(), "ec2", "vm-1")
+
+    assert "provider_not_allowed" in result.evidence["reason_codes"]
+    assert "required_metadata_missing" in result.evidence["reason_codes"]

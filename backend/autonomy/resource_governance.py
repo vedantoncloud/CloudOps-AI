@@ -78,6 +78,10 @@ class ResourceGovernanceEngine:
         }
         evidence.update(policy.evidence)
 
+        from autonomy.resource_governance_evidence import reason_codes
+
+        evidence["reason_codes"] = reason_codes(policy.reasons)
+
         return GovernedResourceObservation(
             observation=observation,
             policy=policy,
