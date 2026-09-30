@@ -40,3 +40,19 @@ def test_evidence_contains_deterministic_policy_snapshot():
 
     assert evidence["policy"]["allowed_providers"] == ["aws"]
     assert evidence["policy"]["allowed_resource_types"] == ["ec2"]
+
+
+def test_reason_codes_are_stable():
+    from autonomy.resource_governance_evidence import reason_codes
+
+    reasons = [
+        "Resource contains a denied tag value.",
+        "Provider 'x' is not allowed by resource policy.",
+        "Required resource metadata is missing: environment",
+    ]
+
+    assert reason_codes(reasons) == [
+        "denied_tag",
+        "provider_not_allowed",
+        "required_metadata_missing",
+    ]
