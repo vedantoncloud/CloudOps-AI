@@ -85,5 +85,16 @@ class ResourceGovernanceEngine:
             evidence=evidence,
         )
 
+    def report(self, result: GovernedResourceObservation) -> dict:
+        """Return a deterministic governance report for an inspected resource."""
+        from autonomy.resource_governance_report import (
+            build_resource_governance_report,
+        )
+
+        return build_resource_governance_report(
+            governed=result,
+            policy=self.policy_engine.policy,
+        )
+
     def can_proceed(self, result: GovernedResourceObservation) -> bool:
         return result.allowed_for_decision
