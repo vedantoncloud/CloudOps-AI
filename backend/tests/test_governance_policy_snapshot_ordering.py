@@ -11,7 +11,7 @@ def test_policy_snapshot_normalizes_case_and_whitespace():
 
     snapshot = policy_snapshot(policy)
 
-    assert snapshot["allowed_providers"] == ["azure", "aws"]
+    assert snapshot["allowed_providers"] == ["aws", "azure"]
     assert snapshot["allowed_resource_types"] == ["ec2", "s3"]
     assert snapshot["required_metadata"] == ["environment", "owner"]
 
