@@ -34,7 +34,7 @@ def _reconciliation() -> PersistentAuditReconciliation:
 def audit_reconciliation():
     try:
         result = _reconciliation().inspect()
-    except (ValueError, OSError, sqlite3.OperationalError) as exc:
+    except (ValueError, OSError, sqlite3.Error) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     return {
