@@ -24,8 +24,9 @@ class PersistentAuditHealthChecker:
         self.path = str(path)
 
     def inspect(self) -> PersistentAuditHealth:
-        connection = sqlite3.connect(self.path)
+        connection = None
         try:
+            connection = sqlite3.connect(self.path)
             row = connection.execute(
                 """
                 SELECT
@@ -35,12 +36,13 @@ class PersistentAuditHealthChecker:
                 FROM audit_idempotency
                 """
             ).fetchone()
-        except sqlite3.OperationalError as exc:
+        except sqlite3.Error as exc:
             raise ValueError(
                 "Persistent audit idempotency store is not initialized"
             ) from exc
         finally:
-            connection.close()
+            if connection is not None:
+                connection.close()
 
         total, pending, emitted = (int(value or 0) for value in row)
         return PersistentAuditHealth(
@@ -54,7 +56,6 @@ class PersistentAuditHealthChecker:
                 "consistent": total == pending + emitted,
             },
         )
-
     def list_pending(self) -> list[dict[str, Any]]:
         connection = None
         try:
