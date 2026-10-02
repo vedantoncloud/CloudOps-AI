@@ -81,8 +81,10 @@ class ResourceObserver:
         else:
             tags = {}
 
-        metadata = dict(raw.get("metadata", {}))
-        if not isinstance(raw.get("metadata", {}), dict):
+        raw_metadata = raw.get("metadata", {})
+        if isinstance(raw_metadata, dict):
+            metadata = dict(raw_metadata)
+        else:
             metadata = {}
 
         reserved = {
