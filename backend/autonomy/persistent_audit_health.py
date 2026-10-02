@@ -56,8 +56,9 @@ class PersistentAuditHealthChecker:
         )
 
     def list_pending(self) -> list[dict[str, Any]]:
-        connection = sqlite3.connect(self.path)
+        connection = None
         try:
+            connection = sqlite3.connect(self.path)
             rows = connection.execute(
                 """
                 SELECT run_id, event_type, evidence_json, claimed_at
@@ -66,12 +67,13 @@ class PersistentAuditHealthChecker:
                 ORDER BY run_id ASC, event_type ASC
                 """
             ).fetchall()
-        except sqlite3.OperationalError as exc:
+        except sqlite3.Error as exc:
             raise ValueError(
                 "Persistent audit idempotency store is not initialized"
             ) from exc
         finally:
-            connection.close()
+            if connection is not None:
+                connection.close()
 
         result: list[dict[str, Any]] = []
         for run_id, event_type, evidence_json, claimed_at in rows:
