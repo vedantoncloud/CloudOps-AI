@@ -180,3 +180,42 @@ def test_empty_store_returns_empty_result(tmp_path):
     assert result.active_count == 0
     assert result.stale_count == 0
     assert result.evidence["read_only"] is True
+
+
+@pytest.mark.parametrize(
+    "malformed_evidence",
+    [
+        ["unexpected", "list"],
+        "unexpected-string",
+        42,
+        None,
+    ],
+)
+def test_non_object_evidence_is_preserved_as_raw_value(
+    tmp_path, monkeypatch, malformed_evidence
+):
+    store = _seed_store(tmp_path)
+    now = datetime(2026, 9, 28, 20, 0, tzinfo=timezone.utc)
+
+    _set_claim_times(
+        store,
+        monkeypatch,
+        [
+            (
+                "run-a",
+                "recovery_completed",
+                now.timestamp() - 10,
+                malformed_evidence,
+            )
+        ],
+    )
+
+    result = PersistentAuditReconciliation(
+        store,
+        lease_seconds=300,
+        now=now,
+    ).inspect()
+
+    assert result.count == 1
+    assert result.items[0].evidence == {"raw": malformed_evidence}
+    assert result.evidence["read_only"] is True

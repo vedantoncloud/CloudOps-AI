@@ -71,6 +71,13 @@ class PersistentAuditReconciliation:
             else:
                 active_count += 1
 
+            raw_evidence = claim.get("evidence", {})
+            normalized_evidence = (
+                dict(raw_evidence)
+                if isinstance(raw_evidence, dict)
+                else {"raw": raw_evidence}
+            )
+
             items.append(
                 AuditReconciliationItem(
                     run_id=run_id,
@@ -78,7 +85,7 @@ class PersistentAuditReconciliation:
                     status=status,
                     claimed_at=claimed_at,
                     age_seconds=age_seconds,
-                    evidence=dict(claim.get("evidence", {})),
+                    evidence=normalized_evidence,
                 )
             )
 
