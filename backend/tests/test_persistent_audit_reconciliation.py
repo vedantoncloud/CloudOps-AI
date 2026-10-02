@@ -219,3 +219,24 @@ def test_non_object_evidence_is_preserved_as_raw_value(
     assert result.count == 1
     assert result.items[0].evidence == {"raw": malformed_evidence}
     assert result.evidence["read_only"] is True
+
+
+@pytest.mark.parametrize("timestamp", [float("nan"), float("inf"), float("-inf")])
+def test_non_finite_claimed_at_is_rejected(tmp_path, monkeypatch, timestamp):
+    store = _seed_store(tmp_path)
+    _set_claim_times(
+        store,
+        monkeypatch,
+        [("run-a", "recovery_completed", timestamp, {})],
+    )
+
+    with pytest.raises(ValueError, match="invalid claimed_at"):
+        PersistentAuditReconciliation(store).inspect()
+
+
+@pytest.mark.parametrize("lease_seconds", [float("nan"), float("inf"), float("-inf")])
+def test_non_finite_lease_is_rejected(tmp_path, lease_seconds):
+    store = PersistentAuditIdempotencyStore(tmp_path / "audit.db")
+
+    with pytest.raises(ValueError, match="lease_seconds"):
+        PersistentAuditReconciliation(store, lease_seconds=lease_seconds)

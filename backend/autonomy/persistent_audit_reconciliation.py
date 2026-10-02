@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+import math
 from typing import Any
 
 from autonomy.persistent_audit_health import PersistentAuditHealthChecker
@@ -40,10 +41,14 @@ class PersistentAuditReconciliation:
         lease_seconds: float = 300.0,
         now: datetime | None = None,
     ) -> None:
-        if lease_seconds < 0:
-            raise ValueError("lease_seconds must be non-negative")
+        try:
+            normalized_lease = float(lease_seconds)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("lease_seconds must be finite and non-negative") from exc
+        if not math.isfinite(normalized_lease) or normalized_lease < 0:
+            raise ValueError("lease_seconds must be finite and non-negative")
         self.store = store
-        self.lease_seconds = float(lease_seconds)
+        self.lease_seconds = normalized_lease
         self._now = now
 
     def inspect(self) -> AuditReconciliationResult:
@@ -119,6 +124,6 @@ class PersistentAuditReconciliation:
             timestamp = float(value)
         except (TypeError, ValueError) as exc:
             raise ValueError("invalid claimed_at timestamp") from exc
-        if timestamp < 0:
+        if not math.isfinite(timestamp) or timestamp < 0:
             raise ValueError("invalid claimed_at timestamp")
         return timestamp
