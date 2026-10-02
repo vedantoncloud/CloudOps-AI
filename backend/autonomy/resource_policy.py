@@ -68,10 +68,14 @@ class ResourcePolicyEngine:
         if self.policy.require_read_only and not observation.read_only:
             reasons.append("Resource observation is not read-only.")
 
+        metadata = observation.data.get("metadata", {})
+        if not isinstance(metadata, dict):
+            metadata = {}
+
         missing_metadata = sorted(
             key
             for key in self.policy.required_metadata
-            if key not in observation.data.get("metadata", {})
+            if key not in metadata
         )
         if missing_metadata:
             reasons.append(
