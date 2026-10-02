@@ -114,5 +114,9 @@ class ResourceObserver:
             resource_type=observed_type,
             resource_id=observed_id,
             data=data,
-            read_only=bool(raw.get("read_only", True)),
+            read_only=(
+                raw.get("read_only")
+                if isinstance(raw.get("read_only"), bool)
+                else True
+            ),
         )
