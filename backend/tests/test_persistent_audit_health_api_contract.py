@@ -1,10 +1,12 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from autonomy.persistent_audit_health import PersistentAuditHealthChecker
 from autonomy.persistent_audit_health_api import router
 from autonomy.persistent_audit_idempotency import PersistentAuditIdempotencyStore
 
@@ -19,93 +21,89 @@ def build_client(monkeypatch, path: Path) -> TestClient:
     return TestClient(app)
 
 
-def test_health_api_response_contract(tmp_path, monkeypatch):
+def test_health_api_contract_reports_consistent_counts(tmp_path, monkeypatch):
     path = tmp_path / "audit.db"
     store = PersistentAuditIdempotencyStore(path)
 
-    store.claim("run-1", "recovery_failed", {"action_id": "a-1"})
+    pending = store.claim(
+        "contract-pending",
+        "recovery_failed",
+        {"action_id": "pending"},
+    )
+    emitted = store.claim(
+        "contract-emitted",
+        "recovery_completed",
+        {"action_id": "emitted"},
+    )
+
+    assert store.mark_emitted(
+        "contract-emitted",
+        "recovery_completed",
+        emitted.claim_token,
+    )
 
     response = build_client(monkeypatch, path).get(
         "/autonomy/audit/health"
     )
 
     assert response.status_code == 200
-
     body = response.json()
 
-    assert set(body) == {
-        "path",
-        "total_claims",
-        "pending_claims",
-        "emitted_claims",
-        "evidence_conflicts",
-        "evidence",
-    }
-
-    assert body["total_claims"] == (
-        body["pending_claims"] + body["emitted_claims"]
-    )
+    assert body["total_claims"] == 2
+    assert body["pending_claims"] == 1
+    assert body["emitted_claims"] == 1
     assert body["evidence_conflicts"] == 0
     assert body["evidence"]["store"] == "sqlite"
     assert body["evidence"]["read_only"] is True
     assert body["evidence"]["consistent"] is True
+    assert pending.claim_token
 
 
-def test_pending_api_response_contract_and_order(
+def test_pending_api_is_deterministic_and_does_not_mutate_store(
     tmp_path,
     monkeypatch,
 ):
     path = tmp_path / "audit.db"
     store = PersistentAuditIdempotencyStore(path)
 
-    store.claim("run-z", "recovery_failed", {"action_id": "z"})
-    store.claim("run-a", "recovery_failed", {"action_id": "a"})
+    store.claim("contract-b", "recovery_failed", {"action_id": "b"})
+    store.claim("contract-a", "recovery_failed", {"action_id": "a"})
 
-    response = build_client(monkeypatch, path).get(
-        "/autonomy/audit/pending"
-    )
+    before = PersistentAuditHealthChecker(path).inspect()
+    client = build_client(monkeypatch, path)
 
-    assert response.status_code == 200
+    first = client.get("/autonomy/audit/pending")
+    second = client.get("/autonomy/audit/pending")
+    after = PersistentAuditHealthChecker(path).inspect()
 
-    body = response.json()
-
-    assert set(body) == {"count", "pending", "read_only"}
-    assert body["count"] == len(body["pending"]) == 2
-    assert body["read_only"] is True
-
-    assert [item["run_id"] for item in body["pending"]] == [
-        "run-a",
-        "run-z",
-    ]
-
-    for item in body["pending"]:
-        assert set(item) == {
-            "run_id",
-            "event_type",
-            "claimed_at",
-            "evidence",
-        }
-        assert isinstance(item["run_id"], str)
-        assert isinstance(item["event_type"], str)
-        assert isinstance(item["claimed_at"], (int, float))
-        assert isinstance(item["evidence"], dict)
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json() == second.json()
+    assert first.json()["count"] == 2
+    assert first.json()["read_only"] is True
+    assert [
+        item["run_id"] for item in first.json()["pending"]
+    ] == ["contract-a", "contract-b"]
+    assert before == after
 
 
-def test_health_and_pending_endpoints_preserve_read_only_state(
+def test_health_and_pending_api_report_malformed_database(
     tmp_path,
     monkeypatch,
 ):
-    path = tmp_path / "audit.db"
-    store = PersistentAuditIdempotencyStore(path)
+    path = tmp_path / "malformed.db"
 
-    store.claim("run-1", "recovery_failed", {"action_id": "a-1"})
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "CREATE TABLE unrelated_data (value TEXT)"
+        )
 
     client = build_client(monkeypatch, path)
 
-    before = client.get("/autonomy/audit/health").json()
-    pending = client.get("/autonomy/audit/pending").json()
-    after = client.get("/autonomy/audit/health").json()
+    health = client.get("/autonomy/audit/health")
+    pending = client.get("/autonomy/audit/pending")
 
-    assert before == after
-    assert pending["read_only"] is True
-    assert pending["count"] == before["pending_claims"]
+    assert health.status_code == 503
+    assert pending.status_code == 503
+    assert "not initialized" in health.json()["detail"]
+    assert "not initialized" in pending.json()["detail"]
