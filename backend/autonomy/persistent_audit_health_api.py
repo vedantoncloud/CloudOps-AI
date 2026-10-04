@@ -27,7 +27,7 @@ def audit_health():
     except (ValueError, sqlite3.Error) as exc:
         raise HTTPException(
             status_code=503,
-            detail="Persistent audit health store is unavailable",
+            detail="Persistent audit idempotency store is not initialized",
         ) from exc
 
     return {
@@ -47,7 +47,7 @@ def audit_pending_claims():
     except (ValueError, sqlite3.Error) as exc:
         raise HTTPException(
             status_code=503,
-            detail="Persistent audit health store is unavailable",
+            detail="Persistent audit idempotency store is not initialized",
         ) from exc
 
     return {

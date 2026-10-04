@@ -99,7 +99,7 @@ def test_health_endpoint_hides_database_error_details(tmp_path: Path, monkeypatc
     response = build_client(monkeypatch, path).get("/autonomy/audit/health")
 
     assert response.status_code == 503
-    assert response.json()["detail"] == "Persistent audit health store is unavailable"
+    assert response.json()["detail"] == "Persistent audit idempotency store is not initialized"
     assert "not a database" not in response.text
 
 
@@ -110,5 +110,5 @@ def test_pending_endpoint_hides_database_error_details(tmp_path: Path, monkeypat
     response = build_client(monkeypatch, path).get("/autonomy/audit/pending")
 
     assert response.status_code == 503
-    assert response.json()["detail"] == "Persistent audit health store is unavailable"
+    assert response.json()["detail"] == "Persistent audit idempotency store is not initialized"
     assert "not a database" not in response.text
