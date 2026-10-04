@@ -1,4 +1,4 @@
-﻿import sqlite3
+import sqlite3
 
 from autonomy.persistent_audit_idempotency import (
     PersistentAuditIdempotencyStore,
@@ -73,5 +73,3 @@ def test_finalization_cannot_cross_audit_event_boundaries(tmp_path):
     assert after[0][2] == first.claim_token
     assert after[1][0] == "deployment.failed"
     assert after[1][2] == second.claim_token
-    assert after[1][2] == first.claim_token
-
