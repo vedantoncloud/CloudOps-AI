@@ -93,6 +93,8 @@ class PersistentAuditIdempotencyStore:
             raise ValueError("run_id is required")
         if not event_type:
             raise ValueError("event_type is required")
+        if not isinstance(evidence, dict):
+            raise ValueError("evidence must be a dictionary")
 
         normalized = self._normalize_evidence(evidence)
         token = uuid.uuid4().hex
