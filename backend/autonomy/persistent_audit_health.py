@@ -26,7 +26,7 @@ class PersistentAuditHealthChecker:
     def inspect(self) -> PersistentAuditHealth:
         connection = None
         try:
-            connection = sqlite3.connect(f"file:{Path(self.path).resolve().as_posix()}?mode=ro", uri=True)
+            connection = sqlite3.connect(f"{Path(self.path).resolve().as_uri()}?mode=ro", uri=True)
             row = connection.execute(
                 """
                 SELECT
@@ -66,7 +66,7 @@ class PersistentAuditHealthChecker:
     def list_pending(self) -> list[dict[str, Any]]:
         connection = None
         try:
-            connection = sqlite3.connect(f"file:{Path(self.path).resolve().as_posix()}?mode=ro", uri=True)
+            connection = sqlite3.connect(f"{Path(self.path).resolve().as_uri()}?mode=ro", uri=True)
             rows = connection.execute(
                 """
                 SELECT run_id, event_type, evidence_json, claimed_at
