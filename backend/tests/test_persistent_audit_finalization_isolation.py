@@ -69,5 +69,9 @@ def test_finalization_cannot_cross_audit_event_boundaries(tmp_path):
 
     assert len(after) == 2
     assert all(row[1] == "emitted" for row in after)
-    assert after[0][2] == second.claim_token
+    assert after[0][0] == "deployment.completed"
+    assert after[0][2] == first.claim_token
+    assert after[1][0] == "deployment.failed"
+    assert after[1][2] == second.claim_token
     assert after[1][2] == first.claim_token
+
