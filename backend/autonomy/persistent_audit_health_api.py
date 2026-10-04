@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -23,8 +24,11 @@ def _checker() -> PersistentAuditHealthChecker:
 def audit_health():
     try:
         health = _checker().inspect()
-    except ValueError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except (ValueError, sqlite3.Error) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Persistent audit health store is unavailable",
+        ) from exc
 
     return {
         "path": health.path,
@@ -40,8 +44,11 @@ def audit_health():
 def audit_pending_claims():
     try:
         pending = _checker().list_pending()
-    except ValueError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except (ValueError, sqlite3.Error) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Persistent audit health store is unavailable",
+        ) from exc
 
     return {
         "count": len(pending),
