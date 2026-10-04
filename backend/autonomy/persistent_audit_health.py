@@ -32,7 +32,11 @@ class PersistentAuditHealthChecker:
                 SELECT
                     COUNT(*) AS total_claims,
                     COALESCE(SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END), 0),
-                    COALESCE(SUM(CASE WHEN status = 'emitted' THEN 1 ELSE 0 END), 0)
+                    COALESCE(SUM(CASE WHEN status = 'emitted' THEN 1 ELSE 0 END), 0),
+                    COALESCE(SUM(
+                        CASE WHEN status NOT IN ('pending', 'emitted')
+                        THEN 1 ELSE 0 END
+                    ), 0)
                 FROM audit_idempotency
                 """
             ).fetchone()
@@ -44,7 +48,9 @@ class PersistentAuditHealthChecker:
             if connection is not None:
                 connection.close()
 
-        total, pending, emitted = (int(value or 0) for value in row)
+        total, pending, emitted, unknown = (
+            int(value or 0) for value in row
+        )
         return PersistentAuditHealth(
             path=self.path,
             total_claims=total,
@@ -53,7 +59,8 @@ class PersistentAuditHealthChecker:
             evidence={
                 "store": "sqlite",
                 "read_only": True,
-                "consistent": total == pending + emitted,
+                "consistent": total == pending + emitted and unknown == 0,
+                "unknown_status_claims": unknown,
             },
         )
     def list_pending(self) -> list[dict[str, Any]]:
