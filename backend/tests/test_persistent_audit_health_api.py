@@ -129,3 +129,28 @@ def test_health_endpoint_supports_special_characters_in_database_path(
     assert body["total_claims"] == 1
     assert body["pending_claims"] == 1
     assert body["evidence"]["read_only"] is True
+
+
+def test_health_endpoint_exposes_malformed_evidence_diagnostic(
+    tmp_path: Path,
+    monkeypatch,
+):
+    import sqlite3
+
+    path = tmp_path / "audit.db"
+    store = PersistentAuditIdempotencyStore(path)
+    store.claim("run-malformed", "recovery_failed", {"source": "test"})
+
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "UPDATE audit_idempotency SET evidence_json = ? WHERE run_id = ?",
+            ("not-json", "run-malformed"),
+        )
+        connection.commit()
+
+    response = build_client(monkeypatch, path).get("/autonomy/audit/health")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["evidence"]["malformed_evidence_claims"] == 1
+    assert body["evidence"]["consistent"] is True
