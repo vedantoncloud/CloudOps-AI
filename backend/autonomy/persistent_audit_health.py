@@ -36,6 +36,13 @@ class PersistentAuditHealthChecker:
                     COALESCE(SUM(
                         CASE WHEN status NOT IN ('pending', 'emitted')
                         THEN 1 ELSE 0 END
+                    ), 0),
+                    COALESCE(SUM(
+                        CASE
+                            WHEN evidence_json IS NULL
+                                 OR json_valid(evidence_json) = 0
+                            THEN 1 ELSE 0
+                        END
                     ), 0)
                 FROM audit_idempotency
                 """
@@ -48,7 +55,7 @@ class PersistentAuditHealthChecker:
             if connection is not None:
                 connection.close()
 
-        total, pending, emitted, unknown = (
+        total, pending, emitted, unknown, malformed_evidence = (
             int(value or 0) for value in row
         )
         return PersistentAuditHealth(
@@ -61,6 +68,7 @@ class PersistentAuditHealthChecker:
                 "read_only": True,
                 "consistent": total == pending + emitted and unknown == 0,
                 "unknown_status_claims": unknown,
+                "malformed_evidence_claims": malformed_evidence,
             },
         )
     def list_pending(self) -> list[dict[str, Any]]:
