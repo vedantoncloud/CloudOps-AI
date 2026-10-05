@@ -112,3 +112,20 @@ def test_pending_endpoint_hides_database_error_details(tmp_path: Path, monkeypat
     assert response.status_code == 503
     assert response.json()["detail"] == "Persistent audit idempotency store is not initialized"
     assert "not a database" not in response.text
+
+
+def test_health_endpoint_supports_special_characters_in_database_path(
+    tmp_path: Path,
+    monkeypatch,
+):
+    path = tmp_path / "audit #1 test.db"
+    store = PersistentAuditIdempotencyStore(path)
+    store.claim("run-special", "recovery_failed", {"source": "api-path-test"})
+
+    response = build_client(monkeypatch, path).get("/autonomy/audit/health")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total_claims"] == 1
+    assert body["pending_claims"] == 1
+    assert body["evidence"]["read_only"] is True
