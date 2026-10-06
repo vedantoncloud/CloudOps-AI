@@ -328,3 +328,18 @@ def test_audit_health_response_rejects_empty_path():
             evidence_conflicts=0,
             evidence={},
         )
+
+
+def test_audit_health_response_rejects_evidence_conflict_mismatch():
+    from autonomy.persistent_audit_health_api import AuditHealthResponse
+    import pytest
+
+    with pytest.raises(ValueError, match="evidence_conflicts must match"):
+        AuditHealthResponse(
+            path="/tmp/audit.db",
+            total_claims=0,
+            pending_claims=0,
+            emitted_claims=0,
+            evidence_conflicts=1,
+            evidence={"evidence_conflicts": 0},
+        )

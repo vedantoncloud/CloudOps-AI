@@ -33,6 +33,15 @@ class AuditHealthResponse(BaseModel):
             )
         return self
 
+    @model_validator(mode="after")
+    def validate_evidence_conflicts(self):
+        evidence_conflicts = self.evidence.get("evidence_conflicts")
+        if evidence_conflicts is not None and evidence_conflicts != self.evidence_conflicts:
+            raise ValueError(
+                "evidence_conflicts must match the evidence diagnostic"
+            )
+        return self
+
 
 class AuditPendingItem(BaseModel):
     run_id: str
