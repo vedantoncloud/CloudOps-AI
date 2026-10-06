@@ -5,6 +5,7 @@ import sqlite3
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
 
 from autonomy.persistent_audit_health import PersistentAuditHealthChecker
 
@@ -16,12 +17,27 @@ DEFAULT_DB_PATH = os.getenv(
 )
 
 
+class AuditHealthResponse(BaseModel):
+    path: str
+    total_claims: int = Field(ge=0)
+    pending_claims: int = Field(ge=0)
+    emitted_claims: int = Field(ge=0)
+    evidence_conflicts: int = Field(ge=0)
+    evidence: dict[str, object]
+
+
+class AuditPendingResponse(BaseModel):
+    count: int = Field(ge=0)
+    pending: list[dict[str, object]]
+    read_only: bool
+
+
 def _checker() -> PersistentAuditHealthChecker:
     return PersistentAuditHealthChecker(Path(DEFAULT_DB_PATH))
 
 
 @router.get("/health")
-def audit_health():
+def audit_health() -> AuditHealthResponse:
     try:
         health = _checker().inspect()
     except (ValueError, sqlite3.Error) as exc:
@@ -41,7 +57,7 @@ def audit_health():
 
 
 @router.get("/pending")
-def audit_pending_claims():
+def audit_pending_claims() -> AuditPendingResponse:
     try:
         pending = _checker().list_pending()
     except (ValueError, sqlite3.Error) as exc:

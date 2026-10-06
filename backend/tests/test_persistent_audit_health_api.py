@@ -154,3 +154,20 @@ def test_health_endpoint_exposes_malformed_evidence_diagnostic(
     body = response.json()
     assert body["evidence"]["malformed_evidence_claims"] == 1
     assert body["evidence"]["consistent"] is True
+
+
+def test_audit_health_openapi_exposes_response_contract():
+    app = FastAPI()
+    app.include_router(router)
+
+    schema = app.openapi()
+    health = schema["paths"]["/autonomy/audit/health"]["get"]
+    pending = schema["paths"]["/autonomy/audit/pending"]["get"]
+
+    assert health["responses"]["200"]["content"]["application/json"]["schema"][
+        "$ref"
+    ].endswith("/AuditHealthResponse")
+
+    assert pending["responses"]["200"]["content"]["application/json"]["schema"][
+        "$ref"
+    ].endswith("/AuditPendingResponse")
