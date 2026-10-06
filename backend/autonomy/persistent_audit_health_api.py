@@ -18,11 +18,11 @@ DEFAULT_DB_PATH = os.getenv(
 
 
 class AuditHealthEvidence(BaseModel):
-    store: str
-    read_only: bool
-    consistent: bool
-    unknown_status_claims: int = Field(ge=0)
-    malformed_evidence_claims: int = Field(ge=0)
+    store: str = ""
+    read_only: bool = False
+    consistent: bool = False
+    unknown_status_claims: int = Field(default=0, ge=0)
+    malformed_evidence_claims: int = Field(default=0, ge=0)
 
     model_config = {"extra": "allow"}
 
@@ -45,11 +45,17 @@ class AuditHealthResponse(BaseModel):
 
     @model_validator(mode="after")
     def validate_evidence_conflicts(self):
-        evidence_conflicts = self.evidence.get("evidence_conflicts")
-        if evidence_conflicts is not None and evidence_conflicts != self.evidence_conflicts:
+        extra = self.evidence.model_extra or {}
+        evidence_conflicts = extra.get("evidence_conflicts")
+
+        if (
+            evidence_conflicts is not None
+            and evidence_conflicts != self.evidence_conflicts
+        ):
             raise ValueError(
                 "evidence_conflicts must match the evidence diagnostic"
             )
+
         return self
 
 
