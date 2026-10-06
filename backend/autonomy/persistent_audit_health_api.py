@@ -25,6 +25,14 @@ class AuditHealthResponse(BaseModel):
     evidence_conflicts: int = Field(ge=0)
     evidence: dict[str, object]
 
+    @model_validator(mode="after")
+    def validate_claim_counts(self):
+        if self.total_claims != self.pending_claims + self.emitted_claims:
+            raise ValueError(
+                "total_claims must equal pending_claims plus emitted_claims"
+            )
+        return self
+
 
 class AuditPendingItem(BaseModel):
     run_id: str

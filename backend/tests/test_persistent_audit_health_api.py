@@ -298,3 +298,18 @@ def test_audit_pending_response_rejects_count_mismatch():
             pending=[item],
             read_only=True,
         )
+
+
+def test_audit_health_response_rejects_inconsistent_claim_counts():
+    from autonomy.persistent_audit_health_api import AuditHealthResponse
+    import pytest
+
+    with pytest.raises(ValueError, match="total_claims must equal"):
+        AuditHealthResponse(
+            path="/tmp/audit.db",
+            total_claims=3,
+            pending_claims=1,
+            emitted_claims=1,
+            evidence_conflicts=0,
+            evidence={},
+        )
