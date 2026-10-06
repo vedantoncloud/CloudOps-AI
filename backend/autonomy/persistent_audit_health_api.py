@@ -77,15 +77,19 @@ def _checker() -> PersistentAuditHealthChecker:
     return PersistentAuditHealthChecker(Path(DEFAULT_DB_PATH))
 
 
+def _store_unavailable(exc: Exception) -> HTTPException:
+    return HTTPException(
+        status_code=503,
+        detail="Persistent audit idempotency store is not initialized",
+    )
+
+
 @router.get("/health")
 def audit_health() -> AuditHealthResponse:
     try:
         health = _checker().inspect()
     except (ValueError, sqlite3.Error) as exc:
-        raise HTTPException(
-            status_code=503,
-            detail="Persistent audit idempotency store is not initialized",
-        ) from exc
+        raise _store_unavailable(exc) from exc
 
     return {
         "path": health.path,
@@ -102,10 +106,7 @@ def audit_pending_claims() -> AuditPendingResponse:
     try:
         pending = _checker().list_pending()
     except (ValueError, sqlite3.Error) as exc:
-        raise HTTPException(
-            status_code=503,
-            detail="Persistent audit idempotency store is not initialized",
-        ) from exc
+        raise _store_unavailable(exc) from exc
 
     return {
         "count": len(pending),
