@@ -260,3 +260,19 @@ def test_pending_endpoint_returns_typed_pending_items(
     assert item["event_type"] == "recovery_failed"
     assert isinstance(item["claimed_at"], float)
     assert item["evidence"] == {"action_id": "typed-1"}
+
+
+def test_audit_pending_openapi_locks_pending_item_fields():
+    app = FastAPI()
+    app.include_router(router)
+
+    schema = app.openapi()
+
+    item_schema = schema["components"]["schemas"]["AuditPendingItem"]
+
+    assert set(item_schema["required"]) == {
+        "run_id",
+        "event_type",
+        "claimed_at",
+        "evidence",
+    }
