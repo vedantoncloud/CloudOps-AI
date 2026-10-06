@@ -313,3 +313,18 @@ def test_audit_health_response_rejects_inconsistent_claim_counts():
             evidence_conflicts=0,
             evidence={},
         )
+
+
+def test_audit_health_response_rejects_empty_path():
+    from autonomy.persistent_audit_health_api import AuditHealthResponse
+    import pytest
+
+    with pytest.raises(ValueError):
+        AuditHealthResponse(
+            path="",
+            total_claims=0,
+            pending_claims=0,
+            emitted_claims=0,
+            evidence_conflicts=0,
+            evidence={},
+        )

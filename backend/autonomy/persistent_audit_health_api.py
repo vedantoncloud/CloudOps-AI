@@ -18,7 +18,7 @@ DEFAULT_DB_PATH = os.getenv(
 
 
 class AuditHealthResponse(BaseModel):
-    path: str
+    path: str = Field(min_length=1)
     total_claims: int = Field(ge=0)
     pending_claims: int = Field(ge=0)
     emitted_claims: int = Field(ge=0)
