@@ -1,12 +1,12 @@
-from __future__ import annotations
-
+﻿from __future__ import annotations
+import pytest
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from autonomy.persistent_audit_health import PersistentAuditHealthChecker
-from autonomy.persistent_audit_health_api import router
+from autonomy.persistent_audit_health_api import AuditHealthResponse, router
 from autonomy.persistent_audit_idempotency import PersistentAuditIdempotencyStore
 
 
@@ -283,7 +283,6 @@ def test_audit_pending_response_rejects_count_mismatch():
         AuditPendingItem,
         AuditPendingResponse,
     )
-    import pytest
 
     item = AuditPendingItem(
         run_id="run-1",
@@ -302,7 +301,6 @@ def test_audit_pending_response_rejects_count_mismatch():
 
 def test_audit_health_response_rejects_inconsistent_claim_counts():
     from autonomy.persistent_audit_health_api import AuditHealthResponse
-    import pytest
 
     with pytest.raises(ValueError, match="total_claims must equal"):
         AuditHealthResponse(
@@ -317,7 +315,6 @@ def test_audit_health_response_rejects_inconsistent_claim_counts():
 
 def test_audit_health_response_rejects_empty_path():
     from autonomy.persistent_audit_health_api import AuditHealthResponse
-    import pytest
 
     with pytest.raises(ValueError):
         AuditHealthResponse(
@@ -368,7 +365,6 @@ def test_audit_health_response_rejects_negative_malformed_evidence_claims():
 
 def test_audit_health_response_rejects_evidence_conflict_mismatch():
     from autonomy.persistent_audit_health_api import AuditHealthResponse
-    import pytest
 
     with pytest.raises(ValueError, match="evidence_conflicts must match"):
         AuditHealthResponse(
@@ -383,7 +379,6 @@ def test_audit_health_response_rejects_evidence_conflict_mismatch():
 
 def test_audit_health_evidence_rejects_negative_diagnostics():
     from autonomy.persistent_audit_health_api import AuditHealthEvidence
-    import pytest
 
     with pytest.raises(ValueError):
         AuditHealthEvidence(
@@ -408,3 +403,6 @@ def test_audit_health_evidence_allows_forward_compatible_fields():
     )
 
     assert evidence.future_diagnostic == "supported"
+
+
+
