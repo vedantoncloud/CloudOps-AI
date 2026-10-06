@@ -5,7 +5,7 @@ import sqlite3
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from autonomy.persistent_audit_health import PersistentAuditHealthChecker
 
@@ -37,6 +37,12 @@ class AuditPendingResponse(BaseModel):
     count: int = Field(ge=0)
     pending: list[AuditPendingItem]
     read_only: bool
+
+    @model_validator(mode="after")
+    def validate_count_matches_pending(self):
+        if self.count != len(self.pending):
+            raise ValueError("count must match the number of pending items")
+        return self
 
 
 def _checker() -> PersistentAuditHealthChecker:

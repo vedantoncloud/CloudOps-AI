@@ -276,3 +276,25 @@ def test_audit_pending_openapi_locks_pending_item_fields():
         "claimed_at",
         "evidence",
     }
+
+
+def test_audit_pending_response_rejects_count_mismatch():
+    from autonomy.persistent_audit_health_api import (
+        AuditPendingItem,
+        AuditPendingResponse,
+    )
+    import pytest
+
+    item = AuditPendingItem(
+        run_id="run-1",
+        event_type="recovery_failed",
+        claimed_at=1.0,
+        evidence={"action_id": "a-1"},
+    )
+
+    with pytest.raises(ValueError, match="count must match"):
+        AuditPendingResponse(
+            count=2,
+            pending=[item],
+            read_only=True,
+        )
