@@ -330,6 +330,42 @@ def test_audit_health_response_rejects_empty_path():
         )
 
 
+def test_audit_health_response_rejects_negative_evidence_conflicts():
+    with pytest.raises(ValueError, match="greater than or equal to 0"):
+        AuditHealthResponse(
+            path="/tmp/audit.db",
+            total_claims=0,
+            pending_claims=0,
+            emitted_claims=0,
+            evidence_conflicts=0,
+            evidence={"evidence_conflicts": -1},
+        )
+
+
+def test_audit_health_response_rejects_negative_unknown_status_claims():
+    with pytest.raises(ValueError, match="greater than or equal to 0"):
+        AuditHealthResponse(
+            path="/tmp/audit.db",
+            total_claims=0,
+            pending_claims=0,
+            emitted_claims=0,
+            evidence_conflicts=0,
+            evidence={"unknown_status_claims": -1},
+        )
+
+
+def test_audit_health_response_rejects_negative_malformed_evidence_claims():
+    with pytest.raises(ValueError, match="greater than or equal to 0"):
+        AuditHealthResponse(
+            path="/tmp/audit.db",
+            total_claims=0,
+            pending_claims=0,
+            emitted_claims=0,
+            evidence_conflicts=0,
+            evidence={"malformed_evidence_claims": -1},
+        )
+
+
 def test_audit_health_response_rejects_evidence_conflict_mismatch():
     from autonomy.persistent_audit_health_api import AuditHealthResponse
     import pytest
