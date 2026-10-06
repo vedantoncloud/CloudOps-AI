@@ -26,9 +26,16 @@ class AuditHealthResponse(BaseModel):
     evidence: dict[str, object]
 
 
+class AuditPendingItem(BaseModel):
+    run_id: str
+    event_type: str
+    claimed_at: float
+    evidence: dict[str, object]
+
+
 class AuditPendingResponse(BaseModel):
     count: int = Field(ge=0)
-    pending: list[dict[str, object]]
+    pending: list[AuditPendingItem]
     read_only: bool
 
 

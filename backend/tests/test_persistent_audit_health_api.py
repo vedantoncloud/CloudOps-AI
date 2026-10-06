@@ -237,3 +237,26 @@ def test_audit_pending_openapi_requires_pending_fields():
         "pending",
         "read_only",
     }
+
+
+def test_pending_endpoint_returns_typed_pending_items(
+    tmp_path: Path,
+    monkeypatch,
+):
+    path = tmp_path / "audit.db"
+    store = PersistentAuditIdempotencyStore(path)
+    store.claim(
+        "run-typed",
+        "recovery_failed",
+        {"action_id": "typed-1"},
+    )
+
+    response = build_client(monkeypatch, path).get("/autonomy/audit/pending")
+
+    assert response.status_code == 200
+
+    item = response.json()["pending"][0]
+    assert item["run_id"] == "run-typed"
+    assert item["event_type"] == "recovery_failed"
+    assert isinstance(item["claimed_at"], float)
+    assert item["evidence"] == {"action_id": "typed-1"}
