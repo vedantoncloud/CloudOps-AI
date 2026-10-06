@@ -206,3 +206,34 @@ def test_audit_pending_response_model_rejects_negative_count():
         return
 
     raise AssertionError("Negative pending count must be rejected")
+
+
+def test_audit_health_openapi_requires_health_fields():
+    app = FastAPI()
+    app.include_router(router)
+
+    schema = app.openapi()
+    health_schema = schema["components"]["schemas"]["AuditHealthResponse"]
+
+    assert set(health_schema["required"]) == {
+        "path",
+        "total_claims",
+        "pending_claims",
+        "emitted_claims",
+        "evidence_conflicts",
+        "evidence",
+    }
+
+
+def test_audit_pending_openapi_requires_pending_fields():
+    app = FastAPI()
+    app.include_router(router)
+
+    schema = app.openapi()
+    pending_schema = schema["components"]["schemas"]["AuditPendingResponse"]
+
+    assert set(pending_schema["required"]) == {
+        "count",
+        "pending",
+        "read_only",
+    }
