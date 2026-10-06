@@ -343,3 +343,32 @@ def test_audit_health_response_rejects_evidence_conflict_mismatch():
             evidence_conflicts=1,
             evidence={"evidence_conflicts": 0},
         )
+
+
+def test_audit_health_evidence_rejects_negative_diagnostics():
+    from autonomy.persistent_audit_health_api import AuditHealthEvidence
+    import pytest
+
+    with pytest.raises(ValueError):
+        AuditHealthEvidence(
+            store="sqlite",
+            read_only=True,
+            consistent=True,
+            unknown_status_claims=-1,
+            malformed_evidence_claims=0,
+        )
+
+
+def test_audit_health_evidence_allows_forward_compatible_fields():
+    from autonomy.persistent_audit_health_api import AuditHealthEvidence
+
+    evidence = AuditHealthEvidence(
+        store="sqlite",
+        read_only=True,
+        consistent=True,
+        unknown_status_claims=0,
+        malformed_evidence_claims=0,
+        future_diagnostic="supported",
+    )
+
+    assert evidence.future_diagnostic == "supported"

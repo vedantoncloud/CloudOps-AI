@@ -17,13 +17,23 @@ DEFAULT_DB_PATH = os.getenv(
 )
 
 
+class AuditHealthEvidence(BaseModel):
+    store: str
+    read_only: bool
+    consistent: bool
+    unknown_status_claims: int = Field(ge=0)
+    malformed_evidence_claims: int = Field(ge=0)
+
+    model_config = {"extra": "allow"}
+
+
 class AuditHealthResponse(BaseModel):
     path: str = Field(min_length=1)
     total_claims: int = Field(ge=0)
     pending_claims: int = Field(ge=0)
     emitted_claims: int = Field(ge=0)
     evidence_conflicts: int = Field(ge=0)
-    evidence: dict[str, object]
+    evidence: AuditHealthEvidence
 
     @model_validator(mode="after")
     def validate_claim_counts(self):
