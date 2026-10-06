@@ -171,3 +171,38 @@ def test_audit_health_openapi_exposes_response_contract():
     assert pending["responses"]["200"]["content"]["application/json"]["schema"][
         "$ref"
     ].endswith("/AuditPendingResponse")
+
+
+def test_audit_health_response_model_rejects_negative_counts():
+    from pydantic import ValidationError
+    from autonomy.persistent_audit_health_api import AuditHealthResponse
+
+    try:
+        AuditHealthResponse(
+            path="audit.db",
+            total_claims=-1,
+            pending_claims=0,
+            emitted_claims=0,
+            evidence_conflicts=0,
+            evidence={},
+        )
+    except ValidationError:
+        return
+
+    raise AssertionError("Negative health counters must be rejected")
+
+
+def test_audit_pending_response_model_rejects_negative_count():
+    from pydantic import ValidationError
+    from autonomy.persistent_audit_health_api import AuditPendingResponse
+
+    try:
+        AuditPendingResponse(
+            count=-1,
+            pending=[],
+            read_only=True,
+        )
+    except ValidationError:
+        return
+
+    raise AssertionError("Negative pending count must be rejected")
