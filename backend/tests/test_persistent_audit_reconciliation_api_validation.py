@@ -115,3 +115,21 @@ def test_reconciliation_item_rejects_unknown_status():
             age_seconds=10.0,
             evidence={},
         )
+
+def test_reconciliation_response_rejects_non_read_only():
+    with pytest.raises(ValidationError):
+        AuditReconciliationResponse(
+            count=0,
+            active_count=0,
+            stale_count=0,
+            items=[],
+            evidence={
+                "store": "sqlite",
+                "read_only": True,
+                "lease_seconds": 50.0,
+                "pending_count": 0,
+                "active_count": 0,
+                "stale_count": 0,
+            },
+            read_only=False,
+        )

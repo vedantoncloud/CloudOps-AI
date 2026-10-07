@@ -56,8 +56,7 @@ class AuditReconciliationResponse(BaseModel):
     stale_count: int = Field(ge=0)
     items: list[AuditReconciliationItemResponse]
     evidence: AuditReconciliationEvidence
-    read_only: bool
-
+    read_only: Literal[True]
     @model_validator(mode="after")
     def validate_counts(self):
         if self.count != len(self.items):
@@ -108,4 +107,8 @@ def audit_reconciliation() -> AuditReconciliationResponse:
         "evidence": result.evidence,
         "read_only": True,
     }
+
+
+
+
 
