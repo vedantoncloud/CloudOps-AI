@@ -79,7 +79,7 @@ def _reconciliation() -> PersistentAuditReconciliation:
     )
 
 
-@router.get("/reconciliation")
+@router.get("/reconciliation", responses={503: {"description": "Persistent audit reconciliation is unavailable"}})
 def audit_reconciliation() -> AuditReconciliationResponse:
     try:
         result = _reconciliation().inspect()
@@ -107,6 +107,7 @@ def audit_reconciliation() -> AuditReconciliationResponse:
         "evidence": result.evidence,
         "read_only": True,
     }
+
 
 
 
