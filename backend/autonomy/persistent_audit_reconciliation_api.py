@@ -5,6 +5,8 @@ import sqlite3
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
+from typing import Literal
+
 from pydantic import BaseModel, Field, model_validator
 
 from autonomy.persistent_audit_idempotency import PersistentAuditIdempotencyStore
@@ -42,7 +44,7 @@ class AuditReconciliationEvidence(BaseModel):
 class AuditReconciliationItemResponse(BaseModel):
     run_id: str
     event_type: str
-    status: str
+    status: Literal["active", "stale"]
     claimed_at: float = Field(ge=0)
     age_seconds: float = Field(ge=0)
     evidence: dict[str, object]
@@ -106,3 +108,4 @@ def audit_reconciliation() -> AuditReconciliationResponse:
         "evidence": result.evidence,
         "read_only": True,
     }
+

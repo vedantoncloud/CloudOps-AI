@@ -104,3 +104,14 @@ def test_reconciliation_response_accepts_valid_contract():
     assert response.stale_count == 0
     assert len(response.items) == 1
     assert response.read_only is True
+
+def test_reconciliation_item_rejects_unknown_status():
+    with pytest.raises(ValidationError):
+        AuditReconciliationItemResponse(
+            run_id="run-1",
+            event_type="event",
+            status="unknown",
+            claimed_at=100.0,
+            age_seconds=10.0,
+            evidence={},
+        )
