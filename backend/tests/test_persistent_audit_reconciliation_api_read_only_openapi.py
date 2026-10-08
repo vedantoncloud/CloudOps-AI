@@ -9,9 +9,13 @@ def test_reconciliation_api_200_openapi_locks_read_only_true():
     app = FastAPI()
     app.include_router(reconciliation_api.router)
 
-    response = app.openapi()["paths"]["/autonomy/audit/reconciliation"]["get"][
+    openapi = app.openapi()
+    response = openapi["paths"]["/autonomy/audit/reconciliation"]["get"][
         "responses"
     ]["200"]
 
-    schema = response["content"]["application/json"]["schema"]
+    schema_ref = response["content"]["application/json"]["schema"]["$ref"]
+    schema_name = schema_ref.rsplit("/", 1)[-1]
+    schema = openapi["components"]["schemas"][schema_name]
+
     assert schema["properties"]["read_only"] == {"const": True}
