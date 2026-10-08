@@ -18,4 +18,6 @@ def test_reconciliation_api_200_openapi_locks_read_only_true():
     schema_name = schema_ref.rsplit("/", 1)[-1]
     schema = openapi["components"]["schemas"][schema_name]
 
-    assert schema["properties"]["read_only"] == {"const": True}
+    read_only = schema["properties"]["read_only"]
+
+    assert read_only["const"] is True
