@@ -3,10 +3,9 @@ from __future__ import annotations
 import os
 import sqlite3
 from pathlib import Path
-
-from fastapi import APIRouter, HTTPException
 from typing import Literal
 
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, model_validator
 
 from autonomy.persistent_audit_idempotency import PersistentAuditIdempotencyStore
@@ -50,6 +49,10 @@ class AuditReconciliationItemResponse(BaseModel):
     evidence: dict[str, object]
 
 
+class AuditReconciliationErrorResponse(BaseModel):
+    detail: str
+
+
 class AuditReconciliationResponse(BaseModel):
     count: int = Field(ge=0)
     active_count: int = Field(ge=0)
@@ -57,6 +60,7 @@ class AuditReconciliationResponse(BaseModel):
     items: list[AuditReconciliationItemResponse]
     evidence: AuditReconciliationEvidence
     read_only: Literal[True]
+
     @model_validator(mode="after")
     def validate_counts(self):
         if self.count != len(self.items):
@@ -79,7 +83,15 @@ def _reconciliation() -> PersistentAuditReconciliation:
     )
 
 
-@router.get("/reconciliation", responses={503: {"description": "Persistent audit reconciliation is unavailable"}})
+@router.get(
+    "/reconciliation",
+    responses={
+        503: {
+            "model": AuditReconciliationErrorResponse,
+            "description": "Persistent audit reconciliation is unavailable",
+        }
+    },
+)
 def audit_reconciliation() -> AuditReconciliationResponse:
     try:
         result = _reconciliation().inspect()
@@ -107,10 +119,3 @@ def audit_reconciliation() -> AuditReconciliationResponse:
         "evidence": result.evidence,
         "read_only": True,
     }
-
-
-
-
-
-
-
