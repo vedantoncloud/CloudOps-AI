@@ -53,3 +53,15 @@ def test_reconciliation_api_openapi_requires_stable_response_fields():
         "age_seconds",
         "evidence",
     }
+
+
+def test_reconciliation_api_openapi_locks_response_numeric_constraints():
+    app = FastAPI()
+    app.include_router(reconciliation_api.router)
+
+    schema = app.openapi()["components"]["schemas"]["AuditReconciliationResponse"]
+    properties = schema["properties"]
+
+    assert properties["count"]["minimum"] == 0
+    assert properties["active_count"]["minimum"] == 0
+    assert properties["stale_count"]["minimum"] == 0
