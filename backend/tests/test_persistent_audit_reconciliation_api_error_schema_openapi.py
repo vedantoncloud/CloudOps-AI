@@ -34,3 +34,4 @@ def test_reconciliation_api_error_schema_requires_detail():
     assert error_schema["type"] == "object"
     assert error_schema["required"] == ["detail"]
     assert error_schema["properties"]["detail"]["type"] == "string"
+    assert error_schema["properties"]["detail"]["minLength"] == 1
