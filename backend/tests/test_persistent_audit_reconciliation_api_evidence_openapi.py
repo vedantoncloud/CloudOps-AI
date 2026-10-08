@@ -24,3 +24,13 @@ def test_reconciliation_evidence_openapi_locks_numeric_constraints():
     assert properties["pending_count"]["minimum"] == 0
     assert properties["active_count"]["minimum"] == 0
     assert properties["stale_count"]["minimum"] == 0
+
+
+def test_reconciliation_evidence_openapi_locks_read_only_type():
+    app = FastAPI()
+    app.include_router(reconciliation_api.router)
+
+    schema = app.openapi()["components"]["schemas"]["AuditReconciliationEvidence"]
+    read_only = schema["properties"]["read_only"]
+
+    assert read_only["type"] == "boolean"
