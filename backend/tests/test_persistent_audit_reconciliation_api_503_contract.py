@@ -18,6 +18,7 @@ def test_reconciliation_api_503_contract_matches_openapi(monkeypatch):
     response = TestClient(app).get("/autonomy/audit/reconciliation")
 
     assert response.status_code == 503
+    assert response.headers["content-type"].startswith("application/json")
     assert response.json() == {
         "detail": "Persistent audit reconciliation is unavailable"
     }
