@@ -44,4 +44,4 @@ def test_reconciliation_api_maps_missing_event_type_to_503(
     )
 
     assert response.status_code == 503
-    assert "missing event_type" in response.json()["detail"]
+    assert response.json()["detail"] == "Persistent audit reconciliation is unavailable"

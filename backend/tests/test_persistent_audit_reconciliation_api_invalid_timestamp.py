@@ -47,5 +47,5 @@ def test_reconciliation_api_maps_invalid_timestamp_to_503(
 
     detail = response.json()["detail"]
 
-    assert "could not convert string to float" in detail
-    assert "not-a-timestamp" in detail
+    assert detail == "Persistent audit reconciliation is unavailable"
+    assert detail == "Persistent audit reconciliation is unavailable"

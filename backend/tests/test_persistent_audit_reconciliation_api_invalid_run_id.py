@@ -44,4 +44,4 @@ def test_reconciliation_api_maps_missing_run_id_to_503(
     )
 
     assert response.status_code == 503
-    assert "missing run_id" in response.json()["detail"]
+    assert response.json()["detail"] == "Persistent audit reconciliation is unavailable"

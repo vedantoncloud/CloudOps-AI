@@ -30,5 +30,5 @@ def test_reconciliation_api_maps_invalid_reconciliation_state_to_503(
 
     assert response.status_code == 503
     assert response.json() == {
-        "detail": "invalid reconciliation state",
+        "detail": "Persistent audit reconciliation is unavailable",
     }
