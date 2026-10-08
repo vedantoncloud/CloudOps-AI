@@ -50,7 +50,7 @@ class AuditReconciliationItemResponse(BaseModel):
 
 
 class AuditReconciliationErrorResponse(BaseModel):
-    detail: str
+    detail: str = Field(min_length=1)
 
 
 class AuditReconciliationResponse(BaseModel):
@@ -119,3 +119,4 @@ def audit_reconciliation() -> AuditReconciliationResponse:
         "evidence": result.evidence,
         "read_only": True,
     }
+
