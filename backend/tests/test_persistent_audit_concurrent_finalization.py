@@ -1,46 +1,50 @@
 ﻿from concurrent.futures import ThreadPoolExecutor
-import sqlite3
+from threading import Barrier
 
 from autonomy.persistent_audit_idempotency import (
     PersistentAuditIdempotencyStore,
 )
 
 
-def test_concurrent_finalization_has_exactly_one_winner(tmp_path):
-    database = tmp_path / "audit.db"
-    store = PersistentAuditIdempotencyStore(database)
+def test_concurrent_finalization_succeeds_for_exactly_one_worker(tmp_path):
+    database = tmp_path / "concurrent-finalization.db"
+    evidence = {"action_id": "finalize-1", "outcome": "failed"}
 
-    claim = store.claim(
-        "finalize-race",
-        "deployment.completed",
-        {"service": "api", "result": "success"},
+    stores = [
+        PersistentAuditIdempotencyStore(database)
+        for _ in range(8)
+    ]
+
+    initial_claim = stores[0].claim(
+        "concurrent-finalize-run",
+        "recovery_failed",
+        evidence,
     )
 
-    assert claim.emitted is True
-    assert claim.claim_token
+    assert initial_claim.emitted is True
+    assert initial_claim.claim_token
 
-    def finalize():
-        worker_store = PersistentAuditIdempotencyStore(database)
-        return worker_store.mark_emitted(
-            "finalize-race",
-            "deployment.completed",
-            claim.claim_token,
+    barrier = Barrier(8)
+
+    def finalize(store):
+        barrier.wait()
+        return store.mark_emitted(
+            "concurrent-finalize-run",
+            "recovery_failed",
+            initial_claim.claim_token,
         )
 
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        results = list(executor.map(lambda _: finalize(), range(2)))
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        results = list(executor.map(finalize, stores))
 
-    assert sorted(results) == [False, True]
+    assert results.count(True) == 1
+    assert results.count(False) == 7
 
-    with sqlite3.connect(database) as connection:
-        row = connection.execute(
-            "SELECT evidence_json, status, claim_token "
-            "FROM audit_idempotency "
-            "WHERE run_id = ? AND event_type = ?",
-            ("finalize-race", "deployment.completed"),
-        ).fetchone()
+    repeated_claim = stores[0].claim(
+        "concurrent-finalize-run",
+        "recovery_failed",
+        evidence,
+    )
 
-    assert row is not None
-    assert row[0] == '{"result":"success","service":"api"}'
-    assert row[1] == "emitted"
-    assert row[2] == claim.claim_token
+    assert repeated_claim.emitted is False
+    assert repeated_claim.claim_token == ""
