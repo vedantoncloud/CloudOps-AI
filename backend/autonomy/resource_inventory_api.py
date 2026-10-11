@@ -1,4 +1,4 @@
-from typing import Any
+﻿from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -36,8 +36,8 @@ def list_resources(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return {
-        "provider": provider.lower(),
-        "resource_type": resource_type.lower(),
+        "provider": provider.strip().lower(),
+        "resource_type": resource_type.strip().lower(),
         "read_only": True,
         "count": len(resources),
         "resources": [
@@ -51,3 +51,4 @@ def list_resources(
             for item in resources
         ],
     }
+
