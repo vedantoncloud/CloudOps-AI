@@ -128,3 +128,31 @@ def test_resource_attributes_are_preserved():
 
     assert resource.attributes == {"instance_id": "i-789", "state": "running"}
     assert resource.read_only is True
+
+@pytest.mark.parametrize("resource_type", ["ec2", "s3"])
+@pytest.mark.parametrize(
+    "malformed_response",
+    [
+        None,
+        "invalid-response",
+        42,
+        {"unexpected": "shape"},
+    ],
+)
+def test_malformed_provider_response_returns_empty_list(
+    resource_type,
+    malformed_response,
+):
+    registry, provider = make_registry()
+
+    if resource_type == "ec2":
+        provider.get_ec2_instances.return_value = malformed_response
+    else:
+        provider.get_s3_buckets.return_value = malformed_response
+
+    resources = ResourceDiscovery(registry).list_resources(
+        "aws",
+        resource_type,
+    )
+
+    assert resources == []
