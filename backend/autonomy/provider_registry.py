@@ -1,4 +1,4 @@
-﻿from threading import RLock
+from threading import RLock
 
 from autonomy.provider import CloudProvider
 
@@ -12,12 +12,10 @@ class ProviderRegistry:
 
     @staticmethod
     def _normalize(name: str) -> str:
-        normalized = name.strip().lower()
-
-        if not normalized:
+        if not isinstance(name, str) or not name.strip():
             raise ValueError("provider name cannot be empty")
 
-        return normalized
+        return name.strip().lower()
 
     def register(self, provider: CloudProvider) -> CloudProvider:
         name = self._normalize(provider.provider_name)
