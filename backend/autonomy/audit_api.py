@@ -46,8 +46,25 @@ def _serialize(event: AuditEvent) -> AuditEventResponse:
 )
 def list_audit_events(
     action_id: str | None = Query(default=None),
+    resource_id: str | None = Query(default=None),
+    event: str | None = Query(default=None),
+    action_type: str | None = Query(default=None),
+    limit: int | None = Query(default=None, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
 ) -> list[AuditEventResponse]:
-    return [
-        _serialize(event)
-        for event in audit_trail.get_events(action_id=action_id)
-    ]
+    events = audit_trail.get_events(action_id=action_id)
+
+    if resource_id is not None:
+        events = [item for item in events if item.resource_id == resource_id]
+
+    if event is not None:
+        events = [item for item in events if item.event == event]
+
+    if action_type is not None:
+        events = [item for item in events if item.action_type == action_type]
+
+    events = events[offset:]
+    if limit is not None:
+        events = events[:limit]
+
+    return [_serialize(item) for item in events]
