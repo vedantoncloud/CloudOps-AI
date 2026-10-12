@@ -18,7 +18,8 @@ class ProviderRegistry:
         return name.strip().lower()
 
     def register(self, provider: CloudProvider) -> CloudProvider:
-        name = self._normalize(provider.provider_name)
+        provider_name = getattr(provider, "provider_name", None)
+        name = self._normalize(provider_name)
 
         with self._lock:
             if name in self._providers:
