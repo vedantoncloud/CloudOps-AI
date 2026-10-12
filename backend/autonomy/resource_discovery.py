@@ -83,6 +83,20 @@ class ResourceDiscovery:
                     return value
             if raw and all(isinstance(v, dict) for v in raw.values()):
                 return list(raw.values())
+
+            identifier_keys = {
+                "resource_id",
+                "id",
+                "instance_id",
+                "InstanceId",
+                "bucket_name",
+                "name",
+                "Name",
+            }
+
+            if identifier_keys.intersection(raw):
+                return [raw]
+
         return []
 
     @staticmethod
