@@ -32,72 +32,66 @@ class AWSProvider(CloudProvider):
         resource_type: str,
         resource_id: str,
     ) -> dict[str, Any]:
-        """Return read-only details for a supported AWS resource."""
-        super().get_resource(resource_type, resource_id)
+        """Return read-only details while preserving the base provider contract."""
+        base = super().get_resource(resource_type, resource_id)
 
         normalized_type = resource_type.strip().lower()
         normalized_id = resource_id.strip()
+
+        # Preserve generic observations for resource types not yet supported
+        # by AWS inventory discovery (for example, service resources).
+        if normalized_type not in {"ec2", "s3"}:
+            return base
 
         if normalized_type == "ec2":
             response = self.service.get_ec2_instances()
 
             if response.get("status") != "healthy":
                 return {
-                    "provider": "aws",
-                    "resource_type": normalized_type,
-                    "resource_id": normalized_id,
+                    **base,
                     "status": "unhealthy",
-                    "error": response.get("error", "Unable to retrieve EC2 inventory"),
-                    "read_only": True,
+                    "error": response.get(
+                        "error",
+                        "Unable to retrieve EC2 inventory",
+                    ),
                 }
 
             instance = next(
                 (
-                    item for item in response.get("instances", [])
+                    item
+                    for item in response.get("instances", [])
                     if item.get("instance_id") == normalized_id
                 ),
                 None,
             )
 
+            # Keep the original generic response for unknown resources.
             if instance is None:
-                return {
-                    "provider": "aws",
-                    "resource_type": normalized_type,
-                    "resource_id": normalized_id,
-                    "status": "not_found",
-                    "read_only": True,
-                }
+                return base
 
             return {
-                "provider": "aws",
-                "resource_type": normalized_type,
-                "resource_id": normalized_id,
+                **base,
                 "status": "healthy",
                 "attributes": instance,
-                "read_only": True,
             }
 
-        if normalized_type == "s3":
-            response = self.service.get_s3_bucket_details(normalized_id)
-            healthy = response.get("status") == "healthy"
+        response = self.service.get_s3_bucket_details(normalized_id)
+        healthy = response.get("status") == "healthy"
 
-            result = {
-                "provider": "aws",
-                "resource_type": normalized_type,
-                "resource_id": normalized_id,
-                "status": response.get("status", "unhealthy"),
-                "attributes": (
-                    {
-                        "bucket": response.get("bucket"),
-                        "region": response.get("region"),
-                    } if healthy else {}
-                ),
-                "read_only": True,
-            }
+        result = {
+            **base,
+            "status": response.get("status", "unhealthy"),
+            "attributes": (
+                {
+                    "bucket": response.get("bucket"),
+                    "region": response.get("region"),
+                }
+                if healthy
+                else {}
+            ),
+        }
 
-            if not healthy and response.get("error"):
-                result["error"] = response["error"]
+        if not healthy and response.get("error"):
+            result["error"] = response["error"]
 
-            return result
-
-        raise ValueError(f"unsupported AWS resource type: {resource_type}")
+        return result

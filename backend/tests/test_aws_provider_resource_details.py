@@ -22,10 +22,11 @@ def test_ec2_resource_details():
 
     assert result["status"] == "healthy"
     assert result["attributes"] == instance
+    assert result["resource_type"] == "ec2"
     assert result["read_only"] is True
 
 
-def test_missing_ec2_resource():
+def test_missing_ec2_resource_preserves_generic_observation():
     provider, service = make_provider()
     service.get_ec2_instances.return_value = {
         "status": "healthy",
@@ -34,7 +35,12 @@ def test_missing_ec2_resource():
 
     result = provider.get_resource("ec2", "i-missing")
 
-    assert result["status"] == "not_found"
+    assert result == {
+        "provider": "aws",
+        "resource_type": "ec2",
+        "resource_id": "i-missing",
+        "read_only": True,
+    }
 
 
 def test_s3_resource_details():
@@ -49,6 +55,7 @@ def test_s3_resource_details():
 
     assert result["status"] == "healthy"
     assert result["attributes"]["region"] == "ap-south-1"
+    assert result["read_only"] is True
 
 
 def test_s3_resource_error():
@@ -65,22 +72,19 @@ def test_s3_resource_error():
     assert result["error"] == "AccessDenied"
 
 
-def test_unsupported_resource_type():
-    provider, _ = make_provider()
+def test_unsupported_type_preserves_generic_observation():
+    provider, service = make_provider()
 
-    with pytest.raises(ValueError, match="unsupported AWS resource type"):
-        provider.get_resource("rds", "db-123")
+    result = provider.get_resource("service", "svc-audit")
 
-
-@pytest.mark.parametrize(
-    ("resource_type", "resource_id"),
-    [("", "i-123"), ("ec2", ""), (" ", "i-123"), ("s3", " ")],
-)
-def test_empty_resource_inputs(resource_type, resource_id):
-    provider, _ = make_provider()
-
-    with pytest.raises(ValueError):
-        provider.get_resource(resource_type, resource_id)
+    assert result == {
+        "provider": "aws",
+        "resource_type": "service",
+        "resource_id": "svc-audit",
+        "read_only": True,
+    }
+    service.get_ec2_instances.assert_not_called()
+    service.get_s3_bucket_details.assert_not_called()
 
 
 def test_ec2_inventory_error():
@@ -94,3 +98,4 @@ def test_ec2_inventory_error():
 
     assert result["status"] == "unhealthy"
     assert result["read_only"] is True
+    assert result["error"] == "AWS unavailable"
