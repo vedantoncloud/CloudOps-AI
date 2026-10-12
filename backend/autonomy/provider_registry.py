@@ -6,6 +6,22 @@ from autonomy.provider import CloudProvider
 class ProviderRegistry:
     """Thread-safe registry for cloud provider adapters."""
 
+    REQUIRED_METHODS = (
+        "get_ec2_instances",
+        "get_ec2_summary",
+        "get_s3_buckets",
+    )
+
+    @classmethod
+    def _validate_provider(cls, provider: CloudProvider) -> None:
+        for method_name in cls.REQUIRED_METHODS:
+            method = getattr(provider, method_name, None)
+
+            if not callable(method):
+                raise ValueError(
+                    f"provider must implement callable {method_name}"
+                )
+
     def __init__(self) -> None:
         self._providers: dict[str, CloudProvider] = {}
         self._lock = RLock()
@@ -18,6 +34,7 @@ class ProviderRegistry:
         return name.strip().lower()
 
     def register(self, provider: CloudProvider) -> CloudProvider:
+        self._validate_provider(provider)
         provider_name = getattr(provider, "provider_name", None)
         name = self._normalize(provider_name)
 
