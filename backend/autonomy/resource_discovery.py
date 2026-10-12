@@ -46,10 +46,38 @@ class ResourceDiscovery:
 
         if normalized_type == "ec2":
             raw = cloud_provider.get_ec2_instances()
-            items = self._extract_items(raw, ("resources", "instances"))
+            items = self._extract_items(
+                raw,
+                ("resources", "instances", "Instances"),
+            )
+
+            reservations = (
+                raw.get("Reservations")
+                if isinstance(raw, dict)
+                else None
+            )
+
+            if isinstance(reservations, list):
+                items = []
+
+                for reservation in reservations:
+                    if not isinstance(reservation, dict):
+                        continue
+
+                    instances = reservation.get("Instances")
+
+                    if isinstance(instances, list):
+                        items.extend(
+                            instance
+                            for instance in instances
+                            if isinstance(instance, dict)
+                        )
         else:
             raw = cloud_provider.get_s3_buckets()
-            items = self._extract_items(raw, ("resources", "buckets"))
+            items = self._extract_items(
+                raw,
+                ("resources", "buckets", "Buckets"),
+            )
 
         result: list[DiscoveredResource] = []
         for item in items:
