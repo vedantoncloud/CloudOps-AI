@@ -1,4 +1,4 @@
-﻿from abc import ABC, abstractmethod
+from abc import ABC, abstractmethod
 from typing import Any
 
 
@@ -32,10 +32,10 @@ class CloudProvider(ABC):
         resource_id: str,
     ) -> dict[str, Any]:
         """Return a provider-neutral, read-only resource observation."""
-        if not resource_type.strip():
-            raise ValueError("resource_type cannot be empty")
-        if not resource_id.strip():
-            raise ValueError("resource_id cannot be empty")
+        if not isinstance(resource_type, str) or not resource_type.strip():
+            raise ValueError("resource_type must be a non-empty string")
+        if not isinstance(resource_id, str) or not resource_id.strip():
+            raise ValueError("resource_id must be a non-empty string")
 
         return {
             "provider": self.provider_name,
