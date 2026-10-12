@@ -95,5 +95,5 @@ class ResourceDiscovery:
         for key in keys:
             value = item.get(key)
             if value is not None and str(value).strip():
-                return str(value)
+                return str(value).strip()
         return ""
