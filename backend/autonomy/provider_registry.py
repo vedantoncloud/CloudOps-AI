@@ -74,6 +74,34 @@ class ProviderRegistry:
         with self._lock:
             return sorted(self._providers.keys())
 
+    def get_capabilities(self, name: str) -> dict[str, object]:
+        """Return validated, normalized capabilities for a registered provider."""
+        normalized = self._normalize(name)
+        provider = self.get(normalized)
+        getter = getattr(provider, "get_capabilities", None)
+
+        if not callable(getter):
+            raise ValueError(
+                f"provider '{normalized}' does not expose capability discovery"
+            )
+
+        raw_capabilities = getter()
+        if not isinstance(raw_capabilities, (list, tuple, set, frozenset)):
+            raise ValueError("provider capabilities must be a collection")
+
+        capabilities = set()
+        for capability in raw_capabilities:
+            if not isinstance(capability, str) or not capability.strip():
+                raise ValueError(
+                    "provider capabilities must contain non-empty strings"
+                )
+            capabilities.add(capability.strip())
+
+        return {
+            "provider": normalized,
+            "capabilities": sorted(capabilities),
+        }
+
     def unregister(self, name: str) -> CloudProvider:
         normalized = self._normalize(name)
 

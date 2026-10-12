@@ -26,6 +26,21 @@ class CloudProvider(ABC):
     def get_s3_buckets(self) -> dict[str, Any]:
         raise NotImplementedError
 
+    def get_capabilities(self) -> list[str]:
+        """Return the read-only capabilities exposed by this provider adapter."""
+        capability_methods = {
+            "compute.instances.list": "get_ec2_instances",
+            "compute.instances.summary": "get_ec2_summary",
+            "storage.buckets.list": "get_s3_buckets",
+            "resources.get": "get_resource",
+        }
+
+        return sorted(
+            capability
+            for capability, method_name in capability_methods.items()
+            if callable(getattr(self, method_name, None))
+        )
+
     def get_resource(
         self,
         resource_type: str,
