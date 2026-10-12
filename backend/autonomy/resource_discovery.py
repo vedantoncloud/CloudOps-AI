@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -93,7 +94,7 @@ class ResourceDiscovery:
                     provider=normalized_provider,
                     resource_type=normalized_type,
                     resource_id=resource_id,
-                    attributes=dict(item),
+                    attributes=deepcopy(item),
                     read_only=True,
                 )
             )
