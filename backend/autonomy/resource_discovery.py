@@ -81,6 +81,13 @@ class ResourceDiscovery:
                 value = raw.get(key)
                 if isinstance(value, list):
                     return value
+                if isinstance(value, dict):
+                    if not value:
+                        return []
+                    if all(isinstance(v, dict) for v in value.values()):
+                        return list(value.values())
+                    return []
+
             if raw and all(isinstance(v, dict) for v in raw.values()):
                 return list(raw.values())
 
