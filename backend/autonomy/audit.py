@@ -1,4 +1,9 @@
-from dataclasses import dataclass, field
+﻿from __future__ import annotations
+
+import hashlib
+import hmac
+import json
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from threading import Lock
 from typing import Any
@@ -20,11 +25,29 @@ class AuditEvent:
 
 
 class AuditTrail:
-    """In-memory audit trail for autonomous action lifecycle events."""
+    """In-memory audit trail with tamper-evident hash-chain verification."""
 
     def __init__(self) -> None:
         self._events: list[AuditEvent] = []
+        self._event_hashes: list[str] = []
         self._lock = Lock()
+
+    @staticmethod
+    def _canonical_event(event: AuditEvent) -> bytes:
+        return json.dumps(
+            asdict(event),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+
+    @staticmethod
+    def _calculate_hash(previous_hash: str, event: AuditEvent) -> str:
+        digest = hashlib.sha256()
+        digest.update(previous_hash.encode("ascii"))
+        digest.update(b"\0")
+        digest.update(AuditTrail._canonical_event(event))
+        return digest.hexdigest()
 
     def record(
         self,
@@ -40,16 +63,12 @@ class AuditTrail:
     ) -> AuditEvent:
         if not action_id or not action_id.strip():
             raise ValueError("action_id cannot be empty")
-
         if not action_type or not action_type.strip():
             raise ValueError("action_type cannot be empty")
-
         if not resource_type or not resource_type.strip():
             raise ValueError("resource_type cannot be empty")
-
         if not resource_id or not resource_id.strip():
             raise ValueError("resource_id cannot be empty")
-
         if not event or not event.strip():
             raise ValueError("event cannot be empty")
 
@@ -65,7 +84,10 @@ class AuditTrail:
         )
 
         with self._lock:
+            previous_hash = self._event_hashes[-1] if self._event_hashes else ""
+            event_hash = self._calculate_hash(previous_hash, audit_event)
             self._events.append(audit_event)
+            self._event_hashes.append(event_hash)
 
         return audit_event
 
@@ -76,12 +98,31 @@ class AuditTrail:
         if action_id is None:
             return events
 
-        return [
-            event
-            for event in events
-            if event.action_id == action_id
-        ]
+        return [item for item in events if item.action_id == action_id]
+
+    def verify_integrity(self) -> bool:
+        """Return False if an event, its details, or chain metadata was altered."""
+        with self._lock:
+            if len(self._events) != len(self._event_hashes):
+                return False
+
+            previous_hash = ""
+            for event, stored_hash in zip(self._events, self._event_hashes):
+                try:
+                    expected_hash = self._calculate_hash(previous_hash, event)
+                except (TypeError, ValueError, OverflowError):
+                    return False
+
+                if not isinstance(stored_hash, str) or not hmac.compare_digest(
+                    expected_hash, stored_hash
+                ):
+                    return False
+
+                previous_hash = stored_hash
+
+            return True
 
     def clear(self) -> None:
         with self._lock:
             self._events.clear()
+            self._event_hashes.clear()
