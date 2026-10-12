@@ -1,0 +1,77 @@
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from autonomy.audit_api import audit_trail, router
+
+
+def make_client():
+    app = FastAPI()
+    app.include_router(router)
+    return TestClient(app)
+
+
+def test_integrity_endpoint_reports_empty_trail_as_valid():
+    audit_trail.clear()
+
+    response = make_client().get("/autonomy/audit/integrity")
+
+    assert response.status_code == 200
+    assert response.json() == {"valid": True, "event_count": 0}
+
+
+def test_integrity_endpoint_reports_recorded_event_count():
+    audit_trail.clear()
+    for index in range(2):
+        audit_trail.record(
+            action_id=f"action-{index}",
+            action_type="scale",
+            resource_type="instance",
+            resource_id=f"i-{index}",
+            old_status="running",
+            new_status="stopped",
+            event="action_completed",
+        )
+
+    response = make_client().get("/autonomy/audit/integrity")
+
+    assert response.status_code == 200
+    assert response.json() == {"valid": True, "event_count": 2}
+
+
+def test_integrity_endpoint_detects_event_tampering():
+    audit_trail.clear()
+    recorded = audit_trail.record(
+        action_id="action-1",
+        action_type="scale",
+        resource_type="instance",
+        resource_id="i-123",
+        old_status="running",
+        new_status="stopped",
+        event="action_completed",
+    )
+
+    recorded.details["tampered"] = True
+
+    response = make_client().get("/autonomy/audit/integrity")
+
+    assert response.status_code == 200
+    assert response.json() == {"valid": False, "event_count": 1}
+
+
+def test_integrity_endpoint_does_not_modify_audit_events():
+    audit_trail.clear()
+    audit_trail.record(
+        action_id="action-1",
+        action_type="scale",
+        resource_type="instance",
+        resource_id="i-123",
+        old_status="running",
+        new_status="stopped",
+        event="action_completed",
+    )
+
+    before = audit_trail.get_events()
+    response = make_client().get("/autonomy/audit/integrity")
+
+    assert response.status_code == 200
+    assert audit_trail.get_events() == before

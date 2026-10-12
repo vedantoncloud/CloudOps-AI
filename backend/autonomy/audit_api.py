@@ -1,4 +1,4 @@
-﻿from typing import Any
+from typing import Any
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
@@ -12,6 +12,11 @@ router = APIRouter(
 )
 
 audit_trail = AuditTrail()
+
+
+class AuditIntegrityResponse(BaseModel):
+    valid: bool
+    event_count: int
 
 
 class AuditEventResponse(BaseModel):
@@ -37,6 +42,18 @@ def _serialize(event: AuditEvent) -> AuditEventResponse:
         event=event.event,
         timestamp=event.timestamp,
         details=dict(event.details),
+    )
+
+
+@router.get(
+    "/integrity",
+    response_model=AuditIntegrityResponse,
+)
+def verify_audit_integrity() -> AuditIntegrityResponse:
+    events = audit_trail.get_events()
+    return AuditIntegrityResponse(
+        valid=audit_trail.verify_integrity(),
+        event_count=len(events),
     )
 
 
