@@ -83,6 +83,8 @@ class ResourceDiscovery:
         result: list[DiscoveredResource] = []
         for item in items:
             if not isinstance(item, dict):
+                if normalized_type == "s3":
+                    continue
                 item = {"name": item}
 
             resource_id = self._resource_id(item, normalized_type)

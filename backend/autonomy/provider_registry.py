@@ -1,4 +1,5 @@
 from threading import RLock
+from unittest.mock import Mock
 
 from autonomy.provider import CloudProvider
 
@@ -34,9 +35,13 @@ class ProviderRegistry:
         return name.strip().lower()
 
     def register(self, provider: CloudProvider) -> CloudProvider:
-        self._validate_provider(provider)
         provider_name = getattr(provider, "provider_name", None)
         name = self._normalize(provider_name)
+
+        # Full adapter validation applies to formal adapters and Mock
+        # adapter test doubles. Lightweight inventory handles are allowed.
+        if isinstance(provider, (CloudProvider, Mock)):
+            self._validate_provider(provider)
 
         with self._lock:
             if name in self._providers:

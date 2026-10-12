@@ -1,4 +1,4 @@
-﻿from typing import Any
+from typing import Any
 
 from autonomy.provider import CloudProvider
 from services.aws_service import AWSService
@@ -32,10 +32,8 @@ class AWSProvider(CloudProvider):
         resource_type: str,
         resource_id: str,
     ) -> dict[str, Any]:
-        """Read-only compatibility surface for the provider foundation."""
-        return {
-            "provider": self.provider_name,
-            "resource_type": resource_type,
-            "resource_id": resource_id,
-            "read_only": True,
-        }
+        """Return a validated, provider-neutral read-only observation."""
+        return super().get_resource(
+            resource_type=resource_type,
+            resource_id=resource_id,
+        )
