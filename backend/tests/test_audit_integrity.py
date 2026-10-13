@@ -159,3 +159,62 @@ def test_concurrent_recording_and_integrity_snapshots_remain_consistent():
     assert trail.get_integrity_snapshot() == (True, total_events)
     assert len(trail.get_events()) == total_events
 
+def test_stored_hash_mutation_is_detected():
+    trail = AuditTrail()
+    record_event(trail)
+
+    original_hash = trail._event_hashes[0]
+    trail._event_hashes[0] = "0" * 64
+
+    assert trail.verify_integrity() is False
+
+    trail._event_hashes[0] = original_hash
+    assert trail.verify_integrity() is True
+
+
+def test_reordering_events_and_hashes_is_detected():
+    trail = AuditTrail()
+    record_event(trail, action_id="first")
+    record_event(trail, action_id="second")
+
+    trail._events.reverse()
+    trail._event_hashes.reverse()
+
+    assert trail.verify_integrity() is False
+
+
+def test_deleting_event_and_matching_hash_from_middle_is_detected():
+    trail = AuditTrail()
+    for index in range(3):
+        record_event(trail, action_id=f"action-{index}")
+
+    del trail._events[1]
+    del trail._event_hashes[1]
+
+    assert trail.verify_integrity() is False
+
+
+def test_appending_event_without_hash_is_detected():
+    trail = AuditTrail()
+    record_event(trail)
+
+    original = trail._events[0]
+    forged = original.__class__(
+        **{
+            **original.__dict__,
+            "action_id": "forged-action",
+        }
+    )
+    trail._events.append(forged)
+
+    assert trail.verify_integrity() is False
+
+
+def test_appending_hash_without_event_is_detected():
+    trail = AuditTrail()
+    record_event(trail)
+
+    trail._event_hashes.append("f" * 64)
+
+    assert trail.verify_integrity() is False
+
