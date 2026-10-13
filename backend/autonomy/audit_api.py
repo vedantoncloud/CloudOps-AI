@@ -1,7 +1,8 @@
 import json
+from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Query, Response
+from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel
 
 from autonomy.audit import AuditEvent, AuditTrail
@@ -65,8 +66,15 @@ def _filter_audit_events(
     resource_type: str | None = None,
     event: str | None = None,
     action_type: str | None = None,
+    start_time: datetime | None = None,
+    end_time: datetime | None = None,
 ) -> list[AuditEvent]:
-    """Apply the same audit filters for API listing and export."""
+    """Apply shared filters; naive datetimes are interpreted as UTC."""
+    start = _normalize_datetime(start_time) if start_time is not None else None
+    end = _normalize_datetime(end_time) if end_time is not None else None
+    if start is not None and end is not None and start > end:
+        raise HTTPException(status_code=422, detail="start_time must be at or before end_time")
+
     events = audit_trail.get_events(action_id=action_id)
 
     if resource_id is not None:
@@ -81,7 +89,21 @@ def _filter_audit_events(
     if action_type is not None:
         events = [item for item in events if item.action_type == action_type]
 
+    if start is not None or end is not None:
+        def within_range(item: AuditEvent) -> bool:
+            timestamp = _normalize_datetime(datetime.fromisoformat(item.timestamp))
+            return (start is None or timestamp >= start) and (end is None or timestamp <= end)
+
+        events = [item for item in events if within_range(item)]
+
     return events
+
+
+def _normalize_datetime(value: datetime) -> datetime:
+    """Normalize aware times to UTC and treat naive times as UTC."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 @router.get(
@@ -94,6 +116,8 @@ def list_audit_events(
     resource_type: str | None = Query(default=None),
     event: str | None = Query(default=None),
     action_type: str | None = Query(default=None),
+    start_time: datetime | None = Query(default=None),
+    end_time: datetime | None = Query(default=None),
     limit: int | None = Query(default=None, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
 ) -> list[AuditEventResponse]:
@@ -103,6 +127,8 @@ def list_audit_events(
         resource_type=resource_type,
         event=event,
         action_type=action_type,
+        start_time=start_time,
+        end_time=end_time,
     )
 
     events = events[offset:]
@@ -122,6 +148,8 @@ def export_audit_events(
     resource_type: str | None = Query(default=None),
     event: str | None = Query(default=None),
     action_type: str | None = Query(default=None),
+    start_time: datetime | None = Query(default=None),
+    end_time: datetime | None = Query(default=None),
     limit: int | None = Query(default=None, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
 ) -> Response:
@@ -132,6 +160,8 @@ def export_audit_events(
         resource_type=resource_type,
         event=event,
         action_type=action_type,
+        start_time=start_time,
+        end_time=end_time,
     )
 
     events = events[offset:]
