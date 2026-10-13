@@ -81,3 +81,40 @@ def test_audit_export_returns_empty_body_when_no_events_match():
 
     assert response.status_code == 200
     assert response.text == ""
+
+
+
+def test_audit_listing_and_export_apply_identical_filters():
+    seed_events()
+    client = make_client()
+    filters = {
+        "resource_type": "ec2",
+        "action_type": "control_loop",
+    }
+
+    listed = client.get("/autonomy/audit/events", params=filters)
+    exported = client.get("/autonomy/audit/events/export", params=filters)
+
+    assert listed.status_code == 200
+    assert exported.status_code == 200
+
+    listed_events = listed.json()
+    exported_events = [
+        json.loads(line) for line in exported.text.splitlines()
+    ]
+
+    assert listed_events == exported_events
+
+
+def test_audit_listing_and_export_match_for_empty_results():
+    seed_events()
+    client = make_client()
+    filters = {"resource_type": "rds"}
+
+    listed = client.get("/autonomy/audit/events", params=filters)
+    exported = client.get("/autonomy/audit/events/export", params=filters)
+
+    assert listed.status_code == 200
+    assert listed.json() == []
+    assert exported.status_code == 200
+    assert exported.text == ""

@@ -58,19 +58,15 @@ def verify_audit_integrity() -> AuditIntegrityResponse:
     )
 
 
-@router.get(
-    "/events",
-    response_model=list[AuditEventResponse],
-)
-def list_audit_events(
-    action_id: str | None = Query(default=None),
-    resource_id: str | None = Query(default=None),
-    resource_type: str | None = Query(default=None),
-    event: str | None = Query(default=None),
-    action_type: str | None = Query(default=None),
-    limit: int | None = Query(default=None, ge=1, le=1000),
-    offset: int = Query(default=0, ge=0),
-) -> list[AuditEventResponse]:
+def _filter_audit_events(
+    *,
+    action_id: str | None = None,
+    resource_id: str | None = None,
+    resource_type: str | None = None,
+    event: str | None = None,
+    action_type: str | None = None,
+) -> list[AuditEvent]:
+    """Apply the same audit filters for API listing and export."""
     events = audit_trail.get_events(action_id=action_id)
 
     if resource_id is not None:
@@ -84,6 +80,30 @@ def list_audit_events(
 
     if action_type is not None:
         events = [item for item in events if item.action_type == action_type]
+
+    return events
+
+
+@router.get(
+    "/events",
+    response_model=list[AuditEventResponse],
+)
+def list_audit_events(
+    action_id: str | None = Query(default=None),
+    resource_id: str | None = Query(default=None),
+    resource_type: str | None = Query(default=None),
+    event: str | None = Query(default=None),
+    action_type: str | None = Query(default=None),
+    limit: int | None = Query(default=None, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+) -> list[AuditEventResponse]:
+    events = _filter_audit_events(
+        action_id=action_id,
+        resource_id=resource_id,
+        resource_type=resource_type,
+        event=event,
+        action_type=action_type,
+    )
 
     events = events[offset:]
     if limit is not None:
@@ -104,19 +124,13 @@ def export_audit_events(
     action_type: str | None = Query(default=None),
 ) -> Response:
     """Export matching audit events as newline-delimited JSON."""
-    events = audit_trail.get_events(action_id=action_id)
-
-    if resource_id is not None:
-        events = [item for item in events if item.resource_id == resource_id]
-
-    if resource_type is not None:
-        events = [item for item in events if item.resource_type == resource_type]
-
-    if event is not None:
-        events = [item for item in events if item.event == event]
-
-    if action_type is not None:
-        events = [item for item in events if item.action_type == action_type]
+    events = _filter_audit_events(
+        action_id=action_id,
+        resource_id=resource_id,
+        resource_type=resource_type,
+        event=event,
+        action_type=action_type,
+    )
 
     lines = [
         json.dumps(_serialize(item).dict(), sort_keys=True)
