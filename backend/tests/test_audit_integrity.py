@@ -98,3 +98,64 @@ def test_integrity_snapshot_reports_tampering_and_count():
 def test_empty_integrity_snapshot():
     assert AuditTrail().get_integrity_snapshot() == (True, 0)
 
+def test_concurrent_recording_preserves_audit_integrity():
+    from concurrent.futures import ThreadPoolExecutor
+
+    trail = AuditTrail()
+    total_events = 200
+
+    def record(index):
+        return trail.record(
+            action_id=f"concurrent-{index}",
+            action_type="scale",
+            resource_type="instance",
+            resource_id=f"i-{index}",
+            old_status="running",
+            new_status="stopped",
+            event="action_completed",
+            details={"sequence": index},
+        )
+
+    with ThreadPoolExecutor(max_workers=12) as executor:
+        results = list(executor.map(record, range(total_events)))
+
+    assert len(results) == total_events
+    assert len(trail.get_events()) == total_events
+    assert trail.get_integrity_snapshot() == (True, total_events)
+
+
+def test_concurrent_recording_and_integrity_snapshots_remain_consistent():
+    from concurrent.futures import ThreadPoolExecutor
+
+    trail = AuditTrail()
+    total_events = 150
+
+    def record(index):
+        return trail.record(
+            action_id=f"parallel-{index}",
+            action_type="scale",
+            resource_type="instance",
+            resource_id=f"i-{index}",
+            old_status="running",
+            new_status="stopped",
+            event="action_completed",
+            details={"sequence": index},
+        )
+
+    def snapshot(_):
+        return trail.get_integrity_snapshot()
+
+    with ThreadPoolExecutor(max_workers=12) as executor:
+        recording = [executor.submit(record, i) for i in range(total_events)]
+        checking = [executor.submit(snapshot, i) for i in range(40)]
+
+        for future in recording:
+            future.result()
+
+        snapshots = [future.result() for future in checking]
+
+    assert all(valid is True for valid, _ in snapshots)
+    assert all(0 <= count <= total_events for _, count in snapshots)
+    assert trail.get_integrity_snapshot() == (True, total_events)
+    assert len(trail.get_events()) == total_events
+
