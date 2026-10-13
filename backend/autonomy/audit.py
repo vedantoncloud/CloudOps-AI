@@ -25,6 +25,13 @@ class AuditEvent:
     actor_id: str | None = None
 
 
+@dataclass(frozen=True)
+class AuditIntegrityResult:
+    valid: bool
+    event_count: int
+    first_invalid_index: int | None
+
+
 class AuditTrail:
     """In-memory audit trail with tamper-evident hash-chain verification."""
 
@@ -105,35 +112,46 @@ class AuditTrail:
 
         return [item for item in events if item.action_id == action_id]
 
-    def _verify_integrity_unlocked(self) -> bool:
-        if len(self._events) != len(self._event_hashes):
-            return False
+    def _verify_integrity_unlocked(self) -> AuditIntegrityResult:
+        event_count = len(self._events)
+        if event_count != len(self._event_hashes):
+            return AuditIntegrityResult(
+                valid=False,
+                event_count=event_count,
+                first_invalid_index=min(event_count, len(self._event_hashes)),
+            )
 
         previous_hash = ""
-        for event, stored_hash in zip(self._events, self._event_hashes):
+        for index, (event, stored_hash) in enumerate(zip(self._events, self._event_hashes)):
             try:
                 expected_hash = self._calculate_hash(previous_hash, event)
-            except (TypeError, ValueError, OverflowError):
-                return False
+            except Exception:
+                return AuditIntegrityResult(False, event_count, index)
 
             if not isinstance(stored_hash, str) or not hmac.compare_digest(
                 expected_hash, stored_hash
             ):
-                return False
+                return AuditIntegrityResult(False, event_count, index)
 
             previous_hash = stored_hash
 
-        return True
+        return AuditIntegrityResult(True, event_count, None)
 
     def verify_integrity(self) -> bool:
         """Return False if an event, its details, or chain metadata was altered."""
         with self._lock:
-            return self._verify_integrity_unlocked()
+            return self._verify_integrity_unlocked().valid
 
     def get_integrity_snapshot(self) -> tuple[bool, int]:
         """Return integrity status and event count from one atomic snapshot."""
         with self._lock:
-            return self._verify_integrity_unlocked(), len(self._events)
+            result = self._verify_integrity_unlocked()
+            return result.valid, result.event_count
+
+    def get_integrity_diagnostics(self) -> AuditIntegrityResult:
+        """Return safe integrity diagnostics from one atomic snapshot."""
+        with self._lock:
+            return self._verify_integrity_unlocked()
 
     def clear(self) -> None:
         with self._lock:

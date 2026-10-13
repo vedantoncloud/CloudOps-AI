@@ -19,6 +19,7 @@ audit_trail = AuditTrail()
 class AuditIntegrityResponse(BaseModel):
     valid: bool
     event_count: int
+    first_invalid_index: int | None
 
 
 class AuditEventResponse(BaseModel):
@@ -54,10 +55,11 @@ def _serialize(event: AuditEvent) -> AuditEventResponse:
     response_model=AuditIntegrityResponse,
 )
 def verify_audit_integrity() -> AuditIntegrityResponse:
-    valid, event_count = audit_trail.get_integrity_snapshot()
+    result = audit_trail.get_integrity_diagnostics()
     return AuditIntegrityResponse(
-        valid=valid,
-        event_count=event_count,
+        valid=result.valid,
+        event_count=result.event_count,
+        first_invalid_index=result.first_invalid_index,
     )
 
 

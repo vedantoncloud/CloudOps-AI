@@ -16,7 +16,9 @@ def test_integrity_endpoint_reports_empty_trail_as_valid():
     response = make_client().get("/autonomy/audit/integrity")
 
     assert response.status_code == 200
-    assert response.json() == {"valid": True, "event_count": 0}
+    assert response.json() == {
+        "valid": True, "event_count": 0, "first_invalid_index": None
+    }
 
 
 def test_integrity_endpoint_reports_recorded_event_count():
@@ -35,7 +37,9 @@ def test_integrity_endpoint_reports_recorded_event_count():
     response = make_client().get("/autonomy/audit/integrity")
 
     assert response.status_code == 200
-    assert response.json() == {"valid": True, "event_count": 2}
+    assert response.json() == {
+        "valid": True, "event_count": 2, "first_invalid_index": None
+    }
 
 
 def test_integrity_endpoint_detects_event_tampering():
@@ -55,7 +59,9 @@ def test_integrity_endpoint_detects_event_tampering():
     response = make_client().get("/autonomy/audit/integrity")
 
     assert response.status_code == 200
-    assert response.json() == {"valid": False, "event_count": 1}
+    assert response.json() == {
+        "valid": False, "event_count": 1, "first_invalid_index": 0
+    }
 
 
 def test_integrity_endpoint_does_not_modify_audit_events():
@@ -82,13 +88,17 @@ def test_integrity_endpoint_uses_atomic_snapshot(monkeypatch):
 
     def snapshot():
         calls.append(True)
-        return True, 7
+        from autonomy.audit import AuditIntegrityResult
 
-    monkeypatch.setattr(audit_trail, "get_integrity_snapshot", snapshot)
+        return AuditIntegrityResult(True, 7, None)
+
+    monkeypatch.setattr(audit_trail, "get_integrity_diagnostics", snapshot)
 
     response = make_client().get("/autonomy/audit/integrity")
 
     assert response.status_code == 200
-    assert response.json() == {"valid": True, "event_count": 7}
+    assert response.json() == {
+        "valid": True, "event_count": 7, "first_invalid_index": None
+    }
     assert calls == [True]
 

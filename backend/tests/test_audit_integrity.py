@@ -116,6 +116,66 @@ def test_integrity_snapshot_reports_tampering_and_count():
 def test_empty_integrity_snapshot():
     assert AuditTrail().get_integrity_snapshot() == (True, 0)
 
+
+def test_integrity_diagnostics_report_valid_empty_and_multiple_event_trails():
+    trail = AuditTrail()
+    assert trail.get_integrity_diagnostics().valid is True
+    assert trail.get_integrity_diagnostics().event_count == 0
+    assert trail.get_integrity_diagnostics().first_invalid_index is None
+
+    record_event(trail)
+    record_event(trail, action_id="action-2")
+    assert trail.get_integrity_diagnostics().valid is True
+    assert trail.get_integrity_diagnostics().event_count == 2
+    assert trail.get_integrity_diagnostics().first_invalid_index is None
+
+
+@pytest.mark.parametrize("tampered_index", [0, 1, 2])
+def test_integrity_diagnostics_identify_first_tampered_event(tampered_index):
+    trail = AuditTrail()
+    for index in range(3):
+        record_event(trail, action_id=f"action-{index}")
+    event = trail._events[tampered_index]
+    trail._events[tampered_index] = event.__class__(
+        **{**event.__dict__, "event": "tampered"}
+    )
+
+    result = trail.get_integrity_diagnostics()
+    assert (result.valid, result.event_count, result.first_invalid_index) == (
+        False, 3, tampered_index
+    )
+
+
+def test_integrity_diagnostics_identify_stored_hash_tampering():
+    trail = AuditTrail()
+    record_event(trail)
+    record_event(trail, action_id="action-2")
+    trail._event_hashes[1] = "0" * 64
+
+    assert trail.get_integrity_diagnostics().first_invalid_index == 1
+
+
+def test_integrity_diagnostics_identify_missing_and_unexpected_hash_indices():
+    missing = AuditTrail()
+    record_event(missing)
+    record_event(missing, action_id="action-2")
+    missing._event_hashes.pop()
+    assert missing.get_integrity_diagnostics().first_invalid_index == 1
+
+    unexpected = AuditTrail()
+    record_event(unexpected)
+    unexpected._event_hashes.append("0" * 64)
+    assert unexpected.get_integrity_diagnostics().first_invalid_index == 1
+
+
+def test_integrity_diagnostics_identify_unserializable_event_content():
+    trail = AuditTrail()
+    record_event(trail)
+    trail._events[0].details["bad"] = object()
+    result = trail.get_integrity_diagnostics()
+    assert result.valid is False
+    assert result.first_invalid_index == 0
+
 def test_concurrent_recording_preserves_audit_integrity():
     from concurrent.futures import ThreadPoolExecutor
 
