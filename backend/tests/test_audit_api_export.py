@@ -23,6 +23,7 @@ def seed_events():
         new_status="review",
         event="governance_review",
         details={"sequence": 1},
+        actor_id="operator-1",
     )
     audit_trail.record(
         action_id="action-b",
@@ -33,6 +34,7 @@ def seed_events():
         new_status="approved",
         event="gitops_approved",
         details={"sequence": 2},
+        actor_id="operator-2",
     )
 
 
@@ -174,3 +176,16 @@ def test_audit_export_preserves_unpaginated_legacy_response():
     assert response.status_code == 200
     events = [json.loads(line) for line in response.text.splitlines()]
     assert [item["action_id"] for item in events] == ["action-a", "action-b"]
+
+
+def test_actor_filter_matches_listing_and_jsonl_export():
+    seed_events()
+    client = make_client()
+    filters = {"actor_id": "operator-1"}
+
+    listed = client.get("/autonomy/audit/events", params=filters)
+    exported = client.get("/autonomy/audit/events/export", params=filters)
+
+    assert listed.status_code == exported.status_code == 200
+    assert [item["action_id"] for item in listed.json()] == ["action-a"]
+    assert listed.json() == [json.loads(line) for line in exported.text.splitlines()]

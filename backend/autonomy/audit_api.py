@@ -31,6 +31,7 @@ class AuditEventResponse(BaseModel):
     event: str
     timestamp: str
     details: dict[str, Any]
+    actor_id: str | None = None
 
 
 def _serialize(event: AuditEvent) -> AuditEventResponse:
@@ -44,6 +45,7 @@ def _serialize(event: AuditEvent) -> AuditEventResponse:
         event=event.event,
         timestamp=event.timestamp,
         details=dict(event.details),
+        actor_id=event.actor_id,
     )
 
 
@@ -66,6 +68,7 @@ def _filter_audit_events(
     resource_type: str | None = None,
     event: str | None = None,
     action_type: str | None = None,
+    actor_id: str | None = None,
     start_time: datetime | None = None,
     end_time: datetime | None = None,
 ) -> list[AuditEvent]:
@@ -88,6 +91,9 @@ def _filter_audit_events(
 
     if action_type is not None:
         events = [item for item in events if item.action_type == action_type]
+
+    if actor_id is not None:
+        events = [item for item in events if item.actor_id == actor_id]
 
     if start is not None or end is not None:
         def within_range(item: AuditEvent) -> bool:
@@ -116,6 +122,7 @@ def list_audit_events(
     resource_type: str | None = Query(default=None),
     event: str | None = Query(default=None),
     action_type: str | None = Query(default=None),
+    actor_id: str | None = Query(default=None),
     start_time: datetime | None = Query(default=None),
     end_time: datetime | None = Query(default=None),
     limit: int | None = Query(default=None, ge=1, le=1000),
@@ -127,6 +134,7 @@ def list_audit_events(
         resource_type=resource_type,
         event=event,
         action_type=action_type,
+        actor_id=actor_id,
         start_time=start_time,
         end_time=end_time,
     )
@@ -148,6 +156,7 @@ def export_audit_events(
     resource_type: str | None = Query(default=None),
     event: str | None = Query(default=None),
     action_type: str | None = Query(default=None),
+    actor_id: str | None = Query(default=None),
     start_time: datetime | None = Query(default=None),
     end_time: datetime | None = Query(default=None),
     limit: int | None = Query(default=None, ge=1, le=1000),
@@ -160,6 +169,7 @@ def export_audit_events(
         resource_type=resource_type,
         event=event,
         action_type=action_type,
+        actor_id=actor_id,
         start_time=start_time,
         end_time=end_time,
     )

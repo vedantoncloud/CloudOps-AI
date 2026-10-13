@@ -22,6 +22,7 @@ class AuditEvent:
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
     details: dict[str, Any] = field(default_factory=dict)
+    actor_id: str | None = None
 
 
 class AuditTrail:
@@ -60,6 +61,7 @@ class AuditTrail:
         new_status: str,
         event: str,
         details: dict[str, Any] | None = None,
+        actor_id: str | None = None,
     ) -> AuditEvent:
         if not action_id or not action_id.strip():
             raise ValueError("action_id cannot be empty")
@@ -71,6 +73,8 @@ class AuditTrail:
             raise ValueError("resource_id cannot be empty")
         if not event or not event.strip():
             raise ValueError("event cannot be empty")
+        if actor_id is not None and not actor_id.strip():
+            raise ValueError("actor_id cannot be empty")
 
         audit_event = AuditEvent(
             action_id=action_id,
@@ -81,6 +85,7 @@ class AuditTrail:
             new_status=new_status,
             event=event,
             details=details or {},
+            actor_id=actor_id,
         )
 
         with self._lock:

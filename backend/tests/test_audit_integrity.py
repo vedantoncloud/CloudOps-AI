@@ -3,7 +3,7 @@ import pytest
 from autonomy.audit import AuditTrail
 
 
-def record_event(trail, action_id="action-1", details=None):
+def record_event(trail, action_id="action-1", details=None, actor_id=None):
     return trail.record(
         action_id=action_id,
         action_type="scale",
@@ -13,6 +13,7 @@ def record_event(trail, action_id="action-1", details=None):
         new_status="stopped",
         event="action_completed",
         details=details or {"provider": "aws"},
+        actor_id=actor_id,
     )
 
 
@@ -25,6 +26,23 @@ def test_recorded_events_have_valid_integrity():
     record_event(trail)
     record_event(trail, action_id="action-2")
     assert trail.verify_integrity() is True
+
+
+def test_actor_attribution_is_recorded_and_covered_by_integrity_hash():
+    trail = AuditTrail()
+    event = record_event(trail, actor_id="user-17")
+    assert event.actor_id == "user-17"
+    assert trail.verify_integrity() is True
+
+    trail._events[0] = event.__class__(**{**event.__dict__, "actor_id": "user-18"})
+    assert trail.verify_integrity() is False
+
+
+def test_actor_id_defaults_to_none_and_blank_values_are_rejected():
+    trail = AuditTrail()
+    assert record_event(trail).actor_id is None
+    with pytest.raises(ValueError, match="actor_id"):
+        record_event(trail, actor_id=" \t ")
 
 
 def test_event_field_tampering_is_detected():

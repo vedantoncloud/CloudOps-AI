@@ -22,6 +22,7 @@ def seed_events():
         new_status="review",
         event="governance_review",
         details={"sequence": 1},
+        actor_id="operator-1",
     )
     audit_trail.record(
         action_id="action-b",
@@ -32,6 +33,7 @@ def seed_events():
         new_status="blocked",
         event="control_loop_blocked",
         details={"sequence": 2},
+        actor_id="operator-2",
     )
     audit_trail.record(
         action_id="action-c",
@@ -42,6 +44,7 @@ def seed_events():
         new_status="approved",
         event="gitops_approved",
         details={"sequence": 3},
+        actor_id="operator-1",
     )
 
 
@@ -176,4 +179,22 @@ def test_audit_api_combines_resource_type_with_existing_filters():
     data = response.json()
     assert len(data) == 1
     assert data[0]["action_id"] == "action-b"
+
+
+def test_audit_api_filters_by_actor_and_combines_with_existing_filters():
+    seed_events()
+    response = make_client().get(
+        "/autonomy/audit/events",
+        params={
+            "actor_id": "operator-1",
+            "resource_type": "ec2",
+            "start_time": "2024-01-01T00:00:00Z",
+            "end_time": "2030-01-01T00:00:00Z",
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert [item["action_id"] for item in data] == ["action-a"]
+    assert data[0]["actor_id"] == "operator-1"
 
