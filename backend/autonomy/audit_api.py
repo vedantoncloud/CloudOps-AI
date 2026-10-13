@@ -64,6 +64,7 @@ def verify_audit_integrity() -> AuditIntegrityResponse:
 def list_audit_events(
     action_id: str | None = Query(default=None),
     resource_id: str | None = Query(default=None),
+    resource_type: str | None = Query(default=None),
     event: str | None = Query(default=None),
     action_type: str | None = Query(default=None),
     limit: int | None = Query(default=None, ge=1, le=1000),
@@ -73,6 +74,9 @@ def list_audit_events(
 
     if resource_id is not None:
         events = [item for item in events if item.resource_id == resource_id]
+
+    if resource_type is not None:
+        events = [item for item in events if item.resource_type == resource_type]
 
     if event is not None:
         events = [item for item in events if item.event == event]

@@ -1,4 +1,4 @@
-﻿from fastapi import FastAPI
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from autonomy.audit_api import audit_trail, router
@@ -146,3 +146,34 @@ def test_audit_api_rejects_invalid_pagination():
         "/autonomy/audit/events",
         params={"limit": 1001},
     ).status_code == 422
+
+def test_audit_api_filters_by_resource_type():
+    seed_events()
+    response = make_client().get(
+        "/autonomy/audit/events",
+        params={"resource_type": "s3"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["resource_id"] == "bucket-001"
+    assert data[0]["resource_type"] == "s3"
+
+
+def test_audit_api_combines_resource_type_with_existing_filters():
+    seed_events()
+    response = make_client().get(
+        "/autonomy/audit/events",
+        params={
+            "resource_type": "ec2",
+            "action_type": "control_loop",
+            "event": "control_loop_blocked",
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["action_id"] == "action-b"
+
