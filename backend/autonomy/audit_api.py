@@ -1,6 +1,7 @@
+import json
 from typing import Any
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Response
 from pydantic import BaseModel
 
 from autonomy.audit import AuditEvent, AuditTrail
@@ -89,3 +90,43 @@ def list_audit_events(
         events = events[:limit]
 
     return [_serialize(item) for item in events]
+
+
+@router.get(
+    "/events/export",
+    response_class=Response,
+)
+def export_audit_events(
+    action_id: str | None = Query(default=None),
+    resource_id: str | None = Query(default=None),
+    resource_type: str | None = Query(default=None),
+    event: str | None = Query(default=None),
+    action_type: str | None = Query(default=None),
+) -> Response:
+    """Export matching audit events as newline-delimited JSON."""
+    events = audit_trail.get_events(action_id=action_id)
+
+    if resource_id is not None:
+        events = [item for item in events if item.resource_id == resource_id]
+
+    if resource_type is not None:
+        events = [item for item in events if item.resource_type == resource_type]
+
+    if event is not None:
+        events = [item for item in events if item.event == event]
+
+    if action_type is not None:
+        events = [item for item in events if item.action_type == action_type]
+
+    lines = [
+        json.dumps(_serialize(item).dict(), sort_keys=True)
+        for item in events
+    ]
+
+    return Response(
+        content="\n".join(lines),
+        media_type="application/x-ndjson",
+        headers={
+            "Content-Disposition": 'attachment; filename="audit-events.jsonl"'
+        },
+    )
