@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from threading import Lock
@@ -91,7 +92,7 @@ class AuditTrail:
             old_status=old_status,
             new_status=new_status,
             event=event,
-            details=details or {},
+            details=deepcopy(details) if details is not None else {},
             actor_id=actor_id,
         )
 
@@ -101,11 +102,11 @@ class AuditTrail:
             self._events.append(audit_event)
             self._event_hashes.append(event_hash)
 
-        return audit_event
+        return deepcopy(audit_event)
 
     def get_events(self, action_id: str | None = None) -> list[AuditEvent]:
         with self._lock:
-            events = list(self._events)
+            events = deepcopy(self._events)
 
         if action_id is None:
             return events

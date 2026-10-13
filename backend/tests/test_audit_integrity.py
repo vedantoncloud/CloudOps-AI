@@ -57,11 +57,44 @@ def test_event_field_tampering_is_detected():
     assert trail.verify_integrity() is False
 
 
-def test_details_mutation_is_detected():
+def test_details_mutation_on_record_result_does_not_change_stored_event():
     trail = AuditTrail()
     event = record_event(trail, details={"provider": "aws"})
     event.details["provider"] = "unknown"
-    assert trail.verify_integrity() is False
+    assert trail.get_events()[0].details == {"provider": "aws"}
+    assert trail.verify_integrity() is True
+
+
+def test_input_and_returned_nested_details_are_isolated():
+    trail = AuditTrail()
+    nested = {"labels": ["original"], "metadata": {"region": "west"}}
+    event = record_event(trail, details=nested)
+
+    nested["metadata"]["region"] = "east"
+    nested["labels"].append("input mutation")
+    event.details["metadata"]["region"] = "north"
+    event.details["labels"].append("return mutation")
+
+    stored = trail.get_events()[0]
+    assert stored.details == {
+        "labels": ["original"],
+        "metadata": {"region": "west"},
+    }
+    assert trail.verify_integrity() is True
+
+
+def test_get_events_calls_return_independent_nested_snapshots():
+    trail = AuditTrail()
+    record_event(trail, details={"nested": {"items": [1, {"value": "original"}]}})
+
+    first = trail.get_events()
+    second = trail.get_events()
+    first[0].details["nested"]["items"][1]["value"] = "changed"
+    first[0].details["nested"]["items"].append(2)
+
+    assert second[0].details == {"nested": {"items": [1, {"value": "original"}]}}
+    assert trail.get_events()[0].details == second[0].details
+    assert trail.verify_integrity() is True
 
 
 def test_tampering_with_earlier_event_breaks_following_chain():
@@ -110,7 +143,7 @@ def test_integrity_snapshot_reports_tampering_and_count():
     event = record_event(trail)
     event.details["tampered"] = True
 
-    assert trail.get_integrity_snapshot() == (False, 1)
+    assert trail.get_integrity_snapshot() == (True, 1)
 
 
 def test_empty_integrity_snapshot():

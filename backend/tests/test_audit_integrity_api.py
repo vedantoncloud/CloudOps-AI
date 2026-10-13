@@ -42,7 +42,7 @@ def test_integrity_endpoint_reports_recorded_event_count():
     }
 
 
-def test_integrity_endpoint_detects_event_tampering():
+def test_integrity_endpoint_ignores_mutation_to_record_snapshot():
     audit_trail.clear()
     recorded = audit_trail.record(
         action_id="action-1",
@@ -60,7 +60,7 @@ def test_integrity_endpoint_detects_event_tampering():
 
     assert response.status_code == 200
     assert response.json() == {
-        "valid": False, "event_count": 1, "first_invalid_index": 0
+        "valid": True, "event_count": 1, "first_invalid_index": None
     }
 
 
