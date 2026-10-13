@@ -118,3 +118,59 @@ def test_audit_listing_and_export_match_for_empty_results():
     assert listed.json() == []
     assert exported.status_code == 200
     assert exported.text == ""
+
+
+
+def test_audit_export_supports_limit_and_offset():
+    seed_events()
+    response = make_client().get(
+        "/autonomy/audit/events/export",
+        params={"offset": 1, "limit": 1},
+    )
+
+    assert response.status_code == 200
+    lines = response.text.splitlines()
+    assert len(lines) == 1
+
+    event = json.loads(lines[0])
+    assert event["action_id"] == "action-b"
+
+
+def test_audit_export_supports_offset_without_limit():
+    seed_events()
+    response = make_client().get(
+        "/autonomy/audit/events/export",
+        params={"offset": 1},
+    )
+
+    assert response.status_code == 200
+    events = [json.loads(line) for line in response.text.splitlines()]
+    assert [item["action_id"] for item in events] == ["action-b"]
+
+
+def test_audit_export_rejects_invalid_pagination():
+    client = make_client()
+
+    assert client.get(
+        "/autonomy/audit/events/export",
+        params={"limit": 0},
+    ).status_code == 422
+
+    assert client.get(
+        "/autonomy/audit/events/export",
+        params={"offset": -1},
+    ).status_code == 422
+
+    assert client.get(
+        "/autonomy/audit/events/export",
+        params={"limit": 1001},
+    ).status_code == 422
+
+
+def test_audit_export_preserves_unpaginated_legacy_response():
+    seed_events()
+    response = make_client().get("/autonomy/audit/events/export")
+
+    assert response.status_code == 200
+    events = [json.loads(line) for line in response.text.splitlines()]
+    assert [item["action_id"] for item in events] == ["action-a", "action-b"]

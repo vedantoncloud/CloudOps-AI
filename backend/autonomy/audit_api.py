@@ -122,6 +122,8 @@ def export_audit_events(
     resource_type: str | None = Query(default=None),
     event: str | None = Query(default=None),
     action_type: str | None = Query(default=None),
+    limit: int | None = Query(default=None, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
 ) -> Response:
     """Export matching audit events as newline-delimited JSON."""
     events = _filter_audit_events(
@@ -131,6 +133,10 @@ def export_audit_events(
         event=event,
         action_type=action_type,
     )
+
+    events = events[offset:]
+    if limit is not None:
+        events = events[:limit]
 
     lines = [
         json.dumps(_serialize(item).dict(), sort_keys=True)
