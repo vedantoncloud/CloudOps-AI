@@ -50,10 +50,10 @@ def _serialize(event: AuditEvent) -> AuditEventResponse:
     response_model=AuditIntegrityResponse,
 )
 def verify_audit_integrity() -> AuditIntegrityResponse:
-    events = audit_trail.get_events()
+    valid, event_count = audit_trail.get_integrity_snapshot()
     return AuditIntegrityResponse(
-        valid=audit_trail.verify_integrity(),
-        event_count=len(events),
+        valid=valid,
+        event_count=event_count,
     )
 
 

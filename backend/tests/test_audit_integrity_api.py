@@ -75,3 +75,20 @@ def test_integrity_endpoint_does_not_modify_audit_events():
 
     assert response.status_code == 200
     assert audit_trail.get_events() == before
+
+def test_integrity_endpoint_uses_atomic_snapshot(monkeypatch):
+    audit_trail.clear()
+    calls = []
+
+    def snapshot():
+        calls.append(True)
+        return True, 7
+
+    monkeypatch.setattr(audit_trail, "get_integrity_snapshot", snapshot)
+
+    response = make_client().get("/autonomy/audit/integrity")
+
+    assert response.status_code == 200
+    assert response.json() == {"valid": True, "event_count": 7}
+    assert calls == [True]
+

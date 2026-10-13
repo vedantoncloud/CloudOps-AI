@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import hashlib
 import hmac
@@ -100,27 +100,35 @@ class AuditTrail:
 
         return [item for item in events if item.action_id == action_id]
 
+    def _verify_integrity_unlocked(self) -> bool:
+        if len(self._events) != len(self._event_hashes):
+            return False
+
+        previous_hash = ""
+        for event, stored_hash in zip(self._events, self._event_hashes):
+            try:
+                expected_hash = self._calculate_hash(previous_hash, event)
+            except (TypeError, ValueError, OverflowError):
+                return False
+
+            if not isinstance(stored_hash, str) or not hmac.compare_digest(
+                expected_hash, stored_hash
+            ):
+                return False
+
+            previous_hash = stored_hash
+
+        return True
+
     def verify_integrity(self) -> bool:
         """Return False if an event, its details, or chain metadata was altered."""
         with self._lock:
-            if len(self._events) != len(self._event_hashes):
-                return False
+            return self._verify_integrity_unlocked()
 
-            previous_hash = ""
-            for event, stored_hash in zip(self._events, self._event_hashes):
-                try:
-                    expected_hash = self._calculate_hash(previous_hash, event)
-                except (TypeError, ValueError, OverflowError):
-                    return False
-
-                if not isinstance(stored_hash, str) or not hmac.compare_digest(
-                    expected_hash, stored_hash
-                ):
-                    return False
-
-                previous_hash = stored_hash
-
-            return True
+    def get_integrity_snapshot(self) -> tuple[bool, int]:
+        """Return integrity status and event count from one atomic snapshot."""
+        with self._lock:
+            return self._verify_integrity_unlocked(), len(self._events)
 
     def clear(self) -> None:
         with self._lock:
