@@ -72,18 +72,27 @@ class AuditTrail:
         details: dict[str, Any] | None = None,
         actor_id: str | None = None,
     ) -> AuditEvent:
-        if not action_id or not action_id.strip():
-            raise ValueError("action_id cannot be empty")
-        if not action_type or not action_type.strip():
-            raise ValueError("action_type cannot be empty")
-        if not resource_type or not resource_type.strip():
-            raise ValueError("resource_type cannot be empty")
-        if not resource_id or not resource_id.strip():
-            raise ValueError("resource_id cannot be empty")
-        if not event or not event.strip():
-            raise ValueError("event cannot be empty")
-        if actor_id is not None and not actor_id.strip():
-            raise ValueError("actor_id cannot be empty")
+        string_fields = {
+            "action_id": action_id,
+            "action_type": action_type,
+            "resource_type": resource_type,
+            "resource_id": resource_id,
+            "old_status": old_status,
+            "new_status": new_status,
+            "event": event,
+        }
+        for field_name, value in string_fields.items():
+            if not isinstance(value, str):
+                raise ValueError(f"{field_name} must be a string")
+            if not value.strip():
+                raise ValueError(f"{field_name} cannot be empty")
+        if actor_id is not None:
+            if not isinstance(actor_id, str):
+                raise ValueError("actor_id must be a string")
+            if not actor_id.strip():
+                raise ValueError("actor_id cannot be empty")
+        if details is not None and not isinstance(details, dict):
+            raise ValueError("details must be a dict")
 
         audit_event = AuditEvent(
             action_id=action_id,
