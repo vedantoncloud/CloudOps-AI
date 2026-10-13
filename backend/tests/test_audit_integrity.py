@@ -28,6 +28,17 @@ def test_recorded_events_have_valid_integrity():
     assert trail.verify_integrity() is True
 
 
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_record_rejects_non_finite_json_numbers_without_appending(value):
+    trail = AuditTrail()
+
+    with pytest.raises(ValueError):
+        record_event(trail, details={"measurement": value})
+
+    assert trail.get_events() == []
+    assert trail.get_integrity_snapshot() == (True, 0)
+
+
 def test_actor_attribution_is_recorded_and_covered_by_integrity_hash():
     trail = AuditTrail()
     event = record_event(trail, actor_id="user-17")
