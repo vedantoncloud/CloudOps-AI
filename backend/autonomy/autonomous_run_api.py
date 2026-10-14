@@ -26,6 +26,55 @@ def _create_runner() -> GovernedAutonomousRun:
 runner = _create_runner()
 
 
+@router.get("/runs")
+def list_autonomous_runs(
+    request: Request,
+    limit: int = 50,
+    offset: int = 0,
+) -> dict[str, Any]:
+    """Return the authenticated principal's durable autonomous run history."""
+    if not 1 <= limit <= 200:
+        raise HTTPException(status_code=422, detail="limit must be between 1 and 200")
+    if offset < 0:
+        raise HTTPException(status_code=422, detail="offset must be non-negative")
+
+    principal = getattr(request.state, "principal", None)
+    actor_id = getattr(principal, "subject", None)
+    if not actor_id:
+        raise HTTPException(status_code=401, detail="Authenticated principal required")
+
+    grouped: dict[str, list[Any]] = {}
+    for event in audit_trail.get_events():
+        if event.actor_id != actor_id or not event.event.startswith("autonomous_"):
+            continue
+        grouped.setdefault(event.action_id, []).append(event)
+
+    runs = []
+    for action_id, events in grouped.items():
+        first, latest = events[0], events[-1]
+        outcome = {
+            "autonomous_lifecycle_completed": "completed",
+            "autonomous_lifecycle_waiting": "awaiting_approval",
+            "autonomous_lifecycle_blocked": "blocked",
+        }.get(latest.event, "in_progress")
+        runs.append({
+            "action_id": action_id,
+            "action_type": first.action_type,
+            "resource_type": first.resource_type,
+            "resource_id": first.resource_id,
+            "status": latest.new_status,
+            "outcome": outcome,
+            "started_at": first.timestamp,
+            "updated_at": latest.timestamp,
+            "actor_id": actor_id,
+            "dry_run": first.details.get("dry_run"),
+        })
+
+    runs.sort(key=lambda run: (run["updated_at"], run["action_id"]), reverse=True)
+    total = len(runs)
+    return {"runs": runs[offset:offset + limit], "total": total, "limit": limit, "offset": offset}
+
+
 class AutonomousRunRequest(BaseModel):
     provider: str = Field(default="aws", min_length=1)
     action_id: str = Field(min_length=1)

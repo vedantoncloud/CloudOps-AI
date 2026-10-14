@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from auth import AccessControlMiddleware
+from autonomy.audit import AuditTrail
 import autonomy.autonomous_run_api as api
 from autonomy.persistent_audit_trail import PersistentAuditTrail
 
@@ -134,6 +135,49 @@ def test_default_run_lifecycle_uses_durable_shared_audit_trail(tmp_path, monkeyp
     assert events[0].event == "autonomous_lifecycle_started"
     assert events[0].actor_id == "operator-7"
     assert reopened.verify_integrity()
+
+
+def test_run_history_groups_events_and_only_returns_current_actors_runs(monkeypatch):
+    trail = AuditTrail()
+    monkeypatch.setattr(api, "audit_trail", trail)
+    for action_id, actor, event, status in (
+        ("owned-older", "local-development", "autonomous_lifecycle_started", "pending_approval"),
+        ("owned", "local-development", "autonomous_lifecycle_started", "pending_approval"),
+        ("owned", "local-development", "autonomous_lifecycle_completed", "completed"),
+        ("foreign", "another-operator", "autonomous_lifecycle_completed", "completed"),
+    ):
+        trail.record(
+            action_id=action_id,
+            action_type="review_instance_state",
+            resource_type="ec2_instance",
+            resource_id="i-123",
+            old_status="pending_approval",
+            new_status=status,
+            event=event,
+            details={"dry_run": True},
+            actor_id=actor,
+        )
+
+    client = make_client(FakeRunner("completed"))
+    response = client.get("/autonomy/runs?limit=1")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 2
+    assert len(data["runs"]) == 1
+    assert data["runs"][0]["action_id"] == "owned"
+    assert data["runs"][0]["outcome"] == "completed"
+    assert data["runs"][0]["status"] == "completed"
+    assert data["runs"][0]["dry_run"] is True
+    assert client.get("/autonomy/runs?offset=1").json()["runs"][0]["action_id"] == "owned-older"
+
+
+def test_run_history_paginates_and_validates_bounds(monkeypatch):
+    monkeypatch.setattr(api, "audit_trail", AuditTrail())
+    client = make_client(FakeRunner("completed"))
+
+    assert client.get("/autonomy/runs?limit=0").status_code == 422
+    assert client.get("/autonomy/runs?offset=-1").status_code == 422
 
 
 def test_deny_stops_before_lifecycle():
