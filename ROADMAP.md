@@ -4,9 +4,9 @@
 
 ## Current state
 
-CloudOps AI is an actively developed FastAPI backend, not yet a production-ready cloud operations product. The repository contains AWS EC2/S3 inventory, health and insight endpoints; planning, policy, approval, simulation, governance and recovery components; provider discovery; and in-memory and SQLite-backed audit capabilities. The latest history adds persistent tamper-evident audit events and persists autonomous run audit events. The test suite is extensive (303 `test_*.py` modules), including API contracts, governance isolation, malformed input, concurrency, and audit integrity cases. Tests were inspected but not run for this audit.
+CloudOps AI is an actively developed FastAPI backend, not yet a production-ready cloud operations product. The repository contains AWS EC2/S3 inventory, health and insight endpoints; planning, policy, approval, simulation, governance and recovery components; provider discovery; and in-memory and SQLite-backed audit capabilities. The latest history adds persistent tamper-evident audit events and persists autonomous run audit events. The test suite is extensive (303 `test_*.py` modules), including API contracts, governance isolation, malformed input, concurrency, and audit integrity cases. Focused access-control and assembled API tests pass; the full suite has not been run for this change.
 
-The README still labels React, PostgreSQL, Docker, GitHub Actions, Terraform, Kubernetes, and AI/LLM integration as planned stack items. No corresponding frontend, deployment/CI/IaC manifests, or LLM integration were found in the repository. `ActionExecutor` explicitly supports dry-run only and rejects real infrastructure execution. The current durable audit implementation is SQLite, so persistence across process restarts is implemented, but it is not a shared production database service.
+The README still labels React, PostgreSQL, Docker, GitHub Actions, Terraform, Kubernetes, and AI/LLM integration as planned stack items. No corresponding frontend, deployment/CI/IaC manifests, or LLM integration were found in the repository. `ActionExecutor` explicitly supports dry-run only and rejects real infrastructure execution. The current durable audit implementation is SQLite, so persistence across process restarts is implemented, but it is not a shared production database service. A first bearer-token boundary now supports configured roles and tenant claims at the assembled API; resource-level tenant enforcement and authenticated-principal audit attribution are still outstanding.
 
 ## Completed capabilities
 
@@ -19,7 +19,7 @@ The README still labels React, PostgreSQL, Docker, GitHub Actions, Terraform, Ku
 
 ## Prioritized remaining work
 
-1. **Establish API access control and tenant boundaries (P0).** Define the deployment trust model and implement authentication, authorization for read/approval/administrative operations, and tenant or account scoping where the service is multi-user. Ensure audit records identify the authenticated principal. **Done when:** protected endpoints reject unauthenticated or unauthorized requests, cross-tenant access is covered by tests, and the documented local-development mode is explicit.
+1. **Establish API access control and tenant boundaries (P0).** In progress: the assembled API now supports bearer tokens configured by `CLOUDOPS_API_TOKENS`, reader/operator/admin method-based authorization, request principal and tenant context, and mismatched `X-Cloud-Tenant` rejection. `README.md` documents the local development bypass and token mode. Remaining: apply tenant scope to actual AWS/resource data, distinguish approval and administrative operations by route, use an external identity provider for credential lifecycle, and include the authenticated principal in audit records. **Done when:** protected endpoints reject unauthenticated or unauthorized requests, cross-tenant data access is covered by tests, and audit records identify the authenticated principal.
 
 2. **Define a production persistence architecture (P0).** Move operational state and audit/idempotency records from process-local or SQLite-only assumptions to a supported shared database, with schema migrations, transaction/locking semantics, backup/restore, retention, and upgrade procedures. The current SQLite audit stores are durable local files, not evidence of PostgreSQL support. **Done when:** clean install and upgrade migrations work against the chosen database, restart/concurrency behavior is verified, and restore/retention procedures are documented.
 
@@ -45,7 +45,7 @@ The README still labels React, PostgreSQL, Docker, GitHub Actions, Terraform, Ku
 - Current audit persistence uses local SQLite files; the repository contains untracked SQLite files in this checkout, which were not inspected or changed as part of this roadmap-only audit.
 - Real AWS mutations are intentionally disabled. Insight and planning coverage must not be presented as completed autonomous remediation.
 - The health endpoint reports a static application status and does not establish that AWS or persistence dependencies are ready.
-- No authentication/authorization, CI workflow, container/deployment configuration, infrastructure-as-code, or frontend was found in the inspected repository.
+- No CI workflow, container/deployment configuration, infrastructure-as-code, or frontend was found in the inspected repository. API authentication now has a configurable initial bearer-token boundary; resource-level tenant isolation, approval/admin route authorization, and principal-linked audit records are still missing.
 - Requirements are pinned, but no automated dependency update/security workflow or documented supported Python runtime was found.
 - Cost insights explicitly describe themselves as qualitative; actual billing/pricing integration remains outside current behavior.
 
