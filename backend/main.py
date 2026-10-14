@@ -96,6 +96,24 @@ def _tenant_ec2_instances(request: Request, state: str | None, tag: str | None):
     return result
 
 
+def _require_tenant_ec2_instance(request: Request, instance_id: str) -> None:
+    """Hide EC2 instances that are not explicitly owned by this tenant."""
+    if not getattr(request.state, "tenant_scoped", False):
+        return
+    inventory = aws_service.get_ec2_instances()
+    if inventory.get("status") != "healthy":
+        raise HTTPException(status_code=503, detail="EC2 inventory is unavailable")
+    tenant_id = request.state.tenant_id
+    owned = any(
+        item.get("instance_id") == instance_id
+        and _resource_tenant({"tags": item.get("tags", {})}) == tenant_id
+        for item in inventory.get("instances", [])
+    )
+    if not owned:
+        # Use the same response for absent and foreign-owned resources.
+        raise HTTPException(status_code=404, detail="EC2 instance not found")
+
+
 @app.get("/cloud/aws/ec2/instances")
 def aws_ec2_instances(request: Request, state: str = None, tag: str = None):
     valid_states = {
@@ -305,13 +323,14 @@ def aws_s3_bucket_optimization(
 
 
 @app.get("/cloud/aws/ec2/instances/{instance_id}/insights")
-def aws_ec2_insights(instance_id: str):
+def aws_ec2_insights(instance_id: str, request: Request):
     if not re.fullmatch(r"i-[0-9a-fA-F]{8,17}", instance_id):
         raise HTTPException(
             status_code=400,
             detail="Invalid EC2 instance ID",
         )
 
+    _require_tenant_ec2_instance(request, instance_id)
     result = aws_service.get_ec2_insights(instance_id)
 
     if result["status"] == "unhealthy":
@@ -376,7 +395,8 @@ def aws_ec2_security_insights():
 
 
 @app.get("/cloud/aws/ec2/instances/{instance_id}/cpu")
-def aws_ec2_cpu(instance_id: str):
+def aws_ec2_cpu(instance_id: str, request: Request):
+    _require_tenant_ec2_instance(request, instance_id)
     result = aws_service.get_ec2_cpu_utilization(instance_id)
 
     if result["status"] == "unhealthy":
@@ -389,7 +409,8 @@ def aws_ec2_cpu(instance_id: str):
 
 
 @app.get("/cloud/aws/ec2/instances/{instance_id}/network")
-def aws_ec2_network_utilization(instance_id: str):
+def aws_ec2_network_utilization(instance_id: str, request: Request):
+    _require_tenant_ec2_instance(request, instance_id)
     result = aws_service.get_ec2_network_utilization(instance_id)
 
     if result["status"] == "unhealthy":
@@ -442,7 +463,8 @@ def aws_s3_bucket_cost_insights(
 
 
 @app.get("/cloud/aws/ec2/instances/{instance_id}/status")
-def aws_ec2_instance_status(instance_id: str):
+def aws_ec2_instance_status(instance_id: str, request: Request):
+    _require_tenant_ec2_instance(request, instance_id)
     result = aws_service.get_ec2_instance_status(instance_id)
 
     if result["status"] == "unhealthy":
@@ -455,13 +477,14 @@ def aws_ec2_instance_status(instance_id: str):
 
 
 @app.get("/cloud/aws/ec2/instances/{instance_id}/metrics")
-def aws_ec2_metrics(instance_id: str):
+def aws_ec2_metrics(instance_id: str, request: Request):
     if not re.fullmatch(r"i-[0-9a-fA-F]{8,17}", instance_id):
         raise HTTPException(
             status_code=400,
             detail="Invalid EC2 instance ID",
         )
 
+    _require_tenant_ec2_instance(request, instance_id)
     result = aws_service.get_ec2_metrics(instance_id)
 
     if result["status"] == "unhealthy":
