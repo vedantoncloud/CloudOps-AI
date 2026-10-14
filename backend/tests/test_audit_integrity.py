@@ -370,3 +370,18 @@ def test_appending_hash_without_event_is_detected():
 
     assert trail.verify_integrity() is False
 
+
+@pytest.mark.parametrize("malformed_event", [None, {"event": "action_completed"}])
+def test_integrity_verification_safely_rejects_malformed_event_records(malformed_event):
+    trail = AuditTrail()
+    record_event(trail)
+    trail._events[0] = malformed_event
+    hashes = list(trail._event_hashes)
+
+    result = trail.get_integrity_diagnostics()
+
+    assert (result.valid, result.event_count, result.first_invalid_index) == (
+        False, 1, 0
+    )
+    assert trail._events == [malformed_event]
+    assert trail._event_hashes == hashes
