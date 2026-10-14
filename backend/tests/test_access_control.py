@@ -8,6 +8,7 @@ from auth import AccessControlMiddleware, Principal, load_token_registry
 TOKENS = {
     "reader-a": Principal("alice", "reader", "account-a"),
     "operator-a": Principal("bob", "operator", "account-a"),
+    "admin-a": Principal("dana", "admin", "account-a"),
     "reader-b": Principal("carol", "reader", "account-b"),
 }
 
@@ -65,6 +66,38 @@ def test_reader_cannot_perform_approval_operation():
     response = build_client().post("/approvals", headers={"Authorization": "Bearer reader-a"})
 
     assert response.status_code == 403
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/autonomy/audit/health",
+        "/autonomy/audit/pending",
+        "/autonomy/audit/reconciliation",
+        "/autonomy/audit/integrity",
+    ],
+)
+def test_operational_audit_diagnostics_require_admin(path):
+    client = build_client()
+
+    assert client.get(path, headers={"Authorization": "Bearer reader-a"}).status_code == 403
+    assert client.get(path, headers={"Authorization": "Bearer operator-a"}).status_code == 403
+
+
+def test_admin_can_access_operational_audit_diagnostics():
+    app = FastAPI()
+    app.add_middleware(AccessControlMiddleware, mode="token", tokens=TOKENS)
+
+    @app.get("/autonomy/audit/health")
+    def audit_health():
+        return {"ok": True}
+
+    response = TestClient(app).get(
+        "/autonomy/audit/health",
+        headers={"Authorization": "Bearer admin-a"},
+    )
+
+    assert response.status_code == 200
 
 
 def test_health_is_public_and_development_mode_sets_explicit_local_principal():

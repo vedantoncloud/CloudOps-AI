@@ -22,6 +22,15 @@ class Principal:
 
 ROLE_LEVEL = {"reader": 1, "operator": 2, "admin": 3}
 PUBLIC_PATHS = {"/", "/health"}
+# These endpoints expose operational details about shared audit storage and
+# reconciliation state, so they require an administrator even though they are
+# read-only. Approval decisions remain operator-level POST operations.
+ADMIN_ONLY_PATHS = {
+    "/autonomy/audit/health",
+    "/autonomy/audit/pending",
+    "/autonomy/audit/reconciliation",
+    "/autonomy/audit/integrity",
+}
 
 
 def load_token_registry(raw: str | None = None) -> dict[str, Principal]:
@@ -73,7 +82,11 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
         if principal is None:
             return JSONResponse(status_code=401, content={"detail": "Bearer token required"}, headers={"WWW-Authenticate": "Bearer"})
 
-        required_role = "reader" if request.method in {"GET", "HEAD"} else "operator"
+        required_role = (
+            "admin"
+            if request.url.path in ADMIN_ONLY_PATHS
+            else "reader" if request.method in {"GET", "HEAD"} else "operator"
+        )
         if ROLE_LEVEL[principal.role] < ROLE_LEVEL[required_role]:
             return JSONResponse(status_code=403, content={"detail": "Insufficient role"})
 
