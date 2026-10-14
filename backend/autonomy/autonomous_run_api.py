@@ -7,6 +7,8 @@ from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field
 
 from autonomy.action_models import ActionPlan, ActionStatus, ActionTarget, RiskLevel
+from autonomy.audit_api import audit_trail
+from autonomy.autonomous_lifecycle import AutonomousLifecycleOrchestrator
 from autonomy.governed_autonomous_run import GovernedAutonomousRun, GovernedAutonomousRunResult
 
 
@@ -15,7 +17,13 @@ router = APIRouter(
     tags=["autonomous-run"],
 )
 
-runner = GovernedAutonomousRun()
+def _create_runner() -> GovernedAutonomousRun:
+    return GovernedAutonomousRun(
+        lifecycle=AutonomousLifecycleOrchestrator(audit_trail=audit_trail)
+    )
+
+
+runner = _create_runner()
 
 
 class AutonomousRunRequest(BaseModel):

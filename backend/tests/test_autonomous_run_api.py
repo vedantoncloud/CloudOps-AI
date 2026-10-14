@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import autonomy.autonomous_run_api as api
+from autonomy.persistent_audit_trail import PersistentAuditTrail
 
 
 class FakeRunner:
@@ -107,6 +108,27 @@ def test_allow_starts_lifecycle_and_preserves_evidence():
     assert data["evidence"]["execution_flow"] == "autonomous_lifecycle"
     assert len(fake.calls) == 1
     assert fake.calls[0]["dry_run"] is True
+
+
+def test_default_run_lifecycle_uses_durable_shared_audit_trail(tmp_path, monkeypatch):
+    trail = PersistentAuditTrail(tmp_path / "run-audit.db")
+    monkeypatch.setattr(api, "audit_trail", trail)
+    runner = api._create_runner()
+
+    action = api._action(api.AutonomousRunRequest(**payload("durable-run")))
+    runner.lifecycle._audit(
+        action,
+        old_status="pending_approval",
+        new_status="pending_approval",
+        event="autonomous_lifecycle_started",
+        details={"dry_run": True},
+    )
+
+    reopened = PersistentAuditTrail(tmp_path / "run-audit.db")
+    events = reopened.get_events(action_id="durable-run")
+    assert len(events) == 1
+    assert events[0].event == "autonomous_lifecycle_started"
+    assert reopened.verify_integrity()
 
 
 def test_deny_stops_before_lifecycle():
