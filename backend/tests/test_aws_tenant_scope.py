@@ -85,6 +85,31 @@ def test_ec2_summary_counts_only_the_authenticated_tenants_instances(monkeypatch
     }
 
 
+@pytest.mark.parametrize("path,method", [
+    ("/cloud/aws/ec2/efficiency-insights", "get_ec2_efficiency_insights"),
+    ("/cloud/aws/ec2/cost-insights", "get_ec2_cost_insights"),
+    ("/cloud/aws/ec2/rightsizing-insights", "get_ec2_rightsizing_insights"),
+    ("/cloud/aws/ec2/security-insights", "get_ec2_security_insights"),
+])
+def test_aggregate_ec2_insights_analyze_only_authenticated_tenant_instances(monkeypatch, path, method):
+    client = tenant_client(monkeypatch)
+    service = main.aws_service
+    seen = []
+    monkeypatch.setattr(
+        service,
+        method,
+        lambda instances: seen.extend(instances) or {
+            "service": "ec2", "status": "healthy", "instance_count": len(instances),
+            "insight_count": 0, "insights": [],
+        },
+    )
+    response = client.get(path, headers={"Authorization": "Bearer token-a"})
+
+    assert response.status_code == 200
+    assert [item["instance_id"] for item in seen] == ["i-aaaaaaaa"]
+    assert response.json()["instance_count"] == 1
+
+
 @pytest.mark.parametrize("path", [
     "/cloud/aws/ec2/instances/i-bbbbbbbb/insights",
     "/cloud/aws/ec2/instances/i-bbbbbbbb/cpu",

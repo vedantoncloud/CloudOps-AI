@@ -381,8 +381,14 @@ def aws_ec2_insights(instance_id: str, request: Request):
 
 
 @app.get("/cloud/aws/ec2/efficiency-insights")
-def aws_ec2_efficiency_insights():
-    result = aws_service.get_ec2_efficiency_insights()
+def aws_ec2_efficiency_insights(request: Request):
+    if getattr(request.state, "tenant_scoped", False):
+        inventory = _tenant_ec2_instances(request, None, None)
+        if inventory.get("status") != "healthy":
+            return inventory
+        result = aws_service.get_ec2_efficiency_insights(instances=inventory.get("instances", []))
+    else:
+        result = aws_service.get_ec2_efficiency_insights()
 
     if result["status"] == "unhealthy":
         raise HTTPException(
@@ -394,8 +400,14 @@ def aws_ec2_efficiency_insights():
 
 
 @app.get("/cloud/aws/ec2/cost-insights")
-def aws_ec2_cost_insights():
-    result = aws_service.get_ec2_cost_insights()
+def aws_ec2_cost_insights(request: Request):
+    if getattr(request.state, "tenant_scoped", False):
+        inventory = _tenant_ec2_instances(request, None, None)
+        if inventory.get("status") != "healthy":
+            return inventory
+        result = aws_service.get_ec2_cost_insights(instances=inventory.get("instances", []))
+    else:
+        result = aws_service.get_ec2_cost_insights()
 
     if result["status"] == "unhealthy":
         raise HTTPException(
@@ -407,8 +419,14 @@ def aws_ec2_cost_insights():
 
 
 @app.get("/cloud/aws/ec2/rightsizing-insights")
-def aws_ec2_rightsizing_insights():
-    result = aws_service.get_ec2_rightsizing_insights()
+def aws_ec2_rightsizing_insights(request: Request):
+    if getattr(request.state, "tenant_scoped", False):
+        inventory = _tenant_ec2_instances(request, None, None)
+        if inventory.get("status") != "healthy":
+            return inventory
+        result = aws_service.get_ec2_rightsizing_insights(instances=inventory.get("instances", []))
+    else:
+        result = aws_service.get_ec2_rightsizing_insights()
 
     if result["status"] == "unhealthy":
         raise HTTPException(
@@ -420,8 +438,14 @@ def aws_ec2_rightsizing_insights():
 
 
 @app.get("/cloud/aws/ec2/security-insights")
-def aws_ec2_security_insights():
-    result = aws_service.get_ec2_security_insights()
+def aws_ec2_security_insights(request: Request):
+    if getattr(request.state, "tenant_scoped", False):
+        inventory = _tenant_ec2_instances(request, None, None)
+        if inventory.get("status") != "healthy":
+            return inventory
+        result = aws_service.get_ec2_security_insights(instances=inventory.get("instances", []))
+    else:
+        result = aws_service.get_ec2_security_insights()
 
     if result["status"] == "unhealthy":
         raise HTTPException(

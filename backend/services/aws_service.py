@@ -933,14 +933,13 @@ class AWSService:
                 "error": str(error),
             }
 
-    def get_ec2_efficiency_insights(self):
+    def get_ec2_efficiency_insights(self, instances=None):
         try:
-            inventory = self.get_ec2_instances()
-
-            if inventory["status"] != "healthy":
-                return inventory
-
-            instances = inventory.get("instances", [])
+            if instances is None:
+                inventory = self.get_ec2_instances()
+                if inventory["status"] != "healthy":
+                    return inventory
+                instances = inventory.get("instances", [])
             insights = []
 
             for instance in instances:
@@ -996,9 +995,9 @@ class AWSService:
             }
 
 
-    def get_ec2_cost_insights(self):
+    def get_ec2_cost_insights(self, instances=None):
         try:
-            efficiency = self.get_ec2_efficiency_insights()
+            efficiency = self.get_ec2_efficiency_insights(instances=instances)
 
             if efficiency["status"] != "healthy":
                 return efficiency
@@ -1044,14 +1043,13 @@ class AWSService:
                 "error": str(error),
             }
 
-    def get_ec2_rightsizing_insights(self):
+    def get_ec2_rightsizing_insights(self, instances=None):
         try:
-            inventory = self.get_ec2_instances()
-
-            if inventory["status"] != "healthy":
-                return inventory
-
-            instances = inventory.get("instances", [])
+            if instances is None:
+                inventory = self.get_ec2_instances()
+                if inventory["status"] != "healthy":
+                    return inventory
+                instances = inventory.get("instances", [])
             insights = []
 
             for instance in instances:
@@ -1131,14 +1129,13 @@ class AWSService:
                 "error": str(error),
             }
 
-    def get_ec2_security_insights(self):
+    def get_ec2_security_insights(self, instances=None):
         try:
-            inventory = self.get_ec2_instances()
-
-            if inventory["status"] != "healthy":
-                return inventory
-
-            instances = inventory.get("instances", [])
+            if instances is None:
+                inventory = self.get_ec2_instances()
+                if inventory["status"] != "healthy":
+                    return inventory
+                instances = inventory.get("instances", [])
             insights = []
 
             for instance in instances:
