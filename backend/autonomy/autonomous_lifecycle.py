@@ -84,6 +84,7 @@ class AutonomousLifecycleOrchestrator:
         idempotency_key: str | None = None,
         idempotency_seen: bool = False,
         dry_run: bool = True,
+        actor_id: str | None = None,
     ) -> AutonomousLifecycleResult:
         self._validate_action(action)
 
@@ -97,6 +98,7 @@ class AutonomousLifecycleOrchestrator:
                 "idempotency_key": idempotency_key,
                 "idempotency_seen": idempotency_seen,
             },
+            actor_id=actor_id,
         )
 
         approval = self.approval_bridge.get(action.action_id)
@@ -141,6 +143,7 @@ class AutonomousLifecycleOrchestrator:
                 "approval_status": approval.status.value,
                 "safety_evidence": dict(safety.evidence),
             },
+            actor_id=actor_id,
         )
 
         if safety.decision is ExecutionSafetyDecision.DENY:
@@ -150,6 +153,7 @@ class AutonomousLifecycleOrchestrator:
                 new_status=action.status.value,
                 event="autonomous_lifecycle_blocked",
                 details={"reason": "execution_safety_denied"},
+                actor_id=actor_id,
             )
             return AutonomousLifecycleResult(
                 action_id=action.action_id,
@@ -180,6 +184,7 @@ class AutonomousLifecycleOrchestrator:
                     "outcome": outcome,
                     "approval_status": approval.status.value,
                 },
+                actor_id=actor_id,
             )
             return AutonomousLifecycleResult(
                 action_id=action.action_id,
@@ -209,6 +214,7 @@ class AutonomousLifecycleOrchestrator:
                 "approved_by": approval.approved_by,
                 "safety_decision": safety.decision.value,
             },
+            actor_id=actor_id,
         )
 
         outcome = (
@@ -227,6 +233,7 @@ class AutonomousLifecycleOrchestrator:
                 "verification_outcome": verification.verification_outcome,
                 "audit_event_count": verification.audit_event_count,
             },
+            actor_id=actor_id,
         )
 
         return AutonomousLifecycleResult(
@@ -317,6 +324,7 @@ class AutonomousLifecycleOrchestrator:
         new_status: str,
         event: str,
         details: dict[str, Any],
+        actor_id: str | None = None,
     ) -> None:
         self.audit_trail.record(
             action_id=action.action_id,
@@ -327,6 +335,7 @@ class AutonomousLifecycleOrchestrator:
             new_status=new_status,
             event=event,
             details=details,
+            actor_id=actor_id,
         )
 
     @staticmethod

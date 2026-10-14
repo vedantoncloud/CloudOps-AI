@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field
 
@@ -76,7 +76,7 @@ def _result(result: GovernedAutonomousRunResult) -> dict[str, Any]:
 
 
 @router.post("/run")
-def run_autonomous(payload: AutonomousRunRequest) -> dict[str, Any]:
+def run_autonomous(payload: AutonomousRunRequest, request: Request) -> dict[str, Any]:
     try:
         action = _action(payload)
         result = runner.run(
@@ -90,6 +90,7 @@ def run_autonomous(payload: AutonomousRunRequest) -> dict[str, Any]:
             idempotency_key=payload.idempotency_key,
             idempotency_seen=payload.idempotency_seen,
             dry_run=payload.dry_run,
+            actor_id=getattr(getattr(request.state, "principal", None), "subject", None),
         )
         return _result(result)
     except (ValueError, PermissionError, RuntimeError) as exc:

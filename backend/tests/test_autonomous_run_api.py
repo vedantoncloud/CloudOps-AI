@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from auth import AccessControlMiddleware
 import autonomy.autonomous_run_api as api
 from autonomy.persistent_audit_trail import PersistentAuditTrail
 
@@ -73,6 +74,7 @@ class FakeRunner:
 
 def make_client(fake_runner):
     app = FastAPI()
+    app.add_middleware(AccessControlMiddleware, mode="development", tokens={})
     app.include_router(api.router)
     api.runner = fake_runner
     return TestClient(app)
@@ -108,6 +110,7 @@ def test_allow_starts_lifecycle_and_preserves_evidence():
     assert data["evidence"]["execution_flow"] == "autonomous_lifecycle"
     assert len(fake.calls) == 1
     assert fake.calls[0]["dry_run"] is True
+    assert fake.calls[0]["actor_id"] == "local-development"
 
 
 def test_default_run_lifecycle_uses_durable_shared_audit_trail(tmp_path, monkeypatch):
@@ -122,12 +125,14 @@ def test_default_run_lifecycle_uses_durable_shared_audit_trail(tmp_path, monkeyp
         new_status="pending_approval",
         event="autonomous_lifecycle_started",
         details={"dry_run": True},
+        actor_id="operator-7",
     )
 
     reopened = PersistentAuditTrail(tmp_path / "run-audit.db")
     events = reopened.get_events(action_id="durable-run")
     assert len(events) == 1
     assert events[0].event == "autonomous_lifecycle_started"
+    assert events[0].actor_id == "operator-7"
     assert reopened.verify_integrity()
 
 

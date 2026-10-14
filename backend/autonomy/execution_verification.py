@@ -163,6 +163,7 @@ class ExecutionVerificationBridge:
         execution_result: ExecutionResult,
         *,
         verification_details: dict[str, Any] | None = None,
+        actor_id: str | None = None,
     ) -> ExecutionVerificationResult:
         """Verify an already completed execution result and audit it."""
         self._validate_action(action)
@@ -202,6 +203,7 @@ class ExecutionVerificationBridge:
             new_status=new_status,
             event="action_verification_completed",
             details=details,
+            actor_id=actor_id,
         )
 
         events = self.audit_trail.get_events(action.action_id)
