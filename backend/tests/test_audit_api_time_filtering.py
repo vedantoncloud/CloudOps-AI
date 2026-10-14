@@ -66,6 +66,26 @@ def test_invalid_and_reversed_ranges_return_422(endpoint):
     }).status_code == 422
 
 
+@pytest.mark.parametrize("endpoint", ["/autonomy/audit/events", "/autonomy/audit/events/export"])
+def test_audit_filters_accept_omitted_optional_fields(endpoint):
+    response = make_client().get(endpoint)
+
+    assert response.status_code == 200
+
+
+@pytest.mark.parametrize("endpoint", ["/autonomy/audit/events", "/autonomy/audit/events/export"])
+@pytest.mark.parametrize("params", [
+    {"limit": "many"},
+    {"offset": "later"},
+    {"start_time": "2024-13-01T00:00:00Z"},
+    {"end_time": "tomorrow"},
+])
+def test_audit_filters_reject_wrong_type_or_malformed_fields(endpoint, params):
+    response = make_client().get(endpoint, params=params)
+
+    assert response.status_code == 422
+
+
 def test_list_export_parity_with_time_filters():
     client = make_client()
     params = {"start_time": "2024-01-02T00:00:00Z", "end_time": "2024-01-03T00:00:00Z"}
