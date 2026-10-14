@@ -99,7 +99,13 @@ def _filter_audit_events(
 
     if start is not None or end is not None:
         def within_range(item: AuditEvent) -> bool:
-            timestamp = _normalize_datetime(datetime.fromisoformat(item.timestamp))
+            try:
+                timestamp = _normalize_datetime(datetime.fromisoformat(item.timestamp))
+            except (TypeError, ValueError) as exc:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Audit event contains an invalid timestamp",
+                ) from exc
             return (start is None or timestamp >= start) and (end is None or timestamp <= end)
 
         events = [item for item in events if within_range(item)]

@@ -105,3 +105,17 @@ def test_time_filter_combines_with_existing_filters_and_pagination():
 
 def test_no_time_filters_preserve_legacy_behavior():
     assert ids(make_client().get("/autonomy/audit/events")) == ["a", "b", "c"]
+
+
+@pytest.mark.parametrize("endpoint", ["/autonomy/audit/events", "/autonomy/audit/events/export"])
+def test_malformed_stored_timestamp_returns_controlled_server_error(endpoint, monkeypatch):
+    malformed = AuditEvent(
+        "bad", "control_loop", "ec2", "i-bad", "old", "new", "change",
+        "not-a-timestamp", {},
+    )
+    monkeypatch.setattr(audit_trail, "get_events", lambda action_id=None: [malformed])
+
+    response = make_client().get(endpoint, params={"start_time": "2024-01-01T00:00:00Z"})
+
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Audit event contains an invalid timestamp"}
