@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from auth import AccessControlMiddleware, Principal
 from autonomy.resource_inventory_api import (
     discovery,
     provider_registry,
@@ -59,6 +60,35 @@ def test_inventory_returns_ec2_resources():
     assert body["read_only"] is True
     assert body["count"] == 2
     assert body["resources"][0]["resource_id"] == "i-001"
+
+
+def test_token_tenant_inventory_matches_tagged_resources_and_hides_untagged():
+    class TaggedProvider(FakeProvider):
+        def get_ec2_instances(self):
+            return {"resources": [
+                {"instance_id": "i-a", "tags": {"CloudOpsTenantId": "account-a"}},
+                {"instance_id": "i-b", "tags": {"CloudOpsTenantId": "account-b"}},
+                {"instance_id": "i-unowned"},
+            ]}
+
+    if provider_registry.has("aws"):
+        provider_registry.unregister("aws")
+    provider_registry.register(TaggedProvider())
+    app = FastAPI()
+    app.add_middleware(
+        AccessControlMiddleware,
+        mode="token",
+        tokens={"tenant-a": Principal("alice", "reader", "account-a")},
+    )
+    app.include_router(router)
+
+    response = TestClient(app).get(
+        "/autonomy/resources?resource_type=ec2",
+        headers={"Authorization": "Bearer tenant-a"},
+    )
+
+    assert response.status_code == 200
+    assert [item["resource_id"] for item in response.json()["resources"]] == ["i-a"]
 
 
 def test_inventory_returns_s3_resources():

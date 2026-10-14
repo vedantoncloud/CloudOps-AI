@@ -29,8 +29,13 @@ require `reader`; other methods require `operator`. Requests may include
 Keep token values in a deployment secret store and use an identity provider or
 gateway to issue, rotate, and revoke them. The boundary attaches the principal
 and tenant to request state, and autonomous-run lifecycle and verification
-events record the authenticated subject as their actor. Resource-level tenant
-isolation and principal attribution for other API operations remain incomplete.
+events record the authenticated subject as their actor. In token mode, the
+provider-neutral `/autonomy/resources` inventory and governance routes only
+return resources tagged `CloudOpsTenantId` with the token's `tenant_id`; missing
+or mismatched ownership tags are hidden as not found for governance lookups.
+This tag convention does not yet scope the direct `/cloud/aws/*` inventory and
+insight routes, or provide AWS account isolation, so resource-level tenant
+isolation remains incomplete.
 
 ## Planned Stack
 

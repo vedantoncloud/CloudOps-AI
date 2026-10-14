@@ -74,6 +74,7 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
         if self.mode == "development":
             request.state.principal = Principal("local-development", "admin", "local")
             request.state.tenant_id = "local"
+            request.state.tenant_scoped = False
             return await call_next(request)
 
         auth = request.headers.get("authorization", "")
@@ -96,6 +97,7 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
 
         request.state.principal = principal
         request.state.tenant_id = principal.tenant_id
+        request.state.tenant_scoped = True
         return await call_next(request)
 
 

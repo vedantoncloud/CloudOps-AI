@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from auth import AccessControlMiddleware, Principal
+from autonomy import resource_governance_api
 from autonomy.resource_governance_api import router
 
 
@@ -34,3 +36,36 @@ def test_governance_api_executes_real_governance_engine():
     assert "evidence" in body
     assert body["evidence"]["decision"] == "allow"
     assert body["evidence"]["allowed"] is True
+
+
+def test_governance_lookup_hides_resources_owned_by_another_tenant(monkeypatch):
+    class TaggedProvider:
+        provider_name = "aws"
+
+        def get_resource(self, resource_type, resource_id):
+            return {
+                "provider": "aws",
+                "resource_type": resource_type,
+                "resource_id": resource_id,
+                "tags": {"CloudOpsTenantId": "account-b"},
+            }
+
+    monkeypatch.setattr(
+        resource_governance_api.provider_registry,
+        "get",
+        lambda name: TaggedProvider(),
+    )
+    app = FastAPI()
+    app.add_middleware(
+        AccessControlMiddleware,
+        mode="token",
+        tokens={"tenant-a": Principal("alice", "reader", "account-a")},
+    )
+    app.include_router(router)
+
+    response = TestClient(app).get(
+        "/autonomy/resources/ec2/i-private/governance",
+        headers={"Authorization": "Bearer tenant-a"},
+    )
+
+    assert response.status_code == 404
