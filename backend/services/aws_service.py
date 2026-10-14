@@ -273,6 +273,21 @@ class AWSService:
                 "error": str(error),
             }
 
+    def get_s3_bucket_tags(self, bucket_name):
+        """Return a bucket's tags for tenant ownership checks."""
+        try:
+            response = boto3.client("s3").get_bucket_tagging(Bucket=bucket_name)
+            return {
+                "status": "healthy",
+                "tags": {
+                    item.get("Key"): item.get("Value")
+                    for item in response.get("TagSet", [])
+                    if item.get("Key") is not None
+                },
+            }
+        except (BotoCoreError, ClientError) as error:
+            return {"status": "unhealthy", "error": str(error)}
+
     def get_s3_objects(self, bucket_name, prefix=None, max_keys=None):
         try:
             s3 = boto3.client("s3")

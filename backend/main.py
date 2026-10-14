@@ -135,12 +135,38 @@ def aws_ec2_instances(request: Request, state: str = None, tag: str = None):
 
 
 @app.get("/cloud/aws/s3/buckets")
-def aws_s3_buckets():
-    return aws_service.get_s3_buckets()
+def aws_s3_buckets(request: Request):
+    result = aws_service.get_s3_buckets()
+    if result.get("status") != "healthy" or not getattr(request.state, "tenant_scoped", False):
+        return result
+    result = dict(result)
+    result["buckets"] = [
+        bucket for bucket in result.get("buckets", [])
+        if _tenant_owns_s3_bucket(request, bucket.get("name"))
+    ]
+    return result
+
+
+def _tenant_owns_s3_bucket(request: Request, bucket_name: str | None) -> bool:
+    if not getattr(request.state, "tenant_scoped", False):
+        return True
+    if not bucket_name:
+        return False
+    result = aws_service.get_s3_bucket_tags(bucket_name)
+    return (
+        result.get("status") == "healthy"
+        and _resource_tenant({"tags": result.get("tags", {})}) == request.state.tenant_id
+    )
+
+
+def _require_tenant_s3_bucket(request: Request, bucket_name: str) -> None:
+    if not _tenant_owns_s3_bucket(request, bucket_name):
+        raise HTTPException(status_code=404, detail="S3 bucket not found")
 
 
 @app.get("/cloud/aws/s3/buckets/{bucket_name}")
-def aws_s3_bucket_details(bucket_name: str):
+def aws_s3_bucket_details(bucket_name: str, request: Request):
+    _require_tenant_s3_bucket(request, bucket_name)
     result = aws_service.get_s3_bucket_details(bucket_name)
 
     if result["status"] == "unhealthy":
@@ -155,9 +181,11 @@ def aws_s3_bucket_details(bucket_name: str):
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/objects")
 def aws_s3_objects(
     bucket_name: str,
+    request: Request,
     prefix: str = None,
     max_keys: int = None,
 ):
+    _require_tenant_s3_bucket(request, bucket_name)
     if max_keys is not None and (max_keys <= 0 or max_keys > 1000):
         raise HTTPException(
             status_code=400,
@@ -182,9 +210,11 @@ def aws_s3_objects(
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/statistics")
 def aws_s3_object_statistics(
     bucket_name: str,
+    request: Request,
     prefix: str = None,
     max_keys: int = None,
 ):
+    _require_tenant_s3_bucket(request, bucket_name)
     if max_keys is not None and (max_keys <= 0 or max_keys > 1000):
         raise HTTPException(
             status_code=400,
@@ -209,10 +239,12 @@ def aws_s3_object_statistics(
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/largest-objects")
 def aws_s3_largest_objects(
     bucket_name: str,
+    request: Request,
     prefix: str = None,
     max_keys: int = None,
     top_n: int = 5,
 ):
+    _require_tenant_s3_bucket(request, bucket_name)
     if max_keys is not None and (max_keys <= 0 or max_keys > 1000):
         raise HTTPException(
             status_code=400,
@@ -244,9 +276,11 @@ def aws_s3_largest_objects(
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/health")
 def aws_s3_bucket_health(
     bucket_name: str,
+    request: Request,
     prefix: str = None,
     max_keys: int = None,
 ):
+    _require_tenant_s3_bucket(request, bucket_name)
     if max_keys is not None and (max_keys <= 0 or max_keys > 1000):
         raise HTTPException(
             status_code=400,
@@ -271,9 +305,11 @@ def aws_s3_bucket_health(
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/insights")
 def aws_s3_bucket_insights(
     bucket_name: str,
+    request: Request,
     prefix: str = None,
     max_keys: int = None,
 ):
+    _require_tenant_s3_bucket(request, bucket_name)
     if max_keys is not None and (max_keys <= 0 or max_keys > 1000):
         raise HTTPException(
             status_code=400,
@@ -298,9 +334,11 @@ def aws_s3_bucket_insights(
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/optimization")
 def aws_s3_bucket_optimization(
     bucket_name: str,
+    request: Request,
     prefix: str = None,
     max_keys: int = None,
 ):
+    _require_tenant_s3_bucket(request, bucket_name)
     if max_keys is not None and (max_keys <= 0 or max_keys > 1000):
         raise HTTPException(
             status_code=400,
@@ -423,7 +461,8 @@ def aws_ec2_network_utilization(instance_id: str, request: Request):
 
 
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/security-insights")
-def aws_s3_bucket_security_insights(bucket_name: str):
+def aws_s3_bucket_security_insights(bucket_name: str, request: Request):
+    _require_tenant_s3_bucket(request, bucket_name)
     result = aws_service.get_s3_security_insights(bucket_name)
 
     if result["status"] == "unhealthy":
@@ -438,9 +477,11 @@ def aws_s3_bucket_security_insights(bucket_name: str):
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/cost-insights")
 def aws_s3_bucket_cost_insights(
     bucket_name: str,
+    request: Request,
     prefix: str | None = None,
     max_keys: int | None = None,
 ):
+    _require_tenant_s3_bucket(request, bucket_name)
     if max_keys is not None and not 1 <= max_keys <= 1000:
         raise HTTPException(
             status_code=400,
