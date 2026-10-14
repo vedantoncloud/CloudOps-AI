@@ -134,14 +134,17 @@ class AuditTrail:
 
         previous_hash = ""
         for index, (event, stored_hash) in enumerate(zip(self._events, self._event_hashes)):
+            if not isinstance(stored_hash, str) or len(stored_hash) != 64 or any(
+                character not in "0123456789abcdef" for character in stored_hash
+            ):
+                return AuditIntegrityResult(False, event_count, index)
+
             try:
                 expected_hash = self._calculate_hash(previous_hash, event)
             except Exception:
                 return AuditIntegrityResult(False, event_count, index)
 
-            if not isinstance(stored_hash, str) or not hmac.compare_digest(
-                expected_hash, stored_hash
-            ):
+            if not hmac.compare_digest(expected_hash, stored_hash):
                 return AuditIntegrityResult(False, event_count, index)
 
             previous_hash = stored_hash

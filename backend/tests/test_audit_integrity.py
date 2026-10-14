@@ -220,6 +220,36 @@ def test_integrity_diagnostics_identify_unserializable_event_content():
     assert result.valid is False
     assert result.first_invalid_index == 0
 
+
+def test_integrity_verification_safely_rejects_event_with_missing_field():
+    trail = AuditTrail()
+    record_event(trail)
+    del trail._events[0].__dict__["event"]
+    event_state = dict(trail._events[0].__dict__)
+    hashes = list(trail._event_hashes)
+
+    result = trail.get_integrity_diagnostics()
+
+    assert (result.valid, result.first_invalid_index) == (False, 0)
+    assert trail._events[0].__dict__ == event_state
+    assert trail._event_hashes == hashes
+
+
+@pytest.mark.parametrize("stored_hash", [None, b"0" * 64, "é" * 64, "0" * 63, "g" * 64])
+def test_integrity_verification_safely_rejects_malformed_hash(stored_hash):
+    trail = AuditTrail()
+    record_event(trail)
+    trail._event_hashes[0] = stored_hash
+    event = trail._events[0]
+    event_state = dict(event.__dict__)
+
+    result = trail.get_integrity_diagnostics()
+
+    assert (result.valid, result.first_invalid_index) == (False, 0)
+    assert trail._events[0] is event
+    assert trail._events[0].__dict__ == event_state
+    assert trail._event_hashes == [stored_hash]
+
 def test_concurrent_recording_preserves_audit_integrity():
     from concurrent.futures import ThreadPoolExecutor
 
