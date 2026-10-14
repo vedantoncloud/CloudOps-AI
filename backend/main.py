@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 import re
 
 from auth import AccessControlMiddleware
@@ -14,6 +14,7 @@ from autonomy.persistent_audit_health_api import router as persistent_audit_heal
 from autonomy.persistent_audit_reconciliation_api import router as persistent_audit_reconciliation_router
 from autonomy.resource_governance_api import router as resource_governance_router
 from autonomy.resource_inventory_api import router as resource_inventory_router
+from autonomy.resource_inventory_api import _resource_tenant
 
 
 app = FastAPI(
@@ -66,12 +67,37 @@ def aws_service_health(service_name: str):
 
 
 @app.get("/cloud/aws/ec2/summary")
-def aws_ec2_summary():
-    return aws_service.get_ec2_summary()
+def aws_ec2_summary(request: Request):
+    if not getattr(request.state, "tenant_scoped", False):
+        return aws_service.get_ec2_summary()
+    inventory = _tenant_ec2_instances(request, None, None)
+    if inventory.get("status") != "healthy":
+        return inventory
+    instances = inventory.get("instances", [])
+    return {
+        "service": "ec2",
+        "status": "healthy",
+        "total_instances": len(instances),
+        "running_instances": sum(item.get("state") == "running" for item in instances),
+        "stopped_instances": sum(item.get("state") == "stopped" for item in instances),
+    }
+
+
+def _tenant_ec2_instances(request: Request, state: str | None, tag: str | None):
+    result = aws_service.get_ec2_instances(state, tag)
+    if result.get("status") != "healthy" or not getattr(request.state, "tenant_scoped", False):
+        return result
+    tenant_id = request.state.tenant_id
+    result = dict(result)
+    result["instances"] = [
+        item for item in result.get("instances", [])
+        if _resource_tenant({"tags": item.get("tags", {})}) == tenant_id
+    ]
+    return result
 
 
 @app.get("/cloud/aws/ec2/instances")
-def aws_ec2_instances(state: str = None, tag: str = None):
+def aws_ec2_instances(request: Request, state: str = None, tag: str = None):
     valid_states = {
         "pending",
         "running",
@@ -87,7 +113,7 @@ def aws_ec2_instances(state: str = None, tag: str = None):
             detail=f"Invalid EC2 state: {state}",
         )
 
-    return aws_service.get_ec2_instances(state, tag)
+    return _tenant_ec2_instances(request, state, tag)
 
 
 @app.get("/cloud/aws/s3/buckets")
