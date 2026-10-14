@@ -1,11 +1,13 @@
 import json
+import os
 from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel
 
-from autonomy.audit import AuditEvent, AuditTrail
+from autonomy.audit import AuditEvent
+from autonomy.persistent_audit_trail import PersistentAuditTrail
 
 
 router = APIRouter(
@@ -13,7 +15,9 @@ router = APIRouter(
     tags=["autonomy-audit"],
 )
 
-audit_trail = AuditTrail()
+audit_trail = PersistentAuditTrail(
+    os.environ.get("CLOUDOPS_AUDIT_EVENTS_DB", "cloudops_audit_events.db")
+)
 
 
 class AuditIntegrityResponse(BaseModel):
