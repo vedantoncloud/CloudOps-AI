@@ -58,11 +58,22 @@ def load_token_registry(raw: str | None = None) -> dict[str, Principal]:
 
 
 class AccessControlMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app, mode: str | None = None, tokens: dict[str, Principal] | None = None):
+    def __init__(
+        self,
+        app,
+        mode: str | None = None,
+        tokens: dict[str, Principal] | None = None,
+        environment: str | None = None,
+    ):
         super().__init__(app)
         self.mode = (mode or os.getenv("CLOUDOPS_AUTH_MODE", "development")).lower()
         if self.mode not in {"development", "token"}:
             raise RuntimeError("CLOUDOPS_AUTH_MODE must be 'development' or 'token'")
+        self.environment = (environment or os.getenv("CLOUDOPS_ENV", "development")).lower()
+        if self.environment not in {"development", "staging", "production"}:
+            raise RuntimeError("CLOUDOPS_ENV must be 'development', 'staging', or 'production'")
+        if self.environment == "production" and self.mode != "token":
+            raise RuntimeError("CLOUDOPS_AUTH_MODE=token is required when CLOUDOPS_ENV=production")
         self.tokens = load_token_registry() if tokens is None else tokens
         if self.mode == "token" and not self.tokens:
             raise RuntimeError("CLOUDOPS_API_TOKENS is required when CLOUDOPS_AUTH_MODE=token")

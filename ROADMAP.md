@@ -1,12 +1,12 @@
 ﻿# CloudOps AI Roadmap
 
-**Repository audit:** 2026-10-14, updated after tenant-scoped EC2 aggregate insights. This roadmap contains **10 remaining tasks**: the ten numbered incomplete outcomes below. Sub-bullets and acceptance criteria do not count separately. Recount only when a complete outcome ships or scope is explicitly changed.
+**Repository audit:** 2026-10-14, updated after production authentication startup validation. This roadmap contains **10 remaining tasks**: the ten numbered incomplete outcomes below. Sub-bullets and acceptance criteria do not count separately. Recount only when a complete outcome ships or scope is explicitly changed.
 
 ## Current state
 
 CloudOps AI is a FastAPI backend with AWS EC2/S3 inventory and insight routes, planning and governance systems, approval workflows, dry-run execution, recovery, provider abstractions, and audit capabilities. The history shows sustained feature and hardening work, especially around persistent audit idempotency/reconciliation, governance contracts, and audit integrity. There are **305 `test_*.py` modules** under `backend/tests`; this is a file count, not a test-case count or a claim that they pass. The test suite was not run during this repository audit.
 
-Recent commits added configurable bearer-token access control, admin-only audit diagnostics, autonomous-run audit attribution, provider-neutral resource tenant filtering, and tenant filtering for EC2 inventory/summary/detail and aggregate insights. In token mode, the `CloudOpsTenantId` tag scopes provider-neutral `/autonomy/resources` inventory/governance, EC2 inventory/summary/detail/aggregate insights, and direct S3 bucket inventory/detail/object/insight routes. S3 bucket access fails closed when its ownership tag cannot be read; deployments need `s3:GetBucketTagging` for those checks. The AWS client/account context is also shared rather than selected by tenant. The assembled API middleware authenticates non-public paths, but development mode is the default and permits unauthenticated requests. Tokens and claim validation exist; token issuance, rotation, revocation, and federation remain upstream responsibilities. Autonomous-run events include the authenticated subject; attribution is not consistently wired through other operations.
+Recent commits added configurable bearer-token access control, admin-only audit diagnostics, autonomous-run audit attribution, provider-neutral resource tenant filtering, and tenant filtering for EC2 inventory/summary/detail and aggregate insights. In token mode, the `CloudOpsTenantId` tag scopes provider-neutral `/autonomy/resources` inventory/governance, EC2 inventory/summary/detail/aggregate insights, and direct S3 bucket inventory/detail/object/insight routes. S3 bucket access fails closed when its ownership tag cannot be read; deployments need `s3:GetBucketTagging` for those checks. The AWS client/account context is also shared rather than selected by tenant. Development remains the default environment and authentication mode, but `CLOUDOPS_ENV=production` now requires token mode and a nonempty token registry at startup. Tokens and claim validation exist; token issuance, rotation, revocation, and federation remain upstream responsibilities. Autonomous-run events include the authenticated subject; attribution is not consistently wired through other operations.
 
 The audit trail and idempotency/reconciliation state persist to SQLite files and have substantial validation and concurrency coverage. This is not a shared production database architecture. `ActionExecutor` rejects real infrastructure execution; execution remains dry-run only. The repository has a README and roadmap, but `docs/` is empty. No frontend, Docker/container setup, CI workflow, Terraform/Kubernetes configuration, migration framework, or LLM integration was found. Requirements are pinned, but no supported Python version is documented. Cost insights describe qualitative estimates, not live billing data.
 
@@ -19,6 +19,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 - In-memory audit filtering, pagination/export, actor/resource/time filters, hash-chain integrity verification, and diagnostics.
 - SQLite-backed persistent audit events and autonomous-run audit events, plus idempotency, reconciliation, health checks, and extensive malformed-input/concurrency tests.
 - Configurable development/token access modes, method-based reader/operator/admin authorization, tenant claim/header checks, admin-only audit diagnostics, autonomous-run actor attribution, and partial resource/EC2/S3 tenant filtering.
+- Production environment startup validation rejects permissive development authentication and requires configured bearer tokens.
 - Aggregate EC2 efficiency, cost, rightsizing, and security insights analyze only authenticated-tenant inventory in token mode.
 
 ## Prioritized remaining work
@@ -29,7 +30,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 
 3. **Keep infrastructure execution safely disabled until a scoped action is ready (P0).** Real mutations are currently rejected. If enabling execution, start with explicitly selected reversible AWS actions and implement least-privilege permissions, fresh precondition checks, approval binding, idempotency, bounded retries, verification, and tested rollback. **Done when:** every enabled mutation has an action-specific safety review and integration coverage; all unimplemented mutations remain denied. If no real-action scope is approved, document dry-run-only operation as the supported release behavior.
 
-4. **Provide deployment and environment configuration (P1).** Add a reproducible runtime/container setup, configuration validation, secret injection guidance, TLS/reverse-proxy expectations, and separate development/staging/production settings. Production startup must not silently use development authentication. **Done when:** a documented clean deployment starts without source edits and rejects unsafe or missing production configuration.
+4. **Provide deployment and environment configuration (P1).** Production startup validation now requires token auth and configured credentials. Remaining work: add a reproducible runtime/container setup, broader configuration validation, secret injection guidance, TLS/reverse-proxy expectations, and documented development/staging/production settings. **Done when:** a documented clean deployment starts without source edits and rejects unsafe or missing production configuration.
 
 5. **Add automated CI quality gates (P1).** Define supported Python versions and add dependency installation, test execution, lint/type checks, and dependency/security scanning with actionable failure output. **Done when:** pull requests run the documented gates and report failures reliably.
 
@@ -45,7 +46,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 
 ## Technical debt and production-readiness gaps
 
-- Authentication defaults to permissive development mode unless deployment configuration overrides it; the token boundary does not itself provide credential lifecycle management.
+- Authentication defaults to permissive development mode unless `CLOUDOPS_ENV=production` is set; production then requires token mode and configured tokens. The token boundary does not itself provide credential lifecycle management.
 - Tenant isolation is partial: provider-neutral resources, EC2 list/summary/detail and aggregate insights, and direct S3 bucket routes are filtered by ownership tags, while AWS account credentials are not tenant-scoped. S3 checks require bucket-tag read permission and hide resources when ownership cannot be established.
 - Audit actor attribution is implemented for autonomous runs, not consistently for all API operations.
 - Persistent audit stores are SQLite local files; there is no shared production database, migration, backup, or restore workflow.

@@ -118,3 +118,23 @@ def test_token_registry_requires_complete_valid_claims():
 def test_token_mode_fails_closed_without_credentials():
     with pytest.raises(RuntimeError, match="CLOUDOPS_API_TOKENS is required"):
         AccessControlMiddleware(lambda scope, receive, send: None, mode="token", tokens={})
+
+
+def test_production_rejects_permissive_development_authentication():
+    with pytest.raises(RuntimeError, match="CLOUDOPS_AUTH_MODE=token is required"):
+        AccessControlMiddleware(
+            lambda scope, receive, send: None,
+            mode="development",
+            tokens={},
+            environment="production",
+        )
+
+
+def test_production_token_mode_requires_configured_credentials():
+    with pytest.raises(RuntimeError, match="CLOUDOPS_API_TOKENS is required"):
+        AccessControlMiddleware(
+            lambda scope, receive, send: None,
+            mode="token",
+            tokens={},
+            environment="production",
+        )
