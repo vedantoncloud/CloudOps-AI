@@ -15,6 +15,7 @@ def test_console_is_served_to_authenticated_reader():
     assert "Pending approvals" in response.text
     assert "Your autonomous run history" in response.text
     assert "governance" in response.text
+    assert "Action plans" in response.text
 
 
 def test_console_uses_tenant_api_contracts_and_does_not_persist_bearer_token():
@@ -23,6 +24,10 @@ def test_console_uses_tenant_api_contracts_and_does_not_persist_bearer_token():
     assert "/autonomy/resources/" in response.text
     assert "/autonomy/approvals?limit=50" in response.text
     assert "/autonomy/runs?limit=50" in response.text
+    assert "/autonomy/plans?limit=50" in response.text
+    assert "/autonomy/ec2/instances/${encodeURIComponent(resource.id)}/plans" in response.text
+    assert "/autonomy/s3/buckets/${encodeURIComponent(resource.id)}/plans" in response.text
+    assert "Dry run" in response.text
     assert "localStorage" not in response.text
     assert "sessionStorage" not in response.text
 

@@ -32,6 +32,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 - Authenticated users can resume S3 object listings from an AWS continuation token through `/cloud/aws/s3/buckets/{bucket_name}/objects`; responses expose truncation state and the next token for incremental browsing.
 - Authenticated users can use `/console` to browse EC2/S3 inventory, inspect resource governance, review and decide pending approvals, and view their autonomous run history; bearer credentials stay in page memory.
 - Token-scoped EC2/S3 plan generation verifies the source resource's tenant ownership first; foreign, untagged, missing, or unverifiable resources are hidden before insight analysis.
+- The operations console can create action plans from EC2/S3 resource insights, browse and filter the plan queue, evaluate plans, cancel eligible plans, and run approved plans in dry-run mode.
 
 ## Prioritized remaining work
 
@@ -64,7 +65,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 - Real infrastructure mutations are intentionally disabled; planning, governance, and simulation must not be represented as completed remediation.
 - `/health` remains a static liveness check; `/ready` checks AWS but does not yet check persistence readiness.
 - `/ready` establishes AWS readiness; it does not yet check persistence readiness.
-- No CI workflow, deployment/container configuration, IaC, or substantive operator documentation was found; `docs/` is empty. The current console is a lightweight browser client served by FastAPI.
+- No CI workflow, deployment/container configuration, IaC, or substantive operator documentation was found; `docs/` is empty. The console is a lightweight browser client served by FastAPI, with inventory/governance, plan generation and review, approvals, and run history.
 - No supported Python runtime or automated dependency update/security workflow is documented.
 - Cost insights are qualitative; live billing/pricing integration is not present.
 - The checkout contains untracked SQLite database files. They were left untouched and are not part of this roadmap change.
