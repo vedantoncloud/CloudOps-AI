@@ -288,12 +288,12 @@ class AWSService:
         except (BotoCoreError, ClientError) as error:
             return {"status": "unhealthy", "error": str(error)}
 
-    def get_s3_objects(self, bucket_name, prefix=None, max_keys=None):
+    def get_s3_objects(self, bucket_name, prefix=None, max_keys=None, continuation_token=None):
         try:
             s3 = boto3.client("s3")
 
             objects = []
-            continuation_token = None
+            next_continuation_token = None
 
             while True:
                 params = {
@@ -306,10 +306,13 @@ class AWSService:
                 if max_keys:
                     params["MaxKeys"] = min(max_keys, 1000)
 
-                if continuation_token:
+                if next_continuation_token:
+                    params["ContinuationToken"] = next_continuation_token
+                elif continuation_token:
                     params["ContinuationToken"] = continuation_token
 
                 response = s3.list_objects_v2(**params)
+                starting_token = continuation_token
 
                 for obj in response.get("Contents", []):
                     objects.append({
@@ -326,13 +329,13 @@ class AWSService:
                         objects = objects[:max_keys]
                         break
 
-                if max_keys and len(objects) >= max_keys:
+                if starting_token or (max_keys and len(objects) >= max_keys):
                     break
 
                 if not response.get("IsTruncated"):
                     break
 
-                continuation_token = response.get("NextContinuationToken")
+                next_continuation_token = response.get("NextContinuationToken")
 
             return {
                 "service": "s3",
@@ -340,6 +343,8 @@ class AWSService:
                 "bucket": bucket_name,
                 "prefix": prefix,
                 "objects": objects,
+                "is_truncated": bool(response.get("IsTruncated")),
+                "next_continuation_token": response.get("NextContinuationToken"),
             }
 
         except (BotoCoreError, ClientError) as error:

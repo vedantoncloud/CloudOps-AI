@@ -29,6 +29,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 - Operators can reject a pending action plan with a required reason; the response records the authenticated reviewer and exposes a distinct `rejected` status.
 - Authenticated users can retrieve an action plan's current state through `GET /autonomy/plans/{action_id}`; token-mode lookups hide plans belonging to another tenant.
 - Operators can distinguish process liveness (`/health`) from AWS dependency readiness (`/ready`); readiness returns 503 when AWS is unavailable and does not expose account or error details.
+- Authenticated users can resume S3 object listings from an AWS continuation token through `/cloud/aws/s3/buckets/{bucket_name}/objects`; responses expose truncation state and the next token for incremental browsing.
 
 ## Prioritized remaining work
 

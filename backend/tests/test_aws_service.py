@@ -421,6 +421,29 @@ def test_get_s3_objects_pagination():
     )
 
 
+def test_get_s3_objects_resumes_from_continuation_token():
+    mock_s3 = MagicMock()
+    mock_s3.list_objects_v2.return_value = {
+        "Contents": [{"Key": "next.txt", "Size": 10}],
+        "IsTruncated": True,
+        "NextContinuationToken": "next-page-token",
+    }
+
+    with patch("services.aws_service.boto3.client", return_value=mock_s3):
+        result = AWSService().get_s3_objects(
+            "cloudops-test", prefix="logs/", max_keys=25,
+            continuation_token="page-token",
+        )
+
+    mock_s3.list_objects_v2.assert_called_once_with(
+        Bucket="cloudops-test", Prefix="logs/", MaxKeys=25,
+        ContinuationToken="page-token",
+    )
+    assert result["is_truncated"] is True
+    assert result["next_continuation_token"] == "next-page-token"
+    assert result["objects"][0]["key"] == "next.txt"
+
+
 def test_get_s3_objects_access_denied():
     with patch("services.aws_service.boto3.client") as mock_client:
         mock_s3 = mock_client.return_value
