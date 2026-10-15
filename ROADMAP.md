@@ -24,6 +24,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 - Authenticated operators can list their durable autonomous run history through `/autonomy/runs`, with lifecycle summaries and bounded pagination.
 - Authenticated users can browse the in-memory action-plan queue through `/autonomy/plans`, filter by lifecycle status, and page through results; token-mode plan access is restricted to the tenant that created each plan.
 - Non-admin authenticated users can list and export only their own audit events; admins retain cross-actor audit access.
+- Operators can browse a tenant-scoped, newest-first pending approval queue through `/autonomy/approvals`, with bounded pagination.
 
 ## Prioritized remaining work
 
@@ -43,7 +44,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 
 8. **Specify audit trust, retention, and recovery guarantees (P1).** Document the hash-chain threat model and external key/anchor strategy; define tamper detection, export verification, retention, access, backup, and disaster recovery. A hash chain stored in a writable database cannot by itself prevent an attacker with full store access from rewriting the history and recomputing the chain. **Done when:** an operator can independently verify exported history and follow tested backup/restore and incident procedures.
 
-9. **Settle user-facing product scope (P2).** Decide whether the planned React console and AI/LLM integration remain in scope. The API now provides authenticated actor-scoped autonomous run history and a tenant-scoped, filterable action-plan queue; a secured UI for inventory, governance, approvals, and run history remains outstanding if the console stays in scope. Put any model-assisted features behind explicit policy and human review. Otherwise, update the README to state the supported API-only scope and remove unsupported planned-stack claims. **Done when:** product scope and deliverables agree, and AI-driven mutations cannot bypass approval/safety controls.
+9. **Settle user-facing product scope (P2).** Decide whether the planned React console and AI/LLM integration remain in scope. The API provides authenticated actor-scoped autonomous run history, a tenant-scoped filterable action-plan queue, and a tenant-scoped paginated pending approval queue; a secured UI for inventory, governance, approvals, and run history remains outstanding if the console stays in scope. Put any model-assisted features behind explicit policy and human review. Otherwise, update the README to state the supported API-only scope and remove unsupported planned-stack claims. **Done when:** product scope and deliverables agree, and AI-driven mutations cannot bypass approval/safety controls.
 
 10. **Publish operating and support documentation (P2).** Expand the short README with setup, configuration, API/auth model, AWS IAM permissions, data flows, architecture, limitations, incident response, upgrade, and support guidance. **Done when:** a new operator can deploy, validate, recover, and safely disable the service using repository documentation alone.
 

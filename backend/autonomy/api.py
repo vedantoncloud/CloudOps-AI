@@ -149,6 +149,30 @@ def list_plans(request: Request, status: ActionStatus | None = None, limit: int 
             "total": total, "limit": limit, "offset": offset}
 
 
+@router.get("/approvals")
+def list_pending_approvals(request: Request, limit: int = 50, offset: int = 0):
+    """List the pending approval queue visible to this tenant."""
+    if not 1 <= limit <= 200:
+        raise HTTPException(status_code=422, detail="limit must be between 1 and 200")
+    if offset < 0:
+        raise HTTPException(status_code=422, detail="offset must be non-negative")
+    with _registry_lock:
+        approvals = [
+            plan for action_id, plan in _plan_registry.items()
+            if plan.status == ActionStatus.PENDING_APPROVAL
+            and (not getattr(request.state, "tenant_scoped", False)
+                 or _plan_tenants.get(action_id) == request.state.tenant_id)
+        ]
+    approvals.reverse()
+    total = len(approvals)
+    return {
+        "approvals": [_serialize(plan) for plan in approvals[offset:offset + limit]],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
+
+
 @router.post("/plans/{action_id}/evaluate")
 def evaluate_plan(action_id: str, request: Request):
     action = _get_plan(action_id, request)
