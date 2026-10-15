@@ -16,6 +16,9 @@ def test_console_is_served_to_authenticated_reader():
     assert "Your autonomous run history" in response.text
     assert "governance" in response.text
     assert "Action plans" in response.text
+    assert "Browse objects" in response.text
+    assert "Object key prefix" in response.text
+    assert "Next page" in response.text
 
 
 def test_console_uses_tenant_api_contracts_and_does_not_persist_bearer_token():
@@ -30,6 +33,16 @@ def test_console_uses_tenant_api_contracts_and_does_not_persist_bearer_token():
     assert "Dry run" in response.text
     assert "localStorage" not in response.text
     assert "sessionStorage" not in response.text
+
+
+def test_console_s3_object_browser_uses_bounded_resumable_listing_contract():
+    response = TestClient(app).get("/console")
+
+    assert "max_keys:$('objectPageSize').value" in response.text
+    assert "query.set('prefix',prefix)" in response.text
+    assert "query.set('continuation_token',token)" in response.text
+    assert "data.next_continuation_token" in response.text
+    assert "encodeURIComponent(activeBucket)" in response.text
 
 
 def test_console_is_protected_by_token_authentication():

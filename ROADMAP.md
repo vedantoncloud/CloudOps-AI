@@ -33,6 +33,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 - Authenticated users can use `/console` to browse EC2/S3 inventory, inspect resource governance, review and decide pending approvals, and view their autonomous run history; bearer credentials stay in page memory.
 - Token-scoped EC2/S3 plan generation verifies the source resource's tenant ownership first; foreign, untagged, missing, or unverifiable resources are hidden before insight analysis.
 - The operations console can create action plans from EC2/S3 resource insights, browse and filter the plan queue, evaluate plans, cancel eligible plans, and run approved plans in dry-run mode.
+- The operations console can browse S3 bucket objects by prefix, choose a bounded page size, and continue through truncated listings.
 
 ## Prioritized remaining work
 
