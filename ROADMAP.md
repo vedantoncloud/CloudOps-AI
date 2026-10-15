@@ -34,6 +34,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 - Token-scoped EC2/S3 plan generation verifies the source resource's tenant ownership first; foreign, untagged, missing, or unverifiable resources are hidden before insight analysis.
 - The operations console can create action plans from EC2/S3 resource insights, browse and filter the plan queue, evaluate plans, cancel eligible plans, and run approved plans in dry-run mode.
 - The operations console can browse S3 bucket objects by prefix, choose a bounded page size, and continue through truncated listings.
+- EC2 and S3 action-plan generation uses `POST` because it creates plan records; token-mode readers are denied and operators can create tenant-scoped plans.
 
 ## Prioritized remaining work
 

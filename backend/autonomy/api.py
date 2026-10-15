@@ -111,7 +111,7 @@ def _require_tenant_s3_bucket(request: Request, bucket_name: str) -> None:
         raise HTTPException(status_code=404, detail="S3 bucket not found")
 
 
-@router.get("/ec2/instances/{instance_id}/plans")
+@router.post("/ec2/instances/{instance_id}/plans")
 def plan_ec2_actions(instance_id: str, request: Request):
     _require_tenant_ec2_instance(request, instance_id)
     result = aws_service.get_ec2_insights(instance_id)
@@ -127,7 +127,7 @@ def plan_ec2_actions(instance_id: str, request: Request):
     return _plan_response(plans, request)
 
 
-@router.get("/s3/buckets/{bucket_name}/plans")
+@router.post("/s3/buckets/{bucket_name}/plans")
 def plan_s3_actions(
     request: Request,
     bucket_name: str,

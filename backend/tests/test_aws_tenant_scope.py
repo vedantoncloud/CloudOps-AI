@@ -54,7 +54,10 @@ def tenant_client(monkeypatch):
     app.add_middleware(
         AccessControlMiddleware,
         mode="token",
-        tokens={"token-a": Principal("alice", "reader", "tenant-a")},
+        tokens={
+            "token-a": Principal("alice", "reader", "tenant-a"),
+            "operator-a": Principal("bob", "operator", "tenant-a"),
+        },
     )
     return TestClient(app)
 
@@ -216,9 +219,9 @@ def test_ec2_plan_generation_hides_foreign_instances(monkeypatch):
     called = []
     monkeypatch.setattr(service, "get_ec2_insights", lambda instance_id: called.append(instance_id))
 
-    response = client.get(
+    response = client.post(
         "/autonomy/ec2/instances/i-bbbbbbbb/plans",
-        headers={"Authorization": "Bearer token-a"},
+        headers={"Authorization": "Bearer operator-a"},
     )
 
     assert response.status_code == 404
@@ -238,9 +241,9 @@ def test_s3_plan_generation_hides_unowned_buckets(monkeypatch, bucket):
         raising=False,
     )
 
-    response = client.get(
+    response = client.post(
         f"/autonomy/s3/buckets/{bucket}/plans",
-        headers={"Authorization": "Bearer token-a"},
+        headers={"Authorization": "Bearer operator-a"},
     )
 
     assert response.status_code == 404
@@ -258,10 +261,21 @@ def test_plan_generation_allows_tenant_owned_s3_bucket(monkeypatch):
         raising=False,
     )
 
-    response = client.get(
+    response = client.post(
         "/autonomy/s3/buckets/owned/plans",
-        headers={"Authorization": "Bearer token-a"},
+        headers={"Authorization": "Bearer operator-a"},
     )
 
     assert response.status_code == 200
     assert response.json()["plan_count"] == 0
+
+@pytest.mark.parametrize("path", [
+    "/autonomy/ec2/instances/i-aaaaaaaa/plans",
+    "/autonomy/s3/buckets/owned/plans",
+])
+def test_plan_generation_requires_operator_and_uses_post(monkeypatch, path):
+    client = tenant_client(monkeypatch)
+    headers = {"Authorization": "Bearer operator-a"}
+
+    assert client.get(path, headers=headers).status_code == 405
+    assert client.post(path, headers={"Authorization": "Bearer token-a"}).status_code == 403

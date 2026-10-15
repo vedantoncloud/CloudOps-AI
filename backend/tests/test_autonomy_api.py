@@ -39,7 +39,7 @@ def test_evaluate_plan_moves_action_to_pending_approval():
         with patch("autonomy.api.action_planner") as mock_planner:
             mock_planner.plan_from_ec2_insights.return_value = [plan]
 
-            response = client.get(
+            response = client.post(
                 "/autonomy/ec2/instances/i-123456789/plans"
             )
 
@@ -71,7 +71,7 @@ def test_approve_plan_after_policy_evaluation():
         with patch("autonomy.api.action_planner") as mock_planner:
             mock_planner.plan_from_ec2_insights.return_value = [plan]
 
-            response = client.get(
+            response = client.post(
                 "/autonomy/ec2/instances/i-123456789/plans"
             )
 
@@ -102,7 +102,7 @@ def test_cancel_plan_after_policy_evaluation():
         with patch("autonomy.api.action_planner") as mock_planner:
             mock_planner.plan_from_ec2_insights.return_value = [plan]
 
-            response = client.get(
+            response = client.post(
                 "/autonomy/ec2/instances/i-123456789/plans"
             )
 
@@ -133,7 +133,7 @@ def test_approve_before_evaluation_is_rejected():
         with patch("autonomy.api.action_planner") as mock_planner:
             mock_planner.plan_from_ec2_insights.return_value = [plan]
 
-            response = client.get(
+            response = client.post(
                 "/autonomy/ec2/instances/i-123456789/plans"
             )
 
@@ -162,7 +162,7 @@ def test_cancel_already_approved_plan_is_rejected():
         with patch("autonomy.api.action_planner") as mock_planner:
             mock_planner.plan_from_ec2_insights.return_value = [plan]
 
-            response = client.get(
+            response = client.post(
                 "/autonomy/ec2/instances/i-123456789/plans"
             )
 

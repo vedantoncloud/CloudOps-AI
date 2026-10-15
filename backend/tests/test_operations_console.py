@@ -30,6 +30,7 @@ def test_console_uses_tenant_api_contracts_and_does_not_persist_bearer_token():
     assert "/autonomy/plans?limit=50" in response.text
     assert "/autonomy/ec2/instances/${encodeURIComponent(resource.id)}/plans" in response.text
     assert "/autonomy/s3/buckets/${encodeURIComponent(resource.id)}/plans" in response.text
+    assert "api(path,{method:'POST'})" in response.text
     assert "Dry run" in response.text
     assert "localStorage" not in response.text
     assert "sessionStorage" not in response.text
