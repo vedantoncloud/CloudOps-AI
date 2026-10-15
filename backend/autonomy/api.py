@@ -2,7 +2,7 @@ from dataclasses import asdict
 from enum import Enum
 from threading import Lock
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from autonomy.action_models import ActionStatus
 from autonomy.action_planner import ActionPlanner
@@ -25,6 +25,7 @@ action_verifier = ActionVerifier()
 recovery_coordinator = RecoveryCoordinator(verifier=action_verifier)
 
 _plan_registry = {}
+_plan_tenants = {}
 _registry_lock = Lock()
 
 
@@ -47,19 +48,27 @@ def _serialize(value):
     return value
 
 
-def _store_plans(plans):
+def _store_plans(plans, tenant_id=None):
     with _registry_lock:
         for plan in plans:
             _plan_registry[plan.action_id] = plan
+            _plan_tenants[plan.action_id] = tenant_id
 
 
-def _get_plan(action_id: str):
+def _get_plan(action_id: str, request: Request | None = None):
     with _registry_lock:
-        return _plan_registry.get(action_id)
+        plan = _plan_registry.get(action_id)
+        if plan is None:
+            return None
+        if request is not None and getattr(request.state, "tenant_scoped", False):
+            if _plan_tenants.get(action_id) != request.state.tenant_id:
+                return None
+        return plan
 
 
-def _plan_response(plans):
-    _store_plans(plans)
+def _plan_response(plans, request: Request):
+    tenant_id = request.state.tenant_id if getattr(request.state, "tenant_scoped", False) else None
+    _store_plans(plans, tenant_id)
     return {
         "status": "healthy",
         "plan_count": len(plans),
@@ -75,7 +84,7 @@ def _action_response(action):
 
 
 @router.get("/ec2/instances/{instance_id}/plans")
-def plan_ec2_actions(instance_id: str):
+def plan_ec2_actions(instance_id: str, request: Request):
     result = aws_service.get_ec2_insights(instance_id)
 
     if result["status"] == "unhealthy":
@@ -86,11 +95,12 @@ def plan_ec2_actions(instance_id: str):
         result.get("insights", []),
     )
 
-    return _plan_response(plans)
+    return _plan_response(plans, request)
 
 
 @router.get("/s3/buckets/{bucket_name}/plans")
 def plan_s3_actions(
+    request: Request,
     bucket_name: str,
     prefix: str | None = None,
     max_keys: int | None = None,
@@ -116,12 +126,32 @@ def plan_s3_actions(
         prefix=prefix,
     )
 
-    return _plan_response(plans)
+    return _plan_response(plans, request)
+
+
+@router.get("/plans")
+def list_plans(request: Request, status: ActionStatus | None = None, limit: int = 50, offset: int = 0):
+    """List plans available to this tenant, newest registry entries first."""
+    if not 1 <= limit <= 200:
+        raise HTTPException(status_code=422, detail="limit must be between 1 and 200")
+    if offset < 0:
+        raise HTTPException(status_code=422, detail="offset must be non-negative")
+    with _registry_lock:
+        plans = [
+            plan for action_id, plan in _plan_registry.items()
+            if (not getattr(request.state, "tenant_scoped", False)
+                or _plan_tenants.get(action_id) == request.state.tenant_id)
+            and (status is None or plan.status == status)
+        ]
+    plans.reverse()
+    total = len(plans)
+    return {"plans": [_serialize(plan) for plan in plans[offset:offset + limit]],
+            "total": total, "limit": limit, "offset": offset}
 
 
 @router.post("/plans/{action_id}/evaluate")
-def evaluate_plan(action_id: str):
-    action = _get_plan(action_id)
+def evaluate_plan(action_id: str, request: Request):
+    action = _get_plan(action_id, request)
 
     if action is None:
         raise HTTPException(status_code=404, detail="Action plan not found")
@@ -135,8 +165,8 @@ def evaluate_plan(action_id: str):
 
 
 @router.post("/plans/{action_id}/approve")
-def approve_plan(action_id: str):
-    action = _get_plan(action_id)
+def approve_plan(action_id: str, request: Request):
+    action = _get_plan(action_id, request)
 
     if action is None:
         raise HTTPException(status_code=404, detail="Action plan not found")
@@ -150,8 +180,8 @@ def approve_plan(action_id: str):
 
 
 @router.post("/plans/{action_id}/cancel")
-def cancel_plan(action_id: str):
-    action = _get_plan(action_id)
+def cancel_plan(action_id: str, request: Request):
+    action = _get_plan(action_id, request)
 
     if action is None:
         raise HTTPException(status_code=404, detail="Action plan not found")
@@ -167,9 +197,10 @@ def cancel_plan(action_id: str):
 @router.post("/plans/{action_id}/execute")
 def execute_plan(
     action_id: str,
+    request: Request,
     dry_run: str = "true",
 ):
-    action = _get_plan(action_id)
+    action = _get_plan(action_id, request)
 
     if action is None:
         raise HTTPException(status_code=404, detail="Action plan not found")
