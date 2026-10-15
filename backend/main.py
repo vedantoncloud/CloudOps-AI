@@ -56,6 +56,29 @@ def health_check():
     }
 
 
+@app.get("/ready")
+def readiness_check():
+    """Report whether the service can currently reach its AWS dependency.
+
+    Keep /health as a cheap liveness probe; readiness is suitable for routing
+    traffic only when the integration used by the API is available.
+    """
+    try:
+        result = aws_service.get_status()
+    except Exception:
+        result = {"status": "disconnected"}
+
+    ready = result.get("status") == "connected"
+    payload = {
+        "status": "ready" if ready else "not_ready",
+        "service": "cloudops-ai",
+        "dependencies": {"aws": "healthy" if ready else "unhealthy"},
+    }
+    if not ready:
+        raise HTTPException(status_code=503, detail=payload)
+    return payload
+
+
 @app.get("/cloud/aws/status")
 def aws_status():
     return aws_service.get_status()

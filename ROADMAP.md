@@ -26,6 +26,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 - Non-admin authenticated users can list and export only their own audit events; admins retain cross-actor audit access.
 - Operators can browse a tenant-scoped, newest-first pending approval queue through `/autonomy/approvals`, with bounded pagination.
 - Authenticated users can retrieve an action plan's current state through `GET /autonomy/plans/{action_id}`; token-mode lookups hide plans belonging to another tenant.
+- Operators can distinguish process liveness (`/health`) from AWS dependency readiness (`/ready`); readiness returns 503 when AWS is unavailable and does not expose account or error details.
 
 ## Prioritized remaining work
 
@@ -39,7 +40,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 
 5. **Add automated CI quality gates (P1).** Define supported Python versions and add dependency installation, test execution, lint/type checks, and dependency/security scanning with actionable failure output. **Done when:** pull requests run the documented gates and report failures reliably.
 
-6. **Make health and operations observable (P1).** Separate liveness from dependency readiness; add structured logs, request correlation, metrics, and actionable AWS/database failure signals without exposing secrets or sensitive audit payloads. **Done when:** operators can distinguish application health from dependency health and diagnose failures using documented telemetry.
+6. **Make health and operations observable (P1).** `/health` now provides liveness and `/ready` reports AWS dependency readiness with sanitized responses. Add structured logs, request correlation, metrics, database readiness, and actionable AWS/database failure signals without exposing secrets or sensitive audit payloads. **Done when:** operators can distinguish application health from dependency health and diagnose failures using documented telemetry.
 
 7. **Harden API and AWS operational limits (P1).** Set request/response size limits, pagination bounds, timeouts, rate limits, AWS retry/backoff and throttling behavior, and consistent error contracts. **Done when:** limits are explicit and covered for malformed, oversized, throttled, and unavailable-dependency conditions.
 
@@ -56,7 +57,8 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 - Audit actor attribution is implemented for autonomous runs, not consistently for all API operations. Audit event listing/export is actor-scoped for non-admin users; the underlying shared trail and operational diagnostics still require broader tenant and attribution work.
 - Persistent audit stores are SQLite local files; there is no shared production database, migration, backup, or restore workflow.
 - Real infrastructure mutations are intentionally disabled; planning, governance, and simulation must not be represented as completed remediation.
-- `/health` returns static application status and does not establish AWS or persistence readiness.
+- `/health` remains a static liveness check; `/ready` checks AWS but does not yet check persistence readiness.
+- `/ready` establishes AWS readiness; it does not yet check persistence readiness.
 - No CI workflow, deployment/container configuration, IaC, frontend, or substantive operator documentation was found; `docs/` is empty.
 - No supported Python runtime or automated dependency update/security workflow is documented.
 - Cost insights are qualitative; live billing/pricing integration is not present.

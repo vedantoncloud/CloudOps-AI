@@ -21,7 +21,7 @@ class Principal:
 
 
 ROLE_LEVEL = {"reader": 1, "operator": 2, "admin": 3}
-PUBLIC_PATHS = {"/", "/health"}
+PUBLIC_PATHS = {"/", "/health", "/ready"}
 # These endpoints expose operational details about shared audit storage and
 # reconciliation state, so they require an administrator even though they are
 # read-only. Approval decisions remain operator-level POST operations.
