@@ -42,6 +42,32 @@ def test_plan_queue_hides_other_tenants_and_plan_lookup_returns_not_found():
     assert all(plan["action_id"] != "tenant-private" for plan in visible["plans"])
 
 
+def test_get_plan_returns_current_serialized_state_for_owner():
+    plan = _plan("detail-a", ActionStatus.APPROVED)
+    api._store_plans([plan], tenant_id="tenant-a")
+    request = SimpleNamespace(state=SimpleNamespace(tenant_scoped=True, tenant_id="tenant-a"))
+
+    result = api.get_plan("detail-a", request)
+
+    assert result["status"] == "healthy"
+    assert result["action"]["action_id"] == "detail-a"
+    assert result["action"]["status"] == "approved"
+    assert result["action"]["target"]["resource_id"] == "i-detail-a"
+
+
+def test_get_plan_hides_missing_and_foreign_tenant_plans():
+    from fastapi import HTTPException
+    import pytest
+
+    api._store_plans([_plan("detail-private")], tenant_id="tenant-a")
+    request = SimpleNamespace(state=SimpleNamespace(tenant_scoped=True, tenant_id="tenant-b"))
+
+    for action_id in ("detail-private", "does-not-exist"):
+        with pytest.raises(HTTPException) as error:
+            api.get_plan(action_id, request)
+        assert error.value.status_code == 404
+
+
 def test_plan_queue_rejects_invalid_pagination():
     response = client.get("/autonomy/plans?limit=201")
 

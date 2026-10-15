@@ -25,6 +25,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 - Authenticated users can browse the in-memory action-plan queue through `/autonomy/plans`, filter by lifecycle status, and page through results; token-mode plan access is restricted to the tenant that created each plan.
 - Non-admin authenticated users can list and export only their own audit events; admins retain cross-actor audit access.
 - Operators can browse a tenant-scoped, newest-first pending approval queue through `/autonomy/approvals`, with bounded pagination.
+- Authenticated users can retrieve an action plan's current state through `GET /autonomy/plans/{action_id}`; token-mode lookups hide plans belonging to another tenant.
 
 ## Prioritized remaining work
 

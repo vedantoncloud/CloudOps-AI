@@ -149,6 +149,15 @@ def list_plans(request: Request, status: ActionStatus | None = None, limit: int 
             "total": total, "limit": limit, "offset": offset}
 
 
+@router.get("/plans/{action_id}")
+def get_plan(action_id: str, request: Request):
+    """Return the current plan state, hiding plans owned by another tenant."""
+    action = _get_plan(action_id, request)
+    if action is None:
+        raise HTTPException(status_code=404, detail="Action plan not found")
+    return _action_response(action)
+
+
 @router.get("/approvals")
 def list_pending_approvals(request: Request, limit: int = 50, offset: int = 0):
     """List the pending approval queue visible to this tenant."""
