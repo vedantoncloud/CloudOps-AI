@@ -3,6 +3,7 @@ from enum import Enum
 from threading import Lock
 
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel, Field, field_validator
 
 from autonomy.action_models import ActionStatus
 from autonomy.action_planner import ActionPlanner
@@ -205,11 +206,38 @@ def approve_plan(action_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Action plan not found")
 
     try:
-        approved = approval_manager.approve(action)
+        principal = getattr(request.state, "principal", None)
+        approved = approval_manager.approve(
+            action, approved_by=getattr(principal, "subject", None)
+        )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     return _action_response(approved)
+
+
+class RejectionRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("reason", mode="before")
+    @classmethod
+    def normalize_reason(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+
+@router.post("/plans/{action_id}/reject")
+def reject_plan(action_id: str, payload: RejectionRequest, request: Request):
+    action = _get_plan(action_id, request)
+    if action is None:
+        raise HTTPException(status_code=404, detail="Action plan not found")
+
+    principal = getattr(request.state, "principal", None)
+    reviewer = getattr(principal, "subject", None)
+    try:
+        rejected = approval_manager.reject(action, reviewer, payload.reason)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _action_response(rejected)
 
 
 @router.post("/plans/{action_id}/cancel")

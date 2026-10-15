@@ -63,3 +63,33 @@ def test_approval_queue_rejects_invalid_pagination(kwargs):
         api.list_pending_approvals(_request(), **kwargs)
 
     assert error.value.status_code == 422
+
+
+def test_reject_plan_records_authenticated_reviewer_and_reason(monkeypatch):
+    plan = _plan("pending", ActionStatus.PENDING_APPROVAL)
+    monkeypatch.setattr(api, "_plan_registry", {"pending": plan})
+    monkeypatch.setattr(api, "_plan_tenants", {"pending": "tenant-a"})
+    request = _request("tenant-a")
+    request.state.principal = SimpleNamespace(subject="reviewer-a")
+
+    result = api.reject_plan(
+        "pending", api.RejectionRequest(reason="   Outside approved scope. "), request
+    )
+
+    assert result["action"]["status"] == "rejected"
+    assert result["action"]["decision_by"] == "reviewer-a"
+    assert result["action"]["decision_reason"] == "Outside approved scope."
+
+
+def test_reject_plan_hides_foreign_tenant_action():
+    request = _request("tenant-a")
+
+    with pytest.raises(HTTPException) as error:
+        api.reject_plan("foreign", api.RejectionRequest(reason="Not in scope."), request)
+
+    assert error.value.status_code == 404
+
+
+def test_rejection_request_requires_nonblank_reason():
+    with pytest.raises(ValueError):
+        api.RejectionRequest(reason="   ")

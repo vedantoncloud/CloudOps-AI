@@ -22,6 +22,7 @@ class ActionStatus(str, Enum):
     ROLLBACK_REQUIRED = "rollback_required"
     ROLLED_BACK = "rolled_back"
     CANCELLED = "cancelled"
+    REJECTED = "rejected"
 
 
 @dataclass
@@ -47,6 +48,8 @@ class ActionPlan:
     requires_approval: bool = True
     rollback_available: bool = False
     status: ActionStatus = ActionStatus.PLANNED
+    decision_by: str | None = None
+    decision_reason: str | None = None
     action_id: str = field(
         default_factory=lambda: f"act-{uuid4().hex}"
     )

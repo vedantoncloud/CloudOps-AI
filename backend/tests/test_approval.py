@@ -44,6 +44,34 @@ def test_pending_action_can_be_cancelled():
     assert result.status == ActionStatus.CANCELLED
 
 
+def test_pending_action_can_be_rejected_with_reviewer_and_reason():
+    action = create_pending_action()
+
+    result = ApprovalManager().reject(action, "reviewer-1", "Risk exceeds policy.")
+
+    assert result.status == ActionStatus.REJECTED
+    assert result.decision_by == "reviewer-1"
+    assert result.decision_reason == "Risk exceeds policy."
+
+
+@pytest.mark.parametrize(
+    ("reviewer", "reason"),
+    [(" ", "because"), ("reviewer-1", "  ")],
+)
+def test_rejection_requires_reviewer_and_reason(reviewer, reason):
+    with pytest.raises(ValueError):
+        ApprovalManager().reject(create_pending_action(), reviewer, reason)
+
+
+def test_rejected_action_cannot_be_rejected_again():
+    action = create_pending_action()
+    manager = ApprovalManager()
+    manager.reject(action, "reviewer-1", "No longer needed.")
+
+    with pytest.raises(ValueError, match="pending approval"):
+        manager.reject(action, "reviewer-2", "Changed mind.")
+
+
 def test_approved_action_cannot_be_approved_again():
     manager = ApprovalManager()
 
