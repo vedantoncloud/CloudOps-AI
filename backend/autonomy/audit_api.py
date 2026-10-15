@@ -3,7 +3,7 @@ import os
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 from pydantic import BaseModel
 
 from autonomy.audit import AuditEvent
@@ -129,6 +129,7 @@ def _normalize_datetime(value: datetime) -> datetime:
     response_model=list[AuditEventResponse],
 )
 def list_audit_events(
+    request: Request,
     action_id: str | None = Query(default=None),
     resource_id: str | None = Query(default=None),
     resource_type: str | None = Query(default=None),
@@ -140,6 +141,7 @@ def list_audit_events(
     limit: int | None = Query(default=None, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
 ) -> list[AuditEventResponse]:
+    actor_id = _visible_actor_filter(request, actor_id)
     events = _filter_audit_events(
         action_id=action_id,
         resource_id=resource_id,
@@ -163,6 +165,7 @@ def list_audit_events(
     response_class=Response,
 )
 def export_audit_events(
+    request: Request,
     action_id: str | None = Query(default=None),
     resource_id: str | None = Query(default=None),
     resource_type: str | None = Query(default=None),
@@ -175,6 +178,7 @@ def export_audit_events(
     offset: int = Query(default=0, ge=0),
 ) -> Response:
     """Export matching audit events as newline-delimited JSON."""
+    actor_id = _visible_actor_filter(request, actor_id)
     events = _filter_audit_events(
         action_id=action_id,
         resource_id=resource_id,
@@ -202,3 +206,13 @@ def export_audit_events(
             "Content-Disposition": 'attachment; filename="audit-events.jsonl"'
         },
     )
+
+
+def _visible_actor_filter(request: Request, requested_actor: str | None) -> str | None:
+    """Restrict non-admin audit feeds and exports to their own events."""
+    principal = getattr(request.state, "principal", None)
+    if principal is None or principal.role == "admin":
+        return requested_actor
+    if requested_actor is not None and requested_actor != principal.subject:
+        raise HTTPException(status_code=403, detail="Audit events are limited to the authenticated actor")
+    return principal.subject

@@ -1,6 +1,6 @@
 ﻿# CloudOps AI Roadmap
 
-**Repository audit:** 2026-10-14, updated after production authentication startup validation. This roadmap contains **10 remaining tasks**: the ten numbered incomplete outcomes below. Sub-bullets and acceptance criteria do not count separately. Recount only when a complete outcome ships or scope is explicitly changed.
+**Repository audit:** 2026-10-15, updated after audit-feed actor scoping. This roadmap contains **10 remaining tasks**: the ten numbered incomplete outcomes below. Sub-bullets and acceptance criteria do not count separately. Recount only when a complete outcome ships or scope is explicitly changed.
 
 ## Current state
 
@@ -22,6 +22,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 - Production environment startup validation rejects permissive development authentication and requires configured bearer tokens.
 - Aggregate EC2 efficiency, cost, rightsizing, and security insights analyze only authenticated-tenant inventory in token mode.
 - Authenticated operators can list their durable autonomous run history through `/autonomy/runs`, with lifecycle summaries and bounded pagination.
+- Non-admin authenticated users can list and export only their own audit events; admins retain cross-actor audit access.
 
 ## Prioritized remaining work
 
@@ -49,7 +50,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 
 - Authentication defaults to permissive development mode unless `CLOUDOPS_ENV=production` is set; production then requires token mode and configured tokens. The token boundary does not itself provide credential lifecycle management.
 - Tenant isolation is partial: provider-neutral resources, EC2 list/summary/detail and aggregate insights, and direct S3 bucket routes are filtered by ownership tags, while AWS account credentials are not tenant-scoped. S3 checks require bucket-tag read permission and hide resources when ownership cannot be established.
-- Audit actor attribution is implemented for autonomous runs, not consistently for all API operations.
+- Audit actor attribution is implemented for autonomous runs, not consistently for all API operations. Audit event listing/export is actor-scoped for non-admin users; the underlying shared trail and operational diagnostics still require broader tenant and attribution work.
 - Persistent audit stores are SQLite local files; there is no shared production database, migration, backup, or restore workflow.
 - Real infrastructure mutations are intentionally disabled; planning, governance, and simulation must not be represented as completed remediation.
 - `/health` returns static application status and does not establish AWS or persistence readiness.
