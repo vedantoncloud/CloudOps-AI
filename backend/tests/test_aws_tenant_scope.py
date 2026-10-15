@@ -207,3 +207,61 @@ def test_s3_route_allows_owned_bucket(monkeypatch):
     )
 
     assert response.status_code == 200
+
+
+def test_ec2_plan_generation_hides_foreign_instances(monkeypatch):
+    client = tenant_client(monkeypatch)
+    service = FakeAWSService()
+    monkeypatch.setattr("autonomy.api.aws_service", service)
+    called = []
+    monkeypatch.setattr(service, "get_ec2_insights", lambda instance_id: called.append(instance_id))
+
+    response = client.get(
+        "/autonomy/ec2/instances/i-bbbbbbbb/plans",
+        headers={"Authorization": "Bearer token-a"},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "EC2 instance not found"}
+    assert called == []
+
+
+@pytest.mark.parametrize("bucket", ["foreign", "untagged", "missing"])
+def test_s3_plan_generation_hides_unowned_buckets(monkeypatch, bucket):
+    client = tenant_client(monkeypatch)
+    service = FakeAWSService()
+    monkeypatch.setattr("autonomy.api.aws_service", service)
+    called = []
+    monkeypatch.setattr(
+        service, "get_s3_bucket_insights",
+        lambda bucket_name, **kwargs: called.append(bucket_name),
+        raising=False,
+    )
+
+    response = client.get(
+        f"/autonomy/s3/buckets/{bucket}/plans",
+        headers={"Authorization": "Bearer token-a"},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "S3 bucket not found"}
+    assert called == []
+
+
+def test_plan_generation_allows_tenant_owned_s3_bucket(monkeypatch):
+    client = tenant_client(monkeypatch)
+    service = FakeAWSService()
+    monkeypatch.setattr("autonomy.api.aws_service", service)
+    monkeypatch.setattr(
+        service, "get_s3_bucket_insights",
+        lambda bucket_name, **kwargs: {"status": "healthy", "insights": []},
+        raising=False,
+    )
+
+    response = client.get(
+        "/autonomy/s3/buckets/owned/plans",
+        headers={"Authorization": "Bearer token-a"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["plan_count"] == 0

@@ -12,6 +12,7 @@ from autonomy.executor import ActionExecutor
 from autonomy.policy_engine import PolicyEngine
 from autonomy.recovery import RecoveryCoordinator
 from autonomy.verifier import ActionVerifier
+from autonomy.resource_inventory_api import _resource_tenant
 from services.aws_service import AWSService
 
 
@@ -84,8 +85,35 @@ def _action_response(action):
     }
 
 
+def _require_tenant_ec2_instance(request: Request, instance_id: str) -> None:
+    """Keep plan generation inside the same ownership boundary as EC2 reads."""
+    if not getattr(request.state, "tenant_scoped", False):
+        return
+    inventory = aws_service.get_ec2_instances()
+    if inventory.get("status") != "healthy":
+        raise HTTPException(status_code=503, detail="EC2 inventory is unavailable")
+    tenant_id = request.state.tenant_id
+    if not any(
+        item.get("instance_id") == instance_id
+        and _resource_tenant({"tags": item.get("tags", {})}) == tenant_id
+        for item in inventory.get("instances", [])
+    ):
+        raise HTTPException(status_code=404, detail="EC2 instance not found")
+
+
+def _require_tenant_s3_bucket(request: Request, bucket_name: str) -> None:
+    """Fail closed when bucket ownership cannot be established."""
+    if not getattr(request.state, "tenant_scoped", False):
+        return
+    ownership = aws_service.get_s3_bucket_tags(bucket_name)
+    if (ownership.get("status") != "healthy"
+            or _resource_tenant({"tags": ownership.get("tags", {})}) != request.state.tenant_id):
+        raise HTTPException(status_code=404, detail="S3 bucket not found")
+
+
 @router.get("/ec2/instances/{instance_id}/plans")
 def plan_ec2_actions(instance_id: str, request: Request):
+    _require_tenant_ec2_instance(request, instance_id)
     result = aws_service.get_ec2_insights(instance_id)
 
     if result["status"] == "unhealthy":
@@ -106,6 +134,7 @@ def plan_s3_actions(
     prefix: str | None = None,
     max_keys: int | None = None,
 ):
+    _require_tenant_s3_bucket(request, bucket_name)
     if max_keys is not None and not 1 <= max_keys <= 1000:
         raise HTTPException(
             status_code=400,
