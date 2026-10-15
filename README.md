@@ -1,11 +1,18 @@
 # CloudOps AI
 
 CloudOps AI is a cloud operations platform designed to help monitor,
-analyze, and manage cloud infrastructure with automation and AI-powered insights.
+analyze, and manage cloud infrastructure through a secured browser console and API.
 
 ## Project Status
 
-?? Under active development.
+Under active development. The FastAPI application serves an authenticated
+operations console at `/console` for EC2/S3 inventory, resource governance,
+pending approvals, and actor-scoped autonomous run history. In development
+auth mode it connects without a token; in token mode, enter a bearer token in
+the console. The token is held in page memory and cleared when the page closes.
+
+The console and API show planning and governance information. Infrastructure
+mutations remain disabled; action execution is dry-run only.
 
 ## API access control
 
@@ -37,14 +44,11 @@ This tag convention does not yet scope the direct `/cloud/aws/*` inventory and
 insight routes, or provide AWS account isolation, so resource-level tenant
 isolation remains incomplete.
 
-## Planned Stack
+## Runtime
 
-- React
 - FastAPI
-- PostgreSQL
 - AWS
-- Docker
-- GitHub Actions
-- Terraform
-- Kubernetes
-- AI/LLM integration
+
+The console is a small browser client served directly by FastAPI. Shared
+production persistence, container deployment, CI, infrastructure as code, and
+LLM integration are not currently provided.

@@ -1,6 +1,6 @@
 ﻿# CloudOps AI Roadmap
 
-**Repository audit:** 2026-10-15, updated after audit-feed actor scoping. This roadmap contains **10 remaining tasks**: the ten numbered incomplete outcomes below. Sub-bullets and acceptance criteria do not count separately. Recount only when a complete outcome ships or scope is explicitly changed.
+**Repository audit:** 2026-10-15, updated after shipping the secured operations console. This roadmap contains **9 remaining tasks**: the nine numbered incomplete outcomes below. Sub-bullets and acceptance criteria do not count separately. Recount only when a complete outcome ships or scope is explicitly changed.
 
 ## Current state
 
@@ -8,7 +8,7 @@ CloudOps AI is a FastAPI backend with AWS EC2/S3 inventory and insight routes, p
 
 Recent commits added configurable bearer-token access control, admin-only audit diagnostics, autonomous-run audit attribution, provider-neutral resource tenant filtering, and tenant filtering for EC2 inventory/summary/detail and aggregate insights. In token mode, the `CloudOpsTenantId` tag scopes provider-neutral `/autonomy/resources` inventory/governance, EC2 inventory/summary/detail/aggregate insights, and direct S3 bucket inventory/detail/object/insight routes. S3 bucket access fails closed when its ownership tag cannot be read; deployments need `s3:GetBucketTagging` for those checks. The AWS client/account context is also shared rather than selected by tenant. Development remains the default environment and authentication mode, but `CLOUDOPS_ENV=production` now requires token mode and a nonempty token registry at startup. Tokens and claim validation exist; token issuance, rotation, revocation, and federation remain upstream responsibilities. Autonomous-run events include the authenticated subject; attribution is not consistently wired through other operations.
 
-The audit trail and idempotency/reconciliation state persist to SQLite files and have substantial validation and concurrency coverage. This is not a shared production database architecture. `ActionExecutor` rejects real infrastructure execution; execution remains dry-run only. Autonomous lifecycle audit events now back an authenticated, actor-scoped, paginated `/autonomy/runs` history endpoint. The repository has a README and roadmap, but `docs/` is empty. No frontend, Docker/container setup, CI workflow, Terraform/Kubernetes configuration, migration framework, or LLM integration was found. Requirements are pinned, but no supported Python version is documented. Cost insights describe qualitative estimates, not live billing data.
+The audit trail and idempotency/reconciliation state persist to SQLite files and have substantial validation and concurrency coverage. This is not a shared production database architecture. `ActionExecutor` rejects real infrastructure execution; execution remains dry-run only. Autonomous lifecycle audit events now back an authenticated, actor-scoped, paginated `/autonomy/runs` history endpoint. `/console` serves a lightweight authenticated browser console for inventory, governance, approvals, and run history. The repository has a README and roadmap, but `docs/` is empty. No Docker/container setup, CI workflow, Terraform/Kubernetes configuration, migration framework, or LLM integration was found. Requirements are pinned, but no supported Python version is documented. Cost insights describe qualitative estimates, not live billing data.
 
 ## Completed work
 
@@ -30,6 +30,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 - Authenticated users can retrieve an action plan's current state through `GET /autonomy/plans/{action_id}`; token-mode lookups hide plans belonging to another tenant.
 - Operators can distinguish process liveness (`/health`) from AWS dependency readiness (`/ready`); readiness returns 503 when AWS is unavailable and does not expose account or error details.
 - Authenticated users can resume S3 object listings from an AWS continuation token through `/cloud/aws/s3/buckets/{bucket_name}/objects`; responses expose truncation state and the next token for incremental browsing.
+- Authenticated users can use `/console` to browse EC2/S3 inventory, inspect resource governance, review and decide pending approvals, and view their autonomous run history; bearer credentials stay in page memory.
 
 ## Prioritized remaining work
 
@@ -49,9 +50,9 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 
 8. **Specify audit trust, retention, and recovery guarantees (P1).** Document the hash-chain threat model and external key/anchor strategy; define tamper detection, export verification, retention, access, backup, and disaster recovery. A hash chain stored in a writable database cannot by itself prevent an attacker with full store access from rewriting the history and recomputing the chain. **Done when:** an operator can independently verify exported history and follow tested backup/restore and incident procedures.
 
-9. **Settle user-facing product scope (P2).** Decide whether the planned React console and AI/LLM integration remain in scope. The API provides authenticated actor-scoped autonomous run history, a tenant-scoped filterable action-plan queue, and a tenant-scoped paginated pending approval queue; a secured UI for inventory, governance, approvals, and run history remains outstanding if the console stays in scope. Put any model-assisted features behind explicit policy and human review. Otherwise, update the README to state the supported API-only scope and remove unsupported planned-stack claims. **Done when:** product scope and deliverables agree, and AI-driven mutations cannot bypass approval/safety controls.
 
-10. **Publish operating and support documentation (P2).** Expand the short README with setup, configuration, API/auth model, AWS IAM permissions, data flows, architecture, limitations, incident response, upgrade, and support guidance. **Done when:** a new operator can deploy, validate, recover, and safely disable the service using repository documentation alone.
+
+9. **Publish operating and support documentation (P2).** Expand the short README with setup, configuration, API/auth model, AWS IAM permissions, data flows, architecture, limitations, incident response, upgrade, and support guidance. **Done when:** a new operator can deploy, validate, recover, and safely disable the service using repository documentation alone.
 
 ## Technical debt and production-readiness gaps
 
@@ -62,11 +63,11 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 - Real infrastructure mutations are intentionally disabled; planning, governance, and simulation must not be represented as completed remediation.
 - `/health` remains a static liveness check; `/ready` checks AWS but does not yet check persistence readiness.
 - `/ready` establishes AWS readiness; it does not yet check persistence readiness.
-- No CI workflow, deployment/container configuration, IaC, frontend, or substantive operator documentation was found; `docs/` is empty.
+- No CI workflow, deployment/container configuration, IaC, or substantive operator documentation was found; `docs/` is empty. The current console is a lightweight browser client served by FastAPI.
 - No supported Python runtime or automated dependency update/security workflow is documented.
 - Cost insights are qualitative; live billing/pricing integration is not present.
 - The checkout contains untracked SQLite database files. They were left untouched and are not part of this roadmap change.
 
 ## Scope and count
 
-This is a finite backlog of ten delivery outcomes, not a claim to enumerate every possible product feature. Items 1–8 cover security, safe execution, and operational readiness; items 9–10 settle product scope and operating documentation. Add numbered work only when deliberately replacing or extending this scope.
+This is a finite backlog of nine remaining delivery outcomes, not a claim to enumerate every possible product feature. Items 1–8 cover security, safe execution, and operational readiness; item 9 covers operating documentation. Add numbered work only when deliberately replacing or extending this scope.

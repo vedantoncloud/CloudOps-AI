@@ -1,4 +1,6 @@
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse
+from pathlib import Path
 import re
 
 from auth import AccessControlMiddleware
@@ -24,6 +26,8 @@ app = FastAPI(
 )
 app.add_middleware(AccessControlMiddleware)
 
+CONSOLE_PAGE = Path(__file__).parent / "static" / "console.html"
+
 
 aws_service = AWSService()
 
@@ -46,6 +50,12 @@ def root():
         "message": "CloudOps AI is running",
         "version": "0.1.0",
     }
+
+
+@app.get("/console", include_in_schema=False)
+def console():
+    """Serve the authenticated operations console."""
+    return FileResponse(CONSOLE_PAGE, media_type="text/html")
 
 
 @app.get("/health")
