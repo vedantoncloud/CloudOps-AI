@@ -21,6 +21,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 - Configurable development/token access modes, method-based reader/operator/admin authorization, tenant claim/header checks, admin-only audit diagnostics, autonomous-run actor attribution, and partial resource/EC2/S3 tenant filtering.
 - Production environment startup validation rejects permissive development authentication and requires configured bearer tokens.
 - Aggregate EC2 efficiency, cost, rightsizing, and security insights analyze only authenticated-tenant inventory in token mode.
+- Authenticated users can retrieve an individual EC2 inventory record through `GET /cloud/aws/ec2/instances/{instance_id}`; token-mode results use the tenant-filtered inventory and hide foreign, untagged, and missing IDs uniformly.
 - Authenticated operators can list their durable autonomous run history through `/autonomy/runs`, with lifecycle summaries and bounded pagination.
 - Authenticated users can browse the in-memory action-plan queue through `/autonomy/plans`, filter by lifecycle status, and page through results; token-mode plan access is restricted to the tenant that created each plan.
 - Non-admin authenticated users can list and export only their own audit events; admins retain cross-actor audit access.

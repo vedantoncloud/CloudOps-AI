@@ -85,6 +85,49 @@ def test_ec2_summary_counts_only_the_authenticated_tenants_instances(monkeypatch
     }
 
 
+def test_ec2_instance_details_returns_only_owned_inventory_record(monkeypatch):
+    response = tenant_client(monkeypatch).get(
+        "/cloud/aws/ec2/instances/i-aaaaaaaa",
+        headers={"Authorization": "Bearer token-a"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "service": "ec2",
+        "status": "healthy",
+        "instance": {
+            "instance_id": "i-aaaaaaaa",
+            "state": "running",
+            "tags": {"CloudOpsTenantId": "tenant-a"},
+        },
+    }
+
+
+@pytest.mark.parametrize("instance_id", ["i-bbbbbbbb", "i-cccccccc", "i-dddddddd"])
+def test_ec2_instance_details_hides_foreign_untagged_and_missing_records(monkeypatch, instance_id):
+    response = tenant_client(monkeypatch).get(
+        f"/cloud/aws/ec2/instances/{instance_id}",
+        headers={"Authorization": "Bearer token-a"},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "EC2 instance not found"}
+
+
+def test_ec2_instance_details_reports_inventory_unavailable(monkeypatch):
+    client = tenant_client(monkeypatch)
+    service = main.aws_service
+    monkeypatch.setattr(service, "get_ec2_instances", lambda *args: {"status": "unhealthy"})
+
+    response = client.get(
+        "/cloud/aws/ec2/instances/i-aaaaaaaa",
+        headers={"Authorization": "Bearer token-a"},
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "EC2 inventory is unavailable"}
+
+
 @pytest.mark.parametrize("path,method", [
     ("/cloud/aws/ec2/efficiency-insights", "get_ec2_efficiency_insights"),
     ("/cloud/aws/ec2/cost-insights", "get_ec2_cost_insights"),
