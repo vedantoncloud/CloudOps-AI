@@ -86,3 +86,23 @@ def test_console_exposes_ec2_and_s3_resource_details_and_metrics():
     assert "['Metrics',root+'/metrics']" in response.text
     assert "['Insights',root+'/insights']" in response.text
     assert "Promise.allSettled(paths.map(([,path])=>api(path)))" in response.text
+
+
+def test_console_exposes_bounded_s3_bucket_analysis_with_independent_results():
+    response = TestClient(app).get("/console")
+
+    assert response.status_code == 200
+    html = response.text
+    assert 'id="bucketAnalysis"' in html
+    assert 'id="analysisPrefix"' in html
+    assert 'id="loadBucketAnalysis"' in html
+    assert "new URLSearchParams({max_keys:'1000'})" in html
+    assert "query.set('prefix',prefix)" in html
+    assert "${base}/statistics?${query}" in html
+    assert "${base}/health?${query}" in html
+    assert "${base}/security-insights" in html
+    assert "${base}/cost-insights?${query}" in html
+    assert "${base}/largest-objects?${query}&top_n=10" in html
+    assert "Promise.allSettled(checks.map(([,path])=>api(path)))" in html
+    assert "outcome.reason.message" in html
+    assert "Results cover at most 1,000 matching objects." in html
