@@ -118,8 +118,22 @@ def readiness_check():
 
 
 @app.get("/cloud/aws/status")
-def aws_status():
-    return aws_service.get_status()
+def aws_status(request: Request):
+    result = aws_service.get_status()
+    if (
+        not getattr(request.state, "tenant_scoped", False)
+        or getattr(getattr(request.state, "principal", None), "role", None) == "admin"
+    ):
+        return result
+
+    # The configured AWS identity is shared by the service process today. Do
+    # not disclose its account number, principal ARN, or raw AWS error details
+    # to tenant users while account-specific credentials are not configured.
+    return {
+        key: result[key]
+        for key in ("provider", "status", "services", "message")
+        if key in result
+    }
 
 
 @app.get("/cloud/aws/services/{service_name}")

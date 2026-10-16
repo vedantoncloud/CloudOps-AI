@@ -21,6 +21,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 - Configurable development/token access modes, method-based reader/operator/admin authorization, tenant claim/header checks, admin-only audit diagnostics, autonomous-run actor attribution, and partial resource/EC2/S3 tenant filtering.
 - Production environment startup validation rejects permissive development authentication and requires configured bearer tokens.
 - Aggregate EC2 efficiency, cost, rightsizing, and security insights analyze only authenticated-tenant inventory in token mode.
+- Authenticated tenant users receive a sanitized AWS status response without the shared AWS account ID, principal ARN, or raw diagnostics; admins retain full status details.
 - Authenticated users can retrieve an individual EC2 inventory record through `GET /cloud/aws/ec2/instances/{instance_id}`; token-mode results use the tenant-filtered inventory and hide foreign, untagged, and missing IDs uniformly.
 - Authenticated operators can list their durable autonomous run history through `/autonomy/runs`, with lifecycle summaries and bounded pagination.
 - Authenticated users can browse the in-memory action-plan queue through `/autonomy/plans`, filter by lifecycle status, and page through results; token-mode plan access is restricted to the tenant that created each plan.
@@ -68,7 +69,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 ## Technical debt and production-readiness gaps
 
 - Authentication defaults to permissive development mode unless `CLOUDOPS_ENV=production` is set; production then requires token mode and configured tokens. The token boundary does not itself provide credential lifecycle management.
-- Tenant isolation is partial: provider-neutral resources, EC2 list/summary/detail and aggregate insights, and direct S3 bucket routes are filtered by ownership tags, while AWS account credentials are not tenant-scoped. S3 checks require bucket-tag read permission and hide resources when ownership cannot be established.
+- Tenant isolation is partial: provider-neutral resources, EC2 list/summary/detail and aggregate insights, and direct S3 bucket routes are filtered by ownership tags, while AWS account credentials are not tenant-scoped. S3 checks require bucket-tag read permission and hide resources when ownership cannot be established. The shared AWS account identity remains available to admins through `/cloud/aws/status`.
 - Audit actor attribution is implemented for autonomous runs and approval/rejection/cancellation plan state, but not consistently for all API operations. Audit event listing/export is actor-scoped for non-admin users; the underlying shared trail and operational diagnostics still require broader tenant and attribution work.
 - Persistent audit stores are SQLite local files; there is no shared production database, migration, backup, or restore workflow.
 - Real infrastructure mutations are intentionally disabled; planning, governance, and simulation must not be represented as completed remediation.

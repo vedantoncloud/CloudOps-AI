@@ -26,6 +26,17 @@ class FakeAWSService:
     def get_ec2_summary(self):
         raise AssertionError("tenant summary must be computed from scoped inventory")
 
+    def get_status(self):
+        return {
+            "provider": "AWS",
+            "status": "connected",
+            "account_id": "123456789012",
+            "arn": "arn:aws:iam::123456789012:user/cloudops",
+            "services": {"ec2": {"status": "healthy"}},
+            "message": "AWS services are healthy",
+            "error": "internal AWS diagnostic",
+        }
+
     def get_s3_buckets(self):
         return {
             "service": "s3",
@@ -57,9 +68,35 @@ def tenant_client(monkeypatch):
         tokens={
             "token-a": Principal("alice", "reader", "tenant-a"),
             "operator-a": Principal("bob", "operator", "tenant-a"),
+            "admin-a": Principal("dana", "admin", "tenant-a"),
         },
     )
     return TestClient(app)
+
+
+def test_aws_status_hides_shared_account_identity_and_raw_errors_from_tenant(monkeypatch):
+    response = tenant_client(monkeypatch).get(
+        "/cloud/aws/status", headers={"Authorization": "Bearer token-a"}
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "provider": "AWS",
+        "status": "connected",
+        "services": {"ec2": {"status": "healthy"}},
+        "message": "AWS services are healthy",
+    }
+
+
+def test_aws_status_retains_full_diagnostics_for_admin(monkeypatch):
+    client = tenant_client(monkeypatch)
+    response = client.get(
+        "/cloud/aws/status", headers={"Authorization": "Bearer admin-a"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["account_id"] == "123456789012"
+    assert response.json()["arn"] == "arn:aws:iam::123456789012:user/cloudops"
 
 
 def test_ec2_inventory_hides_other_tenants_and_untagged_instances(monkeypatch):
