@@ -53,6 +53,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 - Operators can inspect a plan from the console queue and retrieve its current tenant-scoped state, including the full plan details.
 - The operations console can load EC2 fleet efficiency, cost, rightsizing, and security insights from the aggregate APIs; token-mode analysis is limited to authenticated-tenant instances.
 - Authenticated users can browse audit history in the operations console, filter events by resource ID, and load additional bounded pages through the actor-scoped audit API.
+- Operators can page through the pending approval queue and authenticated users can page through their autonomous run history in the operations console, with bounded requests, visible totals, and independent pagination state.
 - Authenticated users can download the complete audit feed matching the console's resource filter as newline-delimited JSON; the export request retains bearer authentication and server-enforced actor scope.
 - The operations console can open EC2 inventory and metrics or S3 bucket details and insights from each resource row, with independent error reporting when one detail request fails.
 - Operators can download the loaded EC2 or S3 inventory pages as search-aware CSV, with correctly quoted cells and spreadsheet formula-injection protection.

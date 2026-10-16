@@ -35,8 +35,18 @@ def test_console_uses_tenant_api_contracts_and_does_not_persist_bearer_token():
     response = TestClient(app).get("/console")
 
     assert "/autonomy/resources/" in response.text
-    assert "/autonomy/approvals?limit=50" in response.text
-    assert "/autonomy/runs?limit=50" in response.text
+    assert "`/autonomy/approvals?${query}`" in response.text
+    assert "`/autonomy/runs?${query}`" in response.text
+    assert 'id="moreApprovals"' in response.text
+    assert 'id="approvalPageStatus"' in response.text
+    assert 'id="moreRuns"' in response.text
+    assert 'id="runPageStatus"' in response.text
+    assert "loadApprovals(true)" in response.text
+    assert "loadRuns(true)" in response.text
+    assert "$('moreApprovals').disabled=approvalOffset>=data.total" in response.text
+    assert "$('moreRuns').disabled=runOffset>=data.total" in response.text
+    assert "$('approvalRows').append(tr)" in response.text
+    assert "$('runRows').append(tr)" in response.text
     assert "new URLSearchParams({limit:String(planPageSize),offset:String(planOffset)})" in response.text
     assert "loadPlans(true)" in response.text
     assert "$('morePlans').disabled=planOffset>=data.total" in response.text
