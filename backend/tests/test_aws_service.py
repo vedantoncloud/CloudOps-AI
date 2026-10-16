@@ -1336,7 +1336,24 @@ def test_ec2_metrics_api_accepts_valid_instance_id():
 
     assert response.status_code == 200
     assert response.json()["instance_id"] == "i-1234567890"
-    mock_get_metrics.assert_called_once_with("i-1234567890")
+    mock_get_metrics.assert_called_once_with("i-1234567890", lookback_hours=1)
+
+
+def test_ec2_metrics_api_forwards_selected_bounded_window():
+    with patch("main.aws_service.get_ec2_metrics", return_value={"status": "healthy"}) as metrics:
+        response = TestClient(app).get(
+            "/cloud/aws/ec2/instances/i-1234567890/metrics?lookback_hours=6"
+        )
+    assert response.status_code == 200
+    metrics.assert_called_once_with("i-1234567890", lookback_hours=6)
+
+
+def test_ec2_metrics_api_rejects_window_outside_supported_range():
+    response = TestClient(app).get(
+        "/cloud/aws/ec2/instances/i-1234567890/metrics?lookback_hours=25"
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "lookback_hours must be between 1 and 24"
 
 
 

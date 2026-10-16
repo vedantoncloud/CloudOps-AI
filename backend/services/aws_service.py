@@ -785,12 +785,12 @@ class AWSService:
                 "error": str(error),
             }
 
-    def get_ec2_cpu_utilization(self, instance_id):
+    def get_ec2_cpu_utilization(self, instance_id, lookback_hours=1):
         try:
             cloudwatch = boto3.client("cloudwatch")
 
             end_time = datetime.now(timezone.utc)
-            start_time = end_time - timedelta(minutes=10)
+            start_time = end_time - timedelta(hours=lookback_hours)
 
             response = cloudwatch.get_metric_statistics(
                 Namespace="AWS/EC2",
@@ -803,7 +803,7 @@ class AWSService:
                 ],
                 StartTime=start_time,
                 EndTime=end_time,
-                Period=300,
+                Period=60 if lookback_hours <= 3 else 300,
                 Statistics=["Average"],
             )
 
@@ -818,10 +818,8 @@ class AWSService:
                     "value": None,
                 }
 
-            latest = max(
-                datapoints,
-                key=lambda datapoint: datapoint.get("Timestamp")
-            )
+            datapoints = sorted(datapoints, key=lambda point: point.get("Timestamp"))
+            latest = datapoints[-1]
 
             return {
                 "service": "cloudwatch",
@@ -829,6 +827,11 @@ class AWSService:
                 "instance_id": instance_id,
                 "metric": "CPUUtilization",
                 "value": latest.get("Average"),
+                "lookback_hours": lookback_hours,
+                "datapoints": [
+                    {"timestamp": point["Timestamp"].isoformat(), "value": point.get("Average")}
+                    for point in datapoints if point.get("Timestamp")
+                ],
                 "timestamp": (
                     latest.get("Timestamp").isoformat()
                     if latest.get("Timestamp")
@@ -844,14 +847,15 @@ class AWSService:
                 "error": str(error),
             }
 
-    def get_ec2_network_utilization(self, instance_id):
+    def get_ec2_network_utilization(self, instance_id, lookback_hours=1):
         try:
             cloudwatch = boto3.client("cloudwatch")
 
             end_time = datetime.now(timezone.utc)
-            start_time = end_time - timedelta(minutes=10)
+            start_time = end_time - timedelta(hours=lookback_hours)
 
             metrics = {}
+            series = {}
 
             for metric_name in ["NetworkIn", "NetworkOut"]:
                 response = cloudwatch.get_metric_statistics(
@@ -865,27 +869,32 @@ class AWSService:
                     ],
                     StartTime=start_time,
                     EndTime=end_time,
-                    Period=300,
+                    Period=60 if lookback_hours <= 3 else 300,
                     Statistics=["Average"],
                 )
 
                 datapoints = response.get("Datapoints", [])
 
                 if datapoints:
-                    latest = max(
-                        datapoints,
-                        key=lambda datapoint: datapoint.get("Timestamp")
-                    )
+                    datapoints = sorted(datapoints, key=lambda point: point.get("Timestamp"))
+                    latest = datapoints[-1]
 
                     metrics[metric_name] = latest.get("Average")
+                    series[metric_name] = [
+                        {"timestamp": point["Timestamp"].isoformat(), "value": point.get("Average")}
+                        for point in datapoints if point.get("Timestamp")
+                    ]
                 else:
                     metrics[metric_name] = None
+                    series[metric_name] = []
 
             return {
                 "service": "cloudwatch",
                 "status": "healthy",
                 "instance_id": instance_id,
                 "metrics": metrics,
+                "datapoints": series,
+                "lookback_hours": lookback_hours,
             }
 
         except (BotoCoreError, ClientError) as error:
@@ -896,10 +905,10 @@ class AWSService:
                 "error": str(error),
             }
 
-    def get_ec2_metrics(self, instance_id):
+    def get_ec2_metrics(self, instance_id, lookback_hours=1):
         try:
-            cpu = self.get_ec2_cpu_utilization(instance_id)
-            network = self.get_ec2_network_utilization(instance_id)
+            cpu = self.get_ec2_cpu_utilization(instance_id, lookback_hours)
+            network = self.get_ec2_network_utilization(instance_id, lookback_hours)
             status = self.get_ec2_instance_status(instance_id)
 
             if (

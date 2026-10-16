@@ -687,7 +687,7 @@ def aws_ec2_instance_status(instance_id: str, request: Request):
 
 
 @app.get("/cloud/aws/ec2/instances/{instance_id}/metrics")
-def aws_ec2_metrics(instance_id: str, request: Request):
+def aws_ec2_metrics(instance_id: str, request: Request, lookback_hours: int = 1):
     if not re.fullmatch(r"i-[0-9a-fA-F]{8,17}", instance_id):
         raise HTTPException(
             status_code=400,
@@ -695,7 +695,9 @@ def aws_ec2_metrics(instance_id: str, request: Request):
         )
 
     _require_tenant_ec2_instance(request, instance_id)
-    result = aws_service.get_ec2_metrics(instance_id)
+    if not 1 <= lookback_hours <= 24:
+        raise HTTPException(status_code=400, detail="lookback_hours must be between 1 and 24")
+    result = aws_service.get_ec2_metrics(instance_id, lookback_hours=lookback_hours)
 
     if result["status"] == "unhealthy":
         raise HTTPException(
