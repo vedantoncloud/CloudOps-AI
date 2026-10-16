@@ -59,3 +59,15 @@ def test_console_is_protected_by_token_authentication():
     assert client.get("/console").status_code == 401
     response = client.get("/console", headers={"Authorization": "Bearer valid"})
     assert response.status_code == 200
+
+
+def test_console_exposes_ec2_and_s3_resource_details_and_metrics():
+    response = TestClient(app).get("/console")
+
+    assert response.status_code == 200
+    assert 'id="resourceDetails"' in response.text
+    assert "details.textContent='Details'" in response.text
+    assert "inspectDetails(x,aws?'ec2':'s3')" in response.text
+    assert "['Metrics',root+'/metrics']" in response.text
+    assert "['Insights',root+'/insights']" in response.text
+    assert "Promise.allSettled(paths.map(([,path])=>api(path)))" in response.text
