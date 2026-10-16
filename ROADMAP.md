@@ -1,6 +1,6 @@
 ﻿# CloudOps AI Roadmap
 
-**Repository audit:** 2026-10-15, updated after shipping the secured operations console. This roadmap contains **9 remaining tasks**: the nine numbered incomplete outcomes below. Sub-bullets and acceptance criteria do not count separately. Recount only when a complete outcome ships or scope is explicitly changed.
+**Repository audit:** 2026-10-16, updated after adding action-plan inspection to the secured operations console. This roadmap contains **9 remaining tasks**: the nine numbered incomplete outcomes below. Sub-bullets and acceptance criteria do not count separately. Recount only when a complete outcome ships or scope is explicitly changed.
 
 ## Current state
 
@@ -35,6 +35,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 - The operations console can create action plans from EC2/S3 resource insights, browse and filter the plan queue, evaluate plans, cancel eligible plans, and run approved plans in dry-run mode.
 - The operations console can browse S3 bucket objects by prefix, choose a bounded page size, and continue through truncated listings.
 - The operations console can page through action plans in batches of 50, append older plans, and reset pagination when the status filter or refresh changes.
+- Operators can inspect a plan from the console queue and retrieve its current tenant-scoped state, including the full plan details.
 - The operations console can load EC2 fleet efficiency, cost, rightsizing, and security insights from the aggregate APIs; token-mode analysis is limited to authenticated-tenant instances.
 - Authenticated users can browse audit history in the operations console, filter events by resource ID, and load additional bounded pages through the actor-scoped audit API.
 - The operations console can open EC2 inventory and metrics or S3 bucket details and insights from each resource row, with independent error reporting when one detail request fails.
@@ -70,7 +71,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 - Persistent audit stores are SQLite local files; there is no shared production database, migration, backup, or restore workflow.
 - Real infrastructure mutations are intentionally disabled; planning, governance, and simulation must not be represented as completed remediation.
 - `/health` remains a static liveness check; `/ready` checks AWS and configured persistence stores but does not yet provide structured logs, request correlation, metrics, or actionable diagnostic signals.
-- No CI workflow, deployment/container configuration, IaC, or substantive operator documentation was found; `docs/` is empty. The console is a lightweight browser client served by FastAPI, with inventory/governance, plan generation and review, approvals, and run history.
+- No CI workflow, deployment/container configuration, IaC, or substantive operator documentation was found; `docs/` is empty. The console is a lightweight browser client served by FastAPI, with inventory/governance, plan generation, inspection and review, approvals, and run history.
 - No supported Python runtime or automated dependency update/security workflow is documented.
 - Cost insights are qualitative; live billing/pricing integration is not present.
 - The checkout contains untracked SQLite database files. They were left untouched and are not part of this roadmap change.

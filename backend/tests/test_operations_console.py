@@ -21,6 +21,7 @@ def test_console_is_served_to_authenticated_reader():
     assert "Next page" in response.text
     assert 'id="morePlans"' in response.text
     assert 'id="planPageStatus"' in response.text
+    assert 'id="planDetails"' in response.text
     assert 'data-tab="audit"' in response.text
     assert 'id="auditRows"' in response.text
     assert 'id="moreAudit"' in response.text
@@ -35,6 +36,9 @@ def test_console_uses_tenant_api_contracts_and_does_not_persist_bearer_token():
     assert "`/autonomy/plans?limit=${planPageSize}&offset=${planOffset}`" in response.text
     assert "loadPlans(true)" in response.text
     assert "$('morePlans').disabled=planOffset>=data.total" in response.text
+    assert "api(`/autonomy/plans/${encodeURIComponent(actionId)}`)" in response.text
+    assert "JSON.stringify(data.action,null,2)" in response.text
+    assert "inspect.addEventListener('click',()=>inspectPlan(p.action_id))" in response.text
     assert "if(!append)planOffset=0" in response.text
     assert "/autonomy/ec2/instances/${encodeURIComponent(resource.id)}/plans" in response.text
     assert "/autonomy/s3/buckets/${encodeURIComponent(resource.id)}/plans" in response.text
