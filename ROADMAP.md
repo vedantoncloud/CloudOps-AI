@@ -50,6 +50,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 - Operators can inspect a plan from the console queue and retrieve its current tenant-scoped state, including the full plan details.
 - The operations console can load EC2 fleet efficiency, cost, rightsizing, and security insights from the aggregate APIs; token-mode analysis is limited to authenticated-tenant instances.
 - Authenticated users can browse audit history in the operations console, filter events by resource ID, and load additional bounded pages through the actor-scoped audit API.
+- Authenticated users can download the complete audit feed matching the console's resource filter as newline-delimited JSON; the export request retains bearer authentication and server-enforced actor scope.
 - The operations console can open EC2 inventory and metrics or S3 bucket details and insights from each resource row, with independent error reporting when one detail request fails.
 - EC2 and S3 action-plan generation uses `POST` because it creates plan records; token-mode readers are denied and operators can create tenant-scoped plans.
 - S3 object-list API requests default to a bounded 1,000-object page and expose AWS continuation state, so ordinary browser/API requests do not scan an entire bucket.
