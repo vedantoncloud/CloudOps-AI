@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+import pytest
+
 from fastapi.testclient import TestClient
 
 from autonomy import api
@@ -8,6 +10,23 @@ from main import app
 
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def isolate_plan_registry():
+    with api._registry_lock:
+        original_registry = api._plan_registry.copy()
+        original_tenants = api._plan_tenants.copy()
+        api._plan_registry.clear()
+        api._plan_tenants.clear()
+    try:
+        yield
+    finally:
+        with api._registry_lock:
+            api._plan_registry.clear()
+            api._plan_registry.update(original_registry)
+            api._plan_tenants.clear()
+            api._plan_tenants.update(original_tenants)
 
 
 def _plan(action_id, status=ActionStatus.PENDING_APPROVAL):
