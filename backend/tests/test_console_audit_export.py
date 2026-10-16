@@ -14,3 +14,13 @@ def test_console_can_download_actor_scoped_audit_export_with_current_filter():
     assert "query.set('resource_id',resource)" in html
     assert "Authorization:'Bearer '+bearer" in html
     assert "link.download='audit-events.jsonl'" in html
+    assert 'id="auditStart" type="datetime-local"' in html
+    assert 'id="auditEnd" type="datetime-local"' in html
+    assert "function auditFilters()" in html
+    assert "query.set(param,timestamp.toISOString())" in html
+    assert "query.set('start_time'" not in html  # filters are shared by list and export
+    assert "query=auditFilters();query.set('limit'" in html
+    assert "const query=auditFilters();const response=await fetch" in html
+    assert "Start time must be at or before end time." in html
+    assert "$('auditStart').addEventListener('change',()=>loadAudit())" in html
+    assert "$('auditEnd').addEventListener('change',()=>loadAudit())" in html
