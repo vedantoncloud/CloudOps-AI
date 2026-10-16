@@ -37,6 +37,13 @@ class FakeAWSService:
             "error": "internal AWS diagnostic",
         }
 
+    def get_service_health(self, service_name):
+        return {
+            "service": service_name,
+            "status": "unhealthy",
+            "error": "internal AWS diagnostic for account 123456789012",
+        }
+
     def get_s3_buckets(self):
         return {
             "service": "s3",
@@ -97,6 +104,24 @@ def test_aws_status_retains_full_diagnostics_for_admin(monkeypatch):
     assert response.status_code == 200
     assert response.json()["account_id"] == "123456789012"
     assert response.json()["arn"] == "arn:aws:iam::123456789012:user/cloudops"
+
+
+def test_aws_service_health_hides_raw_errors_from_tenant(monkeypatch):
+    response = tenant_client(monkeypatch).get(
+        "/cloud/aws/services/ec2", headers={"Authorization": "Bearer token-a"}
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"service": "ec2", "status": "unhealthy"}
+
+
+def test_aws_service_health_retains_diagnostics_for_admin(monkeypatch):
+    response = tenant_client(monkeypatch).get(
+        "/cloud/aws/services/ec2", headers={"Authorization": "Bearer admin-a"}
+    )
+
+    assert response.status_code == 200
+    assert "123456789012" in response.json()["error"]
 
 
 def test_ec2_inventory_hides_other_tenants_and_untagged_instances(monkeypatch):

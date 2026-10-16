@@ -137,8 +137,20 @@ def aws_status(request: Request):
 
 
 @app.get("/cloud/aws/services/{service_name}")
-def aws_service_health(service_name: str):
-    return aws_service.get_service_health(service_name)
+def aws_service_health(service_name: str, request: Request):
+    result = aws_service.get_service_health(service_name)
+    if (
+        getattr(request.state, "tenant_scoped", False)
+        and getattr(getattr(request.state, "principal", None), "role", None) != "admin"
+    ):
+        # A health check runs with the process-wide AWS identity. Keep raw SDK
+        # errors, which can contain account or request details, within admins.
+        return {
+            key: result[key]
+            for key in ("service", "status", "message")
+            if key in result
+        }
+    return result
 
 
 @app.get("/cloud/aws/ec2/summary")
