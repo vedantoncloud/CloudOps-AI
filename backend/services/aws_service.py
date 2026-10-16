@@ -225,10 +225,15 @@ class AWSService:
                 "error": str(error),
             }
 
-    def get_s3_buckets(self):
+    def get_s3_buckets(self, max_buckets=None, continuation_token=None):
         try:
             s3 = boto3.client("s3")
-            response = s3.list_buckets()
+            request = {}
+            if max_buckets is not None:
+                request["MaxBuckets"] = max_buckets
+            if continuation_token is not None:
+                request["ContinuationToken"] = continuation_token
+            response = s3.list_buckets(**request)
 
             buckets = []
 
@@ -242,11 +247,17 @@ class AWSService:
                     ),
                 })
 
-            return {
+            result = {
                 "service": "s3",
                 "status": "healthy",
                 "buckets": buckets,
             }
+            if max_buckets is not None or continuation_token is not None:
+                result.update({
+                    "is_truncated": bool(response.get("ContinuationToken")),
+                    "next_continuation_token": response.get("ContinuationToken"),
+                })
+            return result
 
         except (BotoCoreError, ClientError) as error:
             return {

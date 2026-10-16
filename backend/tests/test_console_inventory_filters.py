@@ -14,6 +14,16 @@ def test_console_exposes_inventory_search_and_ec2_state_filter():
     assert "toLocaleLowerCase().includes(search)" in html
 
 
+def test_console_exposes_resumable_s3_bucket_inventory():
+    response = TestClient(app).get("/console")
+    assert response.status_code == 200
+    html = response.text
+    assert 'id="bucketPageSize"' in html
+    assert 'id="moreBuckets"' in html
+    assert "next_continuation_token" in html
+    assert "continuation_token" in html
+
+
 def test_console_exposes_tenant_scoped_ec2_fleet_insights():
     response = TestClient(app).get("/console")
 
