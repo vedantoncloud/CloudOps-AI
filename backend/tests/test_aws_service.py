@@ -8,6 +8,29 @@ from services.aws_service import AWSService
 from main import app
 
 
+def test_get_ec2_instance_uses_direct_instance_id_lookup():
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_ec2 = mock_client.return_value
+        mock_ec2.describe_instances.return_value = {
+            "Reservations": [{"Instances": [{
+                "InstanceId": "i-aaaaaaaa",
+                "Tags": [{"Key": "CloudOpsTenantId", "Value": "tenant-a"}],
+            }]}]
+        }
+
+        result = AWSService().get_ec2_instance("i-aaaaaaaa")
+
+    mock_ec2.describe_instances.assert_called_once_with(InstanceIds=["i-aaaaaaaa"])
+    assert result == {
+        "service": "ec2",
+        "status": "healthy",
+        "instance": {
+            "instance_id": "i-aaaaaaaa",
+            "tags": {"CloudOpsTenantId": "tenant-a"},
+        },
+    }
+
+
 def test_get_status_when_aws_is_connected():
     fake_identity = {
         "Account": "123456789012",

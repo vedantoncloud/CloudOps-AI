@@ -225,6 +225,31 @@ class AWSService:
                 "error": str(error),
             }
 
+    def get_ec2_instance(self, instance_id):
+        """Look up one instance directly, independent of inventory pagination."""
+        try:
+            response = boto3.client("ec2").describe_instances(InstanceIds=[instance_id])
+            instances = [
+                instance
+                for reservation in response.get("Reservations", [])
+                for instance in reservation.get("Instances", [])
+            ]
+            if not instances:
+                return {"service": "ec2", "status": "healthy", "instance": None}
+            instance = instances[0]
+            tags = {
+                tag["Key"]: tag.get("Value")
+                for tag in instance.get("Tags", [])
+                if tag.get("Key")
+            }
+            return {
+                "service": "ec2",
+                "status": "healthy",
+                "instance": {"instance_id": instance.get("InstanceId"), "tags": tags},
+            }
+        except (BotoCoreError, ClientError) as error:
+            return {"service": "ec2", "status": "unhealthy", "error": str(error)}
+
     def get_s3_buckets(self, max_buckets=None, continuation_token=None):
         try:
             s3 = boto3.client("s3")

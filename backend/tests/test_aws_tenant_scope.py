@@ -23,6 +23,13 @@ class FakeAWSService:
             ],
         }
 
+    def get_ec2_instance(self, instance_id):
+        instances = {
+            item["instance_id"]: item
+            for item in self.get_ec2_instances()["instances"]
+        }
+        return {"status": "healthy", "instance": instances.get(instance_id)}
+
     def get_ec2_summary(self):
         raise AssertionError("tenant summary must be computed from scoped inventory")
 
@@ -203,6 +210,31 @@ def test_ec2_instance_details_reports_inventory_unavailable(monkeypatch):
 
     assert response.status_code == 503
     assert response.json() == {"detail": "EC2 inventory is unavailable"}
+
+
+def test_tenant_ec2_metric_lookup_finds_owned_instance_outside_first_inventory_page(monkeypatch):
+    client = tenant_client(monkeypatch)
+    service = main.aws_service
+    monkeypatch.setattr(
+        service,
+        "get_ec2_instances",
+        lambda *args, **kwargs: {"status": "healthy", "instances": [], "is_truncated": True, "next_token": "page-2"},
+    )
+    monkeypatch.setattr(
+        service,
+        "get_ec2_instance",
+        lambda instance_id: {
+            "status": "healthy",
+            "instance": {"instance_id": instance_id, "tags": {"CloudOpsTenantId": "tenant-a"}},
+        },
+    )
+
+    response = client.get(
+        "/cloud/aws/ec2/instances/i-dddddddd/metrics",
+        headers={"Authorization": "Bearer token-a"},
+    )
+
+    assert response.status_code == 200
 
 
 @pytest.mark.parametrize("path,method", [

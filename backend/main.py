@@ -190,15 +190,12 @@ def _require_tenant_ec2_instance(request: Request, instance_id: str) -> None:
     """Hide EC2 instances that are not explicitly owned by this tenant."""
     if not getattr(request.state, "tenant_scoped", False):
         return
-    inventory = aws_service.get_ec2_instances()
-    if inventory.get("status") != "healthy":
+    result = aws_service.get_ec2_instance(instance_id)
+    if result.get("status") != "healthy":
         raise HTTPException(status_code=503, detail="EC2 inventory is unavailable")
     tenant_id = request.state.tenant_id
-    owned = any(
-        item.get("instance_id") == instance_id
-        and _resource_tenant({"tags": item.get("tags", {})}) == tenant_id
-        for item in inventory.get("instances", [])
-    )
+    instance = result.get("instance")
+    owned = instance is not None and _resource_tenant({"tags": instance.get("tags", {})}) == tenant_id
     if not owned:
         # Use the same response for absent and foreign-owned resources.
         raise HTTPException(status_code=404, detail="EC2 instance not found")
