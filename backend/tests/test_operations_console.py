@@ -20,6 +20,10 @@ def test_console_is_served_to_authenticated_reader():
     assert "Object key prefix" in response.text
     assert "Next page" in response.text
     assert 'id="morePlans"' in response.text
+    assert 'id="moreInstances"' in response.text
+    assert 'id="instancePageSize"' in response.text
+    assert "params.set('next_token',instanceToken)" in response.text
+    assert "loadInventory(true)" in response.text
     assert 'id="planPageStatus"' in response.text
     assert 'id="planDetails"' in response.text
     assert 'data-tab="audit"' in response.text

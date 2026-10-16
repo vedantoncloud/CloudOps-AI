@@ -170,8 +170,11 @@ def aws_ec2_summary(request: Request):
     }
 
 
-def _tenant_ec2_instances(request: Request, state: str | None, tag: str | None):
-    result = aws_service.get_ec2_instances(state, tag)
+def _tenant_ec2_instances(request: Request, state: str | None, tag: str | None, max_results=None, next_token=None):
+    if max_results is None and next_token is None:
+        result = aws_service.get_ec2_instances(state, tag)
+    else:
+        result = aws_service.get_ec2_instances(state, tag, max_results, next_token)
     if result.get("status") != "healthy" or not getattr(request.state, "tenant_scoped", False):
         return result
     tenant_id = request.state.tenant_id
@@ -202,7 +205,7 @@ def _require_tenant_ec2_instance(request: Request, instance_id: str) -> None:
 
 
 @app.get("/cloud/aws/ec2/instances")
-def aws_ec2_instances(request: Request, state: str = None, tag: str = None):
+def aws_ec2_instances(request: Request, state: str = None, tag: str = None, max_results: int = None, next_token: str = None):
     valid_states = {
         "pending",
         "running",
@@ -218,7 +221,10 @@ def aws_ec2_instances(request: Request, state: str = None, tag: str = None):
             detail=f"Invalid EC2 state: {state}",
         )
 
-    return _tenant_ec2_instances(request, state, tag)
+    if max_results is not None and not 5 <= max_results <= 1000:
+        raise HTTPException(status_code=400, detail="max_results must be between 5 and 1000")
+
+    return _tenant_ec2_instances(request, state, tag, max_results, next_token)
 
 
 @app.get("/cloud/aws/s3/buckets")

@@ -3174,3 +3174,18 @@ def test_s3_cost_insights_api_access_denied():
 
     assert response.status_code == 403
     assert "AccessDenied" in response.json()["detail"]
+
+
+def test_get_ec2_instances_supports_bounded_resumable_pages():
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_ec2 = mock_client.return_value
+        mock_ec2.describe_instances.return_value = {"Reservations": [], "NextToken": "next-page"}
+
+        result = AWSService().get_ec2_instances(max_results=100, next_token="prior-page")
+
+    mock_ec2.describe_instances.assert_called_once_with(
+        MaxResults=100, NextToken="prior-page"
+    )
+    assert result["instances"] == []
+    assert result["is_truncated"] is True
+    assert result["next_token"] == "next-page"

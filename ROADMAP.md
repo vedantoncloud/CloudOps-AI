@@ -1,6 +1,6 @@
 ﻿# CloudOps AI Roadmap
 
-**Repository audit:** 2026-10-16, updated after adding bounded S3 bucket analysis to the secured operations console. This roadmap contains **9 remaining tasks**: the nine numbered incomplete outcomes below. Sub-bullets and acceptance criteria do not count separately. Recount only when a complete outcome ships or scope is explicitly changed.
+**Repository audit:** 2026-10-16, updated after adding resumable EC2 inventory pages to the secured operations console. This roadmap contains **9 remaining tasks**: the nine numbered incomplete outcomes below. Sub-bullets and acceptance criteria do not count separately. Recount only when a complete outcome ships or scope is explicitly changed.
 
 ## Current state
 
@@ -33,6 +33,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 - Authenticated users can retrieve an action plan's current state through `GET /autonomy/plans/{action_id}`; token-mode lookups hide plans belonging to another tenant.
 - Operators can distinguish process liveness (`/health`) from dependency readiness (`/ready`); readiness checks AWS and both persistent SQLite stores, returns 503 when any dependency is unavailable, and does not expose account or error details.
 - Authenticated users can resume S3 object listings from an AWS continuation token through `/cloud/aws/s3/buckets/{bucket_name}/objects`; responses expose truncation state and the next token for incremental browsing.
+- Authenticated users can resume EC2 inventory listings from an AWS `NextToken` through `/cloud/aws/ec2/instances`; page sizes are bounded from 5 to 1,000 and results preserve tenant filtering.
 - Authenticated users can use `/console` to browse EC2/S3 inventory, inspect resource governance, review and decide pending approvals, and view their autonomous run history; bearer credentials stay in page memory.
 - Token-scoped EC2/S3 plan generation verifies the source resource's tenant ownership first; foreign, untagged, missing, or unverifiable resources are hidden before insight analysis.
 - The operations console can create action plans from EC2/S3 resource insights, browse and filter the plan queue, evaluate plans, cancel eligible plans, and run approved plans in dry-run mode.
@@ -40,6 +41,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 - Operators can inspect S3 object metadata from the console, including size, content type, ETag, storage class, encryption, modification time, and user metadata; the lookup uses `HeadObject` and enforces the bucket tenant boundary.
 - The operations console can analyze an S3 bucket by optional prefix, showing object statistics, storage health, security findings, cost opportunities, and largest objects from bounded scans of up to 1,000 objects; each analysis result reports failures independently.
 - The operations console can page through action plans in batches of 50, append older plans, and reset pagination when the status filter or refresh changes.
+- Authenticated users can page through EC2 inventory with bounded AWS `MaxResults` and opaque `NextToken` cursors; each page applies tenant ownership filtering before returning instances.
 - Operators can inspect a plan from the console queue and retrieve its current tenant-scoped state, including the full plan details.
 - The operations console can load EC2 fleet efficiency, cost, rightsizing, and security insights from the aggregate APIs; token-mode analysis is limited to authenticated-tenant instances.
 - Authenticated users can browse audit history in the operations console, filter events by resource ID, and load additional bounded pages through the actor-scoped audit API.
@@ -60,7 +62,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 
 6. **Make health and operations observable (P1).** `/health` now provides liveness and `/ready` reports AWS dependency readiness with sanitized responses. Add structured logs, request correlation, metrics, database readiness, and actionable AWS/database failure signals without exposing secrets or sensitive audit payloads. **Done when:** operators can distinguish application health from dependency health and diagnose failures using documented telemetry.
 
-7. **Harden API and AWS operational limits (P1).** Set request/response size limits, pagination bounds, timeouts, rate limits, AWS retry/backoff and throttling behavior, and consistent error contracts. **Done when:** limits are explicit and covered for malformed, oversized, throttled, and unavailable-dependency conditions.
+7. **Harden API and AWS operational limits (P1).** Set request/response size limits, pagination bounds beyond EC2 inventory and S3 object listing, timeouts, rate limits, AWS retry/backoff and throttling behavior, and consistent error contracts. **Done when:** limits are explicit and covered for malformed, oversized, throttled, and unavailable-dependency conditions.
 
 8. **Specify audit trust, retention, and recovery guarantees (P1).** Document the hash-chain threat model and external key/anchor strategy; define tamper detection, export verification, retention, access, backup, and disaster recovery. A hash chain stored in a writable database cannot by itself prevent an attacker with full store access from rewriting the history and recomputing the chain. **Done when:** an operator can independently verify exported history and follow tested backup/restore and incident procedures.
 

@@ -128,7 +128,7 @@ class AWSService:
                 "error": str(error),
             }
 
-    def get_ec2_instances(self, state=None, tag=None):
+    def get_ec2_instances(self, state=None, tag=None, max_results=None, next_token=None):
         try:
             ec2 = boto3.client("ec2")
 
@@ -162,10 +162,14 @@ class AWSService:
                     "Values": [value],
                 })
 
+            params = {}
             if filters:
-                response = ec2.describe_instances(Filters=filters)
-            else:
-                response = ec2.describe_instances()
+                params["Filters"] = filters
+            if max_results is not None:
+                params["MaxResults"] = max_results
+            if next_token:
+                params["NextToken"] = next_token
+            response = ec2.describe_instances(**params)
 
             instances = []
 
@@ -202,11 +206,17 @@ class AWSService:
                         "tags": tags,
                     })
 
-            return {
+            result = {
                 "service": "ec2",
                 "status": "healthy",
                 "instances": instances,
             }
+            if max_results is not None or next_token is not None:
+                result.update({
+                    "is_truncated": bool(response.get("NextToken")),
+                    "next_token": response.get("NextToken"),
+                })
+            return result
 
         except (BotoCoreError, ClientError) as error:
             return {

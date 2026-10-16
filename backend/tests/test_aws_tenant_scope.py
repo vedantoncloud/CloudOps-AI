@@ -363,3 +363,37 @@ def test_plan_generation_requires_operator_and_uses_post(monkeypatch, path):
 
     assert client.get(path, headers=headers).status_code == 405
     assert client.post(path, headers={"Authorization": "Bearer token-a"}).status_code == 403
+
+
+def test_ec2_inventory_page_is_tenant_filtered_and_cursor_is_forwarded(monkeypatch):
+    client = tenant_client(monkeypatch)
+    calls = []
+
+    def page(state=None, tag=None, max_results=None, next_token=None):
+        calls.append((max_results, next_token))
+        return {
+            "status": "healthy",
+            "instances": [
+                {"instance_id": "i-aaaaaaaa", "tags": {"CloudOpsTenantId": "tenant-a"}},
+                {"instance_id": "i-bbbbbbbb", "tags": {"CloudOpsTenantId": "tenant-b"}},
+            ],
+            "is_truncated": True,
+            "next_token": "opaque-next",
+        }
+
+    monkeypatch.setattr(main.aws_service, "get_ec2_instances", page)
+    response = client.get(
+        "/cloud/aws/ec2/instances?max_results=100&next_token=opaque-prior",
+        headers={"Authorization": "Bearer token-a"},
+    )
+
+    assert response.status_code == 200
+    assert [item["instance_id"] for item in response.json()["instances"]] == ["i-aaaaaaaa"]
+    assert response.json()["next_token"] == "opaque-next"
+    assert calls == [(100, "opaque-prior")]
+
+
+def test_ec2_inventory_page_size_is_bounded(monkeypatch):
+    response = tenant_client(monkeypatch).get("/cloud/aws/ec2/instances?max_results=1001", headers={"Authorization": "Bearer token-a"})
+    assert response.status_code == 400
+    assert response.json()["detail"] == "max_results must be between 5 and 1000"
