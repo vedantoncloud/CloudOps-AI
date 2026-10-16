@@ -14,6 +14,7 @@ def test_get_ec2_instance_uses_direct_instance_id_lookup():
         mock_ec2.describe_instances.return_value = {
             "Reservations": [{"Instances": [{
                 "InstanceId": "i-aaaaaaaa",
+                "State": {"Name": "running"},
                 "Tags": [{"Key": "CloudOpsTenantId", "Value": "tenant-a"}],
             }]}]
         }
@@ -26,6 +27,13 @@ def test_get_ec2_instance_uses_direct_instance_id_lookup():
         "status": "healthy",
         "instance": {
             "instance_id": "i-aaaaaaaa",
+            "name": None,
+            "state": "running",
+            "instance_type": None,
+            "availability_zone": None,
+            "private_ip": None,
+            "public_ip": None,
+            "security_groups": [],
             "tags": {"CloudOpsTenantId": "tenant-a"},
         },
     }

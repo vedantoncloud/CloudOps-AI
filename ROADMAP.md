@@ -23,7 +23,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 - Aggregate EC2 efficiency, cost, rightsizing, and security insights analyze only authenticated-tenant inventory in token mode.
 - Authenticated tenant users receive a sanitized AWS status response without the shared AWS account ID, principal ARN, or raw diagnostics; admins retain full status details.
 - Authenticated tenant users receive sanitized AWS service health responses without raw shared-account SDK errors; admins retain full diagnostics.
-- Authenticated users can retrieve an individual EC2 inventory record through `GET /cloud/aws/ec2/instances/{instance_id}`; token-mode results use the tenant-filtered inventory and hide foreign, untagged, and missing IDs uniformly.
+- Authenticated users can retrieve an individual EC2 inventory record through `GET /cloud/aws/ec2/instances/{instance_id}` using a direct instance lookup, independent of inventory pagination; token-mode results hide foreign, untagged, and missing IDs uniformly.
 - Tenant-scoped EC2 detail, metrics, status, and insight checks look up the requested instance directly, so ownership checks work for instances beyond the first inventory page.
 - Authenticated operators can list their durable autonomous run history through `/autonomy/runs`, with lifecycle summaries and bounded pagination.
 - Authenticated users can browse the in-memory action-plan queue through `/autonomy/plans`, filter by lifecycle status, and page through results; token-mode plan access is restricted to the tenant that created each plan.

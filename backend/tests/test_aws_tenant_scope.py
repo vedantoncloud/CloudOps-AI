@@ -201,7 +201,7 @@ def test_ec2_instance_details_hides_foreign_untagged_and_missing_records(monkeyp
 def test_ec2_instance_details_reports_inventory_unavailable(monkeypatch):
     client = tenant_client(monkeypatch)
     service = main.aws_service
-    monkeypatch.setattr(service, "get_ec2_instances", lambda *args: {"status": "unhealthy"})
+    monkeypatch.setattr(service, "get_ec2_instance", lambda instance_id: {"status": "unhealthy"})
 
     response = client.get(
         "/cloud/aws/ec2/instances/i-aaaaaaaa",
@@ -210,6 +210,35 @@ def test_ec2_instance_details_reports_inventory_unavailable(monkeypatch):
 
     assert response.status_code == 503
     assert response.json() == {"detail": "EC2 inventory is unavailable"}
+
+
+def test_ec2_instance_details_finds_owned_instance_beyond_inventory_page(monkeypatch):
+    client = tenant_client(monkeypatch)
+    service = main.aws_service
+    instance = {
+        "instance_id": "i-dddddddd",
+        "state": "running",
+        "instance_type": "t3.small",
+        "tags": {"CloudOpsTenantId": "tenant-a"},
+    }
+    monkeypatch.setattr(
+        service,
+        "get_ec2_instance",
+        lambda instance_id: {"status": "healthy", "instance": instance},
+    )
+    monkeypatch.setattr(
+        service,
+        "get_ec2_instances",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("detail must use direct lookup")),
+    )
+
+    response = client.get(
+        "/cloud/aws/ec2/instances/i-dddddddd",
+        headers={"Authorization": "Bearer token-a"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["instance"] == instance
 
 
 def test_tenant_ec2_metric_lookup_finds_owned_instance_outside_first_inventory_page(monkeypatch):

@@ -242,10 +242,25 @@ class AWSService:
                 for tag in instance.get("Tags", [])
                 if tag.get("Key")
             }
+            name = tags.get("Name")
             return {
                 "service": "ec2",
                 "status": "healthy",
-                "instance": {"instance_id": instance.get("InstanceId"), "tags": tags},
+                "instance": {
+                    "instance_id": instance.get("InstanceId"),
+                    "name": name,
+                    "state": instance.get("State", {}).get("Name"),
+                    "instance_type": instance.get("InstanceType"),
+                    "availability_zone": instance.get("Placement", {}).get("AvailabilityZone"),
+                    "private_ip": instance.get("PrivateIpAddress"),
+                    "public_ip": instance.get("PublicIpAddress"),
+                    "security_groups": [
+                        group.get("GroupId")
+                        for group in instance.get("SecurityGroups", [])
+                        if group.get("GroupId")
+                    ],
+                    "tags": tags,
+                },
             }
         except (BotoCoreError, ClientError) as error:
             return {"service": "ec2", "status": "unhealthy", "error": str(error)}

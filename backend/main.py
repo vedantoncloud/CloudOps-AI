@@ -511,15 +511,15 @@ def aws_ec2_instance_details(instance_id: str, request: Request):
     if not re.fullmatch(r"i-[0-9a-fA-F]{8,17}", instance_id):
         raise HTTPException(status_code=400, detail="Invalid EC2 instance ID")
 
-    inventory = _tenant_ec2_instances(request, None, None)
-    if inventory.get("status") != "healthy":
+    result = aws_service.get_ec2_instance(instance_id)
+    if result.get("status") != "healthy":
         raise HTTPException(status_code=503, detail="EC2 inventory is unavailable")
 
-    instance = next(
-        (item for item in inventory.get("instances", []) if item.get("instance_id") == instance_id),
-        None,
-    )
-    if instance is None:
+    instance = result.get("instance")
+    if instance is None or (
+        getattr(request.state, "tenant_scoped", False)
+        and _resource_tenant({"tags": instance.get("tags", {})}) != request.state.tenant_id
+    ):
         raise HTTPException(status_code=404, detail="EC2 instance not found")
 
     return {"service": "ec2", "status": "healthy", "instance": instance}
