@@ -99,7 +99,7 @@ def test_console_exposes_ec2_and_s3_resource_details_and_metrics():
     assert 'id="resourceDetails"' in response.text
     assert "details.textContent='Details'" in response.text
     assert "inspectDetails(x,aws?'ec2':'s3')" in response.text
-    assert "['Metrics',root+'/metrics']" in response.text
+    assert "['Metrics',root+'/metrics?lookback_hours='+metricsWindow.value]" in response.text
     assert "['Insights',root+'/insights']" in response.text
     assert "Promise.allSettled(paths.map(([,path])=>api(path)))" in response.text
 
