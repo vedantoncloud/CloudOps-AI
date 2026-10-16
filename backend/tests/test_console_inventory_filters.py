@@ -58,3 +58,19 @@ def test_console_can_download_s3_objects_from_the_object_browser():
     assert "objects/download?${query}" in html
     assert "download.textContent='Download'" in html
     assert "The link expires in ${data.expires_in} seconds." in html
+
+
+def test_console_exports_loaded_inventory_as_search_aware_csv():
+    response = TestClient(app).get("/console")
+
+    assert response.status_code == 200
+    html = response.text
+    assert 'id="exportInventory" disabled' in html
+    assert "function csvCell(value)" in html
+    assert "text.replaceAll('\"','\"\"')" in html
+    assert "loadedInventory.filter(item=>!search" in html
+    assert "item.id,item.type,item.state,item.details" in html
+    assert "text=\"'\"+text" in html
+    assert "link.download=($('kind').value==='ec2'?'ec2-inventory':'s3-bucket-inventory')+'.csv'" in html
+    assert "loadedInventory.push(...normalized)" in html
+    assert "$('exportInventory').addEventListener('click',exportInventory)" in html
