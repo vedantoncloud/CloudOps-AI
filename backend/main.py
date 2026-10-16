@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from pathlib import Path
 import re
+import sqlite3
 
 from auth import AccessControlMiddleware
 from services.aws_service import AWSService
@@ -17,6 +18,8 @@ from autonomy.persistent_audit_reconciliation_api import router as persistent_au
 from autonomy.resource_governance_api import router as resource_governance_router
 from autonomy.resource_inventory_api import router as resource_inventory_router
 from autonomy.resource_inventory_api import _resource_tenant
+from autonomy.audit_api import audit_trail
+from autonomy.persistent_audit_reconciliation_api import DEFAULT_DB_PATH
 
 
 app = FastAPI(
@@ -42,6 +45,19 @@ app.include_router(persistent_audit_health_router)
 app.include_router(persistent_audit_reconciliation_router)
 app.include_router(resource_governance_router)
 app.include_router(resource_inventory_router)
+
+
+def _sqlite_store_ready(database_path: str | Path) -> bool:
+    """Check that a configured SQLite store can be opened and queried."""
+    path = Path(database_path).resolve()
+    try:
+        with sqlite3.connect(
+            f"file:{path.as_posix()}?mode=ro", uri=True, timeout=1
+        ) as connection:
+            connection.execute("SELECT 1").fetchone()
+        return True
+    except (OSError, sqlite3.Error, ValueError):
+        return False
 
 
 @app.get("/")
@@ -78,11 +94,23 @@ def readiness_check():
     except Exception:
         result = {"status": "disconnected"}
 
-    ready = result.get("status") == "connected"
+    aws_ready = result.get("status") == "connected"
+    persistence = {
+        "audit_events": (
+            "healthy" if _sqlite_store_ready(audit_trail.database_path) else "unhealthy"
+        ),
+        "audit_idempotency": (
+            "healthy" if _sqlite_store_ready(DEFAULT_DB_PATH) else "unhealthy"
+        ),
+    }
+    ready = aws_ready and all(status == "healthy" for status in persistence.values())
     payload = {
         "status": "ready" if ready else "not_ready",
         "service": "cloudops-ai",
-        "dependencies": {"aws": "healthy" if ready else "unhealthy"},
+        "dependencies": {
+            "aws": "healthy" if aws_ready else "unhealthy",
+            **persistence,
+        },
     }
     if not ready:
         raise HTTPException(status_code=503, detail=payload)

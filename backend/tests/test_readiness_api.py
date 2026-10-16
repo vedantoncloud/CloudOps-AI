@@ -30,7 +30,11 @@ def test_readiness_reports_aws_dependency_without_exposing_account_details(monke
     assert response.json() == {
         "status": "ready",
         "service": "cloudops-ai",
-        "dependencies": {"aws": "healthy"},
+        "dependencies": {
+            "aws": "healthy",
+            "audit_events": "healthy",
+            "audit_idempotency": "healthy",
+        },
     }
 
 
@@ -48,7 +52,11 @@ def test_readiness_returns_service_unavailable_when_aws_is_down(monkeypatch):
         "detail": {
             "status": "not_ready",
             "service": "cloudops-ai",
-            "dependencies": {"aws": "unhealthy"},
+            "dependencies": {
+                "aws": "unhealthy",
+                "audit_events": "healthy",
+                "audit_idempotency": "healthy",
+            },
         }
     }
 
@@ -84,3 +92,20 @@ def test_readiness_probe_is_available_without_api_credentials(monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["status"] == "ready"
+
+
+def test_readiness_fails_when_a_persistent_store_is_unavailable(monkeypatch):
+    monkeypatch.setattr(main.aws_service, "get_status", lambda: {"status": "connected"})
+    monkeypatch.setattr(
+        main, "_sqlite_store_ready",
+        lambda path: path != main.audit_trail.database_path,
+    )
+
+    response = TestClient(main.app).get("/ready")
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["dependencies"] == {
+        "aws": "healthy",
+        "audit_events": "unhealthy",
+        "audit_idempotency": "healthy",
+    }

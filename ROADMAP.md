@@ -28,7 +28,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 - Operators can browse a tenant-scoped, newest-first pending approval queue through `/autonomy/approvals`, with bounded pagination.
 - Operators can reject a pending action plan with a required reason; the response records the authenticated reviewer and exposes a distinct `rejected` status.
 - Authenticated users can retrieve an action plan's current state through `GET /autonomy/plans/{action_id}`; token-mode lookups hide plans belonging to another tenant.
-- Operators can distinguish process liveness (`/health`) from AWS dependency readiness (`/ready`); readiness returns 503 when AWS is unavailable and does not expose account or error details.
+- Operators can distinguish process liveness (`/health`) from dependency readiness (`/ready`); readiness checks AWS and both persistent SQLite stores, returns 503 when any dependency is unavailable, and does not expose account or error details.
 - Authenticated users can resume S3 object listings from an AWS continuation token through `/cloud/aws/s3/buckets/{bucket_name}/objects`; responses expose truncation state and the next token for incremental browsing.
 - Authenticated users can use `/console` to browse EC2/S3 inventory, inspect resource governance, review and decide pending approvals, and view their autonomous run history; bearer credentials stay in page memory.
 - Token-scoped EC2/S3 plan generation verifies the source resource's tenant ownership first; foreign, untagged, missing, or unverifiable resources are hidden before insight analysis.
@@ -67,8 +67,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 - Audit actor attribution is implemented for autonomous runs, not consistently for all API operations. Audit event listing/export is actor-scoped for non-admin users; the underlying shared trail and operational diagnostics still require broader tenant and attribution work.
 - Persistent audit stores are SQLite local files; there is no shared production database, migration, backup, or restore workflow.
 - Real infrastructure mutations are intentionally disabled; planning, governance, and simulation must not be represented as completed remediation.
-- `/health` remains a static liveness check; `/ready` checks AWS but does not yet check persistence readiness.
-- `/ready` establishes AWS readiness; it does not yet check persistence readiness.
+- `/health` remains a static liveness check; `/ready` checks AWS and configured persistence stores but does not yet provide structured logs, request correlation, metrics, or actionable diagnostic signals.
 - No CI workflow, deployment/container configuration, IaC, or substantive operator documentation was found; `docs/` is empty. The console is a lightweight browser client served by FastAPI, with inventory/governance, plan generation and review, approvals, and run history.
 - No supported Python runtime or automated dependency update/security workflow is documented.
 - Cost insights are qualitative; live billing/pricing integration is not present.
