@@ -355,6 +355,28 @@ class AWSService:
                 "error": str(error),
             }
 
+    def get_s3_object_metadata(self, bucket_name, object_key):
+        """Return useful object metadata without downloading its body."""
+        try:
+            response = boto3.client("s3").head_object(Bucket=bucket_name, Key=object_key)
+            return {
+                "service": "s3",
+                "status": "healthy",
+                "bucket": bucket_name,
+                "object": {
+                    "key": object_key,
+                    "size": response.get("ContentLength"),
+                    "content_type": response.get("ContentType"),
+                    "etag": response.get("ETag"),
+                    "last_modified": response["LastModified"].isoformat() if response.get("LastModified") else None,
+                    "storage_class": response.get("StorageClass", "STANDARD"),
+                    "server_side_encryption": response.get("ServerSideEncryption"),
+                    "user_metadata": response.get("Metadata", {}),
+                },
+            }
+        except (BotoCoreError, ClientError) as error:
+            return {"service": "s3", "status": "unhealthy", "bucket": bucket_name, "error": str(error)}
+
     def get_s3_object_statistics(self, bucket_name, prefix=None, max_keys=None):
         try:
             s3 = boto3.client("s3")

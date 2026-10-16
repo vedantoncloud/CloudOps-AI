@@ -59,6 +59,9 @@ def test_console_s3_object_browser_uses_bounded_resumable_listing_contract():
     assert "query.set('continuation_token',token)" in response.text
     assert "data.next_continuation_token" in response.text
     assert "encodeURIComponent(activeBucket)" in response.text
+    assert 'id="objectMetadata"' in response.text
+    assert "objects/metadata?${query}" in response.text
+    assert "button.textContent='Inspect'" in response.text
 
 
 def test_console_is_protected_by_token_authentication():

@@ -64,6 +64,9 @@ class FakeAWSService:
     def get_s3_bucket_details(self, bucket_name):
         return {"status": "healthy", "bucket": bucket_name}
 
+    def get_s3_object_metadata(self, bucket_name, object_key):
+        return {"status": "healthy", "bucket": bucket_name, "object": {"key": object_key}}
+
 
 def tenant_client(monkeypatch):
     monkeypatch.setattr(main, "aws_service", FakeAWSService())
@@ -272,6 +275,25 @@ def test_s3_route_allows_owned_bucket(monkeypatch):
     )
 
     assert response.status_code == 200
+
+
+def test_s3_object_metadata_is_tenant_scoped_and_preserves_nested_key(monkeypatch):
+    client = tenant_client(monkeypatch)
+    headers = {"Authorization": "Bearer token-a"}
+    response = client.get(
+        "/cloud/aws/s3/buckets/owned/objects/metadata",
+        params={"key": "reports/annual report.csv"},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["object"]["key"] == "reports/annual report.csv"
+
+    foreign = client.get(
+        "/cloud/aws/s3/buckets/foreign/objects/metadata",
+        params={"key": "reports/annual report.csv"},
+        headers=headers,
+    )
+    assert foreign.status_code == 404
 
 
 def test_ec2_plan_generation_hides_foreign_instances(monkeypatch):

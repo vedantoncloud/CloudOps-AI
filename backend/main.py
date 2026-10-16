@@ -296,6 +296,18 @@ def aws_s3_objects(
     return result
 
 
+@app.get("/cloud/aws/s3/buckets/{bucket_name}/objects/metadata")
+def aws_s3_object_metadata(bucket_name: str, request: Request, key: str):
+    """Inspect one S3 object while enforcing the bucket's tenant boundary."""
+    _require_tenant_s3_bucket(request, bucket_name)
+    if not key:
+        raise HTTPException(status_code=400, detail="key must not be empty")
+    result = aws_service.get_s3_object_metadata(bucket_name, key)
+    if result["status"] == "unhealthy":
+        raise HTTPException(status_code=403, detail=result["error"])
+    return result
+
+
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/statistics")
 def aws_s3_object_statistics(
     bucket_name: str,
