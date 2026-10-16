@@ -13,3 +13,19 @@ def test_console_exposes_inventory_search_and_ec2_state_filter():
     assert "encodeURIComponent($('instanceState').value)" in html
     assert "toLocaleLowerCase().includes(search)" in html
 
+
+def test_console_exposes_tenant_scoped_ec2_fleet_insights():
+    response = TestClient(app).get("/console")
+
+    assert response.status_code == 200
+    html = response.text
+    assert 'id="aggregateInsights"' in html
+    assert 'id="insightType"' in html
+    assert 'value="efficiency"' in html
+    assert 'value="cost"' in html
+    assert 'value="rightsizing"' in html
+    assert 'value="security"' in html
+    assert 'id="loadAggregateInsights"' in html
+    assert '/cloud/aws/ec2/${category}-insights' in html
+    assert "Analyzing your tenant-scoped EC2 fleet" in html
+    assert "classList.toggle('hidden',!aws)" in html
