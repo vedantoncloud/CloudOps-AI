@@ -524,6 +524,9 @@ def test_s3_objects_api_success():
     assert response.json()["bucket"] == "cloudops-test"
     assert len(response.json()["objects"]) == 1
     assert response.json()["objects"][0]["key"] == "test/file.txt"
+    mock_s3.list_objects_v2.assert_called_once_with(
+        Bucket="cloudops-test", MaxKeys=1000,
+    )
 
 
 def test_s3_objects_api_access_denied():

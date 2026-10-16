@@ -285,7 +285,7 @@ def aws_s3_objects(
     bucket_name: str,
     request: Request,
     prefix: str = None,
-    max_keys: int = None,
+    max_keys: int = 1000,
     continuation_token: str = None,
 ):
     _require_tenant_s3_bucket(request, bucket_name)
