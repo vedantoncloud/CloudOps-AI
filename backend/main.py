@@ -323,6 +323,18 @@ def aws_s3_object_metadata(bucket_name: str, request: Request, key: str):
     return result
 
 
+@app.get("/cloud/aws/s3/buckets/{bucket_name}/objects/download")
+def aws_s3_object_download_url(bucket_name: str, request: Request, key: str):
+    """Issue a five-minute download URL after checking bucket tenant ownership."""
+    _require_tenant_s3_bucket(request, bucket_name)
+    if not key:
+        raise HTTPException(status_code=400, detail="key must not be empty")
+    result = aws_service.create_s3_object_download_url(bucket_name, key)
+    if result["status"] == "unhealthy":
+        raise HTTPException(status_code=403, detail=result["error"])
+    return result
+
+
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/statistics")
 def aws_s3_object_statistics(
     bucket_name: str,

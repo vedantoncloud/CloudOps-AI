@@ -398,6 +398,30 @@ class AWSService:
         except (BotoCoreError, ClientError) as error:
             return {"service": "s3", "status": "unhealthy", "bucket": bucket_name, "error": str(error)}
 
+    def create_s3_object_download_url(self, bucket_name, object_key):
+        """Create a short-lived URL that downloads one S3 object as an attachment."""
+        expires_in = 300
+        try:
+            url = boto3.client("s3").generate_presigned_url(
+                "get_object",
+                Params={
+                    "Bucket": bucket_name,
+                    "Key": object_key,
+                    "ResponseContentDisposition": "attachment",
+                },
+                ExpiresIn=expires_in,
+            )
+            return {
+                "service": "s3",
+                "status": "healthy",
+                "bucket": bucket_name,
+                "key": object_key,
+                "url": url,
+                "expires_in": expires_in,
+            }
+        except (BotoCoreError, ClientError) as error:
+            return {"service": "s3", "status": "unhealthy", "bucket": bucket_name, "error": str(error)}
+
     def get_s3_object_statistics(self, bucket_name, prefix=None, max_keys=None):
         try:
             s3 = boto3.client("s3")

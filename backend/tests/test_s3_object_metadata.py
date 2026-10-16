@@ -37,3 +37,30 @@ def test_s3_object_metadata_uses_head_object_and_returns_inspection_fields():
             "user_metadata": {"source": "billing"},
         },
     }
+
+
+def test_s3_download_url_is_a_short_lived_attachment_url():
+    with patch("services.aws_service.boto3.client") as client:
+        client.return_value.generate_presigned_url.return_value = "https://signed.example/object"
+
+        result = AWSService().create_s3_object_download_url(
+            "reports", "2026/month 1.csv"
+        )
+
+    client.return_value.generate_presigned_url.assert_called_once_with(
+        "get_object",
+        Params={
+            "Bucket": "reports",
+            "Key": "2026/month 1.csv",
+            "ResponseContentDisposition": "attachment",
+        },
+        ExpiresIn=300,
+    )
+    assert result == {
+        "service": "s3",
+        "status": "healthy",
+        "bucket": "reports",
+        "key": "2026/month 1.csv",
+        "url": "https://signed.example/object",
+        "expires_in": 300,
+    }
