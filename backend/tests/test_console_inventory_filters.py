@@ -10,7 +10,12 @@ def test_console_exposes_inventory_search_and_ec2_state_filter():
     html = response.text
     assert 'id="inventorySearch"' in html
     assert 'id="instanceState"' in html
+    assert 'id="instanceTag"' in html
+    assert 'aria-label="Filter EC2 instances by tag"' in html
     assert "params.set('state',$('instanceState').value)" in html
+    assert "params.set('tag',$('instanceTag').value.trim())" in html
+    assert "$('instanceTag').addEventListener('change',loadInventory)" in html
+    assert "$('instanceTag').addEventListener('keydown'" in html
     assert "toLocaleLowerCase().includes(search)" in html
 
 
