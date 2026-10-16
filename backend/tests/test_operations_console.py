@@ -66,6 +66,11 @@ def test_console_s3_object_browser_uses_bounded_resumable_listing_contract():
     assert 'id="objectMetadata"' in response.text
     assert "objects/metadata?${query}" in response.text
     assert "button.textContent='Inspect'" in response.text
+    assert "async function fetchObjects(token='',append=false)" in response.text
+    assert "fetchObjects(nextObjectToken,true)" in response.text
+    assert "if(append){for(const row of mapped)" in response.text
+    assert "${$('objectRows').rows.length} objects loaded" in response.text
+    assert "if(!append)$('objectRows').replaceChildren()" in response.text
 
 
 def test_console_is_protected_by_token_authentication():

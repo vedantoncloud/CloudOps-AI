@@ -40,6 +40,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 - Token-scoped EC2/S3 plan generation verifies the source resource's tenant ownership first; foreign, untagged, missing, or unverifiable resources are hidden before insight analysis.
 - The operations console can create action plans from EC2/S3 resource insights, browse and filter the plan queue, evaluate plans, cancel eligible plans, and run approved plans in dry-run mode.
 - The operations console can browse S3 bucket objects by prefix, choose a bounded page size, and continue through truncated listings.
+- The operations console appends subsequent S3 object pages to the visible listing, reports the cumulative loaded count, and preserves earlier results if a later page fails.
 - Operators can inspect S3 object metadata from the console, including size, content type, ETag, storage class, encryption, modification time, and user metadata; the lookup uses `HeadObject` and enforces the bucket tenant boundary.
 - Operators can download S3 objects from the console through five-minute presigned attachment URLs; URL issuance enforces the bucket tenant boundary.
 - The operations console can analyze an S3 bucket by optional prefix, showing object statistics, storage health, security findings, cost opportunities, and largest objects from bounded scans of up to 1,000 objects; each analysis result reports failures independently.
