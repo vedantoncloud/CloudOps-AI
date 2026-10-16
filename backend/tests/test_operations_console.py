@@ -37,13 +37,17 @@ def test_console_uses_tenant_api_contracts_and_does_not_persist_bearer_token():
     assert "/autonomy/resources/" in response.text
     assert "/autonomy/approvals?limit=50" in response.text
     assert "/autonomy/runs?limit=50" in response.text
-    assert "`/autonomy/plans?limit=${planPageSize}&offset=${planOffset}`" in response.text
+    assert "new URLSearchParams({limit:String(planPageSize),offset:String(planOffset)})" in response.text
     assert "loadPlans(true)" in response.text
     assert "$('morePlans').disabled=planOffset>=data.total" in response.text
     assert "api(`/autonomy/plans/${encodeURIComponent(actionId)}`)" in response.text
     assert "JSON.stringify(data.action,null,2)" in response.text
     assert "inspect.addEventListener('click',()=>inspectPlan(p.action_id))" in response.text
     assert "if(!append)planOffset=0" in response.text
+    assert 'id="planRisk"' in response.text
+    assert 'id="planResourceType"' in response.text
+    assert "[['planStatus','status'],['planRisk','risk'],['planResourceType','resource_type']]" in response.text
+    assert "$('planRisk').addEventListener('change',()=>loadPlans())" in response.text
     assert "/autonomy/ec2/instances/${encodeURIComponent(resource.id)}/plans" in response.text
     assert "/autonomy/s3/buckets/${encodeURIComponent(resource.id)}/plans" in response.text
     assert "api(path,{method:'POST'})" in response.text

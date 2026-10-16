@@ -29,13 +29,14 @@ def isolate_plan_registry():
             api._plan_tenants.update(original_tenants)
 
 
-def _plan(action_id, status=ActionStatus.PENDING_APPROVAL):
+def _plan(action_id, status=ActionStatus.PENDING_APPROVAL, risk=RiskLevel.MEDIUM,
+          resource_type="ec2_instance"):
     return ActionPlan(
         action_id=action_id,
         action_type="review_instance_state",
-        target=ActionTarget("ec2_instance", f"i-{action_id}"),
+        target=ActionTarget(resource_type, f"i-{action_id}"),
         reason="Review instance state",
-        risk=RiskLevel.MEDIUM,
+        risk=risk,
         status=status,
     )
 
@@ -50,6 +51,29 @@ def test_plan_queue_filters_status_and_paginates():
     assert body["total"] == 1
     assert body["limit"] == 1
     assert [plan["action_id"] for plan in body["plans"]] == ["queue-a"]
+
+
+def test_plan_queue_filters_risk_and_resource_type_before_pagination():
+    api._store_plans([
+        _plan("low-ec2", risk=RiskLevel.LOW),
+        _plan("critical-ec2", risk=RiskLevel.CRITICAL),
+        _plan("critical-s3", risk=RiskLevel.CRITICAL, resource_type="s3_bucket"),
+    ])
+
+    response = client.get(
+        "/autonomy/plans?risk=critical&resource_type=s3_bucket&limit=1"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert [plan["action_id"] for plan in body["plans"]] == ["critical-s3"]
+
+
+def test_plan_queue_rejects_unknown_risk_filter():
+    response = client.get("/autonomy/plans?risk=urgent")
+
+    assert response.status_code == 422
 
 
 def test_plan_queue_hides_other_tenants_and_plan_lookup_returns_not_found():

@@ -5,7 +5,7 @@ from threading import Lock
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 
-from autonomy.action_models import ActionStatus
+from autonomy.action_models import ActionStatus, RiskLevel
 from autonomy.action_planner import ActionPlanner
 from autonomy.approval import ApprovalManager
 from autonomy.executor import ActionExecutor
@@ -160,7 +160,14 @@ def plan_s3_actions(
 
 
 @router.get("/plans")
-def list_plans(request: Request, status: ActionStatus | None = None, limit: int = 50, offset: int = 0):
+def list_plans(
+    request: Request,
+    status: ActionStatus | None = None,
+    risk: RiskLevel | None = None,
+    resource_type: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+):
     """List plans available to this tenant, newest registry entries first."""
     if not 1 <= limit <= 200:
         raise HTTPException(status_code=422, detail="limit must be between 1 and 200")
@@ -172,6 +179,8 @@ def list_plans(request: Request, status: ActionStatus | None = None, limit: int 
             if (not getattr(request.state, "tenant_scoped", False)
                 or _plan_tenants.get(action_id) == request.state.tenant_id)
             and (status is None or plan.status == status)
+            and (risk is None or plan.risk == risk)
+            and (resource_type is None or plan.target.resource_type == resource_type)
         ]
     plans.reverse()
     total = len(plans)
