@@ -21,6 +21,9 @@ def test_console_is_served_to_authenticated_reader():
     assert "Next page" in response.text
     assert 'id="morePlans"' in response.text
     assert 'id="planPageStatus"' in response.text
+    assert 'data-tab="audit"' in response.text
+    assert 'id="auditRows"' in response.text
+    assert 'id="moreAudit"' in response.text
 
 
 def test_console_uses_tenant_api_contracts_and_does_not_persist_bearer_token():
@@ -36,6 +39,9 @@ def test_console_uses_tenant_api_contracts_and_does_not_persist_bearer_token():
     assert "/autonomy/ec2/instances/${encodeURIComponent(resource.id)}/plans" in response.text
     assert "/autonomy/s3/buckets/${encodeURIComponent(resource.id)}/plans" in response.text
     assert "api(path,{method:'POST'})" in response.text
+    assert "`/autonomy/audit/events?${query}`" in response.text
+    assert "query.set('resource_id',resource)" in response.text
+    assert "$('moreAudit').disabled=events.length<auditPageSize" in response.text
     assert "Dry run" in response.text
     assert "localStorage" not in response.text
     assert "sessionStorage" not in response.text
