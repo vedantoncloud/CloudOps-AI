@@ -47,6 +47,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 - Operators can download S3 objects from the console through five-minute presigned attachment URLs; URL issuance enforces the bucket tenant boundary.
 - The operations console can analyze an S3 bucket by optional prefix, showing object statistics, storage health, security findings, cost opportunities, and largest objects from bounded scans of up to 1,000 objects; each analysis result reports failures independently.
 - The operations console can page through action plans in batches of 50, append older plans, and reset pagination when the status filter or refresh changes.
+- Operators can search the EC2 or S3 inventory rows already loaded across pages without reloading page one or losing the continuation cursor.
 - Authenticated users can page through EC2 inventory with bounded AWS `MaxResults` and opaque `NextToken` cursors; each page applies tenant ownership filtering before returning instances.
 - Operators can filter EC2 inventory by AWS tag key and value in the operations console; the filter is applied server-side and retained when loading subsequent pages.
 - Operators can inspect a plan from the console queue and retrieve its current tenant-scoped state, including the full plan details.

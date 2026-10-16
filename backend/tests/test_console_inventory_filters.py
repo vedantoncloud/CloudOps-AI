@@ -16,7 +16,11 @@ def test_console_exposes_inventory_search_and_ec2_state_filter():
     assert "params.set('tag',$('instanceTag').value.trim())" in html
     assert "$('instanceTag').addEventListener('change',loadInventory)" in html
     assert "$('instanceTag').addEventListener('keydown'" in html
-    assert "toLocaleLowerCase().includes(search)" in html
+    assert 'placeholder="Search loaded resources"' in html
+    assert 'aria-label="Search loaded inventory"' in html
+    assert "function filterInventoryRows()" in html
+    assert "filterInventoryRows();message(`${normalized.length} resources loaded.`)" in html
+    assert "$('inventorySearch').addEventListener('input',filterInventoryRows)" in html
 
 
 def test_console_exposes_resumable_s3_bucket_inventory():
