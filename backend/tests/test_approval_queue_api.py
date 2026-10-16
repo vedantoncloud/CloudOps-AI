@@ -81,6 +81,20 @@ def test_reject_plan_records_authenticated_reviewer_and_reason(monkeypatch):
     assert result["action"]["decision_reason"] == "Outside approved scope."
 
 
+def test_cancel_plan_records_authenticated_actor(monkeypatch):
+    plan = _plan("pending", ActionStatus.PENDING_APPROVAL)
+    monkeypatch.setattr(api, "_plan_registry", {"pending": plan})
+    monkeypatch.setattr(api, "_plan_tenants", {"pending": "tenant-a"})
+    request = _request("tenant-a")
+    request.state.principal = SimpleNamespace(subject="operator-a")
+
+    result = api.cancel_plan("pending", request)
+
+    assert result["action"]["status"] == "cancelled"
+    assert result["action"]["decision_by"] == "operator-a"
+    assert result["action"]["decision_reason"] is None
+
+
 def test_reject_plan_hides_foreign_tenant_action():
     request = _request("tenant-a")
 

@@ -277,7 +277,10 @@ def cancel_plan(action_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Action plan not found")
 
     try:
-        cancelled = approval_manager.cancel(action)
+        principal = getattr(request.state, "principal", None)
+        cancelled = approval_manager.cancel(
+            action, cancelled_by=getattr(principal, "subject", None)
+        )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 

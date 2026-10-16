@@ -28,11 +28,15 @@ class ApprovalManager:
         action.decision_reason = reason.strip()
         return action
 
-    def cancel(self, action: ActionPlan) -> ActionPlan:
+    def cancel(
+        self, action: ActionPlan, cancelled_by: str | None = None
+    ) -> ActionPlan:
         if action.status != ActionStatus.PENDING_APPROVAL:
             raise ValueError(
                 "Only actions pending approval can be cancelled."
             )
 
         action.status = ActionStatus.CANCELLED
+        action.decision_by = cancelled_by.strip() if cancelled_by else None
+        action.decision_reason = None
         return action
