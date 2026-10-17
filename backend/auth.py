@@ -31,6 +31,8 @@ ADMIN_ONLY_PATHS = {
     "/autonomy/audit/pending",
     "/autonomy/audit/reconciliation",
     "/autonomy/audit/integrity",
+    # This summary includes shared GitOps counts and audit-event details.
+    "/autonomy/control-plane/summary",
 }
 
 

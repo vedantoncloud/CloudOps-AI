@@ -76,6 +76,7 @@ Administrators can also view the shared AWS account's last 30 complete days of d
 - S3 object-list API requests default to a bounded 1,000-object page and expose AWS continuation state, so ordinary browser/API requests do not scan an entire bucket.
 - Administrators can view the shared AWS account's total daily unblended cost for the last 30 complete days in the console; the account-level endpoint is admin-only in token mode and reports billing permission or availability failures without exposing SDK details.
 - Administrators can see the last 30 complete days of unblended spend aggregated by AWS service, ranked by total cost, alongside the daily account totals in the billing console response.
+- The shared control-plane summary, which includes cross-tenant GitOps counts and audit-event details, is restricted to administrators in token mode.
 
 ## Prioritized remaining work
 
@@ -103,6 +104,7 @@ Administrators can also view the shared AWS account's last 30 complete days of d
 
 - Authentication defaults to permissive development mode unless `CLOUDOPS_ENV=production` is set; production then requires token mode and configured tokens. The token boundary does not itself provide credential lifecycle management.
 - Tenant isolation is partial: provider-neutral resources, EC2 list/summary/detail and aggregate insights, direct S3 bucket routes, and GitOps change sets created through the authenticated control loop are tenant-scoped, while AWS account credentials are not tenant-scoped. S3 checks require bucket-tag read permission and hide resources when ownership cannot be established. The shared AWS account identity remains available to admins through `/cloud/aws/status`.
+- The shared control-plane summary is administrator-only because its GitOps counts and audit-event details span tenants; its contents are not tenant-filtered.
 - Audit actor attribution is implemented for autonomous runs, approval/rejection/cancellation plan state, and control-loop evaluations, but not consistently for all API operations. Audit event listing/export is actor-scoped for non-admin users; the underlying shared trail and operational diagnostics still require broader tenant and attribution work.
 - Persistent audit stores are SQLite local files; there is no shared production database, migration, backup, or restore workflow.
 - Real infrastructure mutations are intentionally disabled; planning, governance, and simulation must not be represented as completed remediation.

@@ -3,6 +3,7 @@ from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from auth import AccessControlMiddleware, Principal, load_token_registry
+from autonomy.control_plane_api import router as control_plane_router
 
 
 TOKENS = {
@@ -16,6 +17,7 @@ TOKENS = {
 def build_client(mode="token", tokens=None):
     app = FastAPI()
     app.add_middleware(AccessControlMiddleware, mode=mode, tokens=TOKENS if tokens is None else tokens)
+    app.include_router(control_plane_router)
 
     @app.get("/health")
     def health():
@@ -75,6 +77,7 @@ def test_reader_cannot_perform_approval_operation():
         "/autonomy/audit/pending",
         "/autonomy/audit/reconciliation",
         "/autonomy/audit/integrity",
+        "/autonomy/control-plane/summary",
     ],
 )
 def test_operational_audit_diagnostics_require_admin(path):
@@ -98,6 +101,16 @@ def test_admin_can_access_operational_audit_diagnostics():
     )
 
     assert response.status_code == 200
+
+
+def test_admin_can_access_shared_control_plane_summary():
+    response = build_client().get(
+        "/autonomy/control-plane/summary",
+        headers={"Authorization": "Bearer admin-a"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "operational"
 
 
 def test_health_is_public_and_development_mode_sets_explicit_local_principal():
