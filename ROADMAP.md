@@ -50,6 +50,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 - Operators can search the EC2 or S3 inventory rows already loaded across pages without reloading page one or losing the continuation cursor.
 - Authenticated users can page through EC2 inventory with bounded AWS `MaxResults` and opaque `NextToken` cursors; each page applies tenant ownership filtering before returning instances.
 - Operators can filter EC2 inventory by AWS tag key and value in the operations console; the filter is applied server-side and retained when loading subsequent pages.
+- Operators can filter EC2 inventory by the exact AWS Name tag in the operations console; AWS applies the filter and subsequent pages retain it.
 - Operators can inspect a plan from the console queue and retrieve its current tenant-scoped state, including the full plan details.
 - The operations console can load EC2 fleet efficiency, cost, rightsizing, and security insights from the aggregate APIs; token-mode analysis is limited to authenticated-tenant instances.
 - Authenticated users can browse audit history in the operations console, filter events by resource ID, and load additional bounded pages through the actor-scoped audit API.

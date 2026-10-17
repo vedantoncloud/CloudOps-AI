@@ -128,7 +128,7 @@ class AWSService:
                 "error": str(error),
             }
 
-    def get_ec2_instances(self, state=None, tag=None, max_results=None, next_token=None):
+    def get_ec2_instances(self, state=None, tag=None, max_results=None, next_token=None, name=None):
         try:
             ec2 = boto3.client("ec2")
 
@@ -160,6 +160,12 @@ class AWSService:
                 filters.append({
                     "Name": f"tag:{key}",
                     "Values": [value],
+                })
+
+            if name:
+                filters.append({
+                    "Name": "tag:Name",
+                    "Values": [name],
                 })
 
             params = {}
