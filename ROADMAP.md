@@ -62,6 +62,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 - Operators can download the loaded EC2 or S3 inventory pages as search-aware CSV, with correctly quoted cells and spreadsheet formula-injection protection.
 - Operators can filter audit history by a local start/end time range; the console converts the selected times to UTC and applies the same range to paged results and JSONL export.
 - Authenticated users can filter audit history by actor ID in the operations console; the filter applies to paged results and JSONL export while the API enforces self-only visibility for non-admins.
+- Operators can filter audit history by exact event type in the operations console; the filter applies to both paged results and JSONL export.
 - GitOps change sets created by token-authenticated control-loop requests are tenant-owned; listing, detail, approval, rejection, apply, and verification enforce that ownership, while approval/rejection attribution comes from the authenticated principal.
 - The operations console shows per-instance EC2 insights beside inventory and selectable-window metrics, with independent error reporting for each detail request.
 - EC2 and S3 action-plan generation uses `POST` because it creates plan records; token-mode readers are denied and operators can create tenant-scoped plans.

@@ -36,3 +36,15 @@ def test_console_audit_actor_filter_is_shared_by_listing_and_export():
     assert "if(actor)query.set('actor_id',actor)" in html
     assert "$('auditActor').addEventListener('keydown'" in html
     assert "const query=auditFilters();const response=await fetch" in html
+
+def test_console_audit_event_type_filter_is_shared_by_listing_and_export():
+    response = TestClient(app).get("/console")
+
+    assert response.status_code == 200
+    html = response.text
+    assert 'id="auditEvent"' in html
+    assert "event=$('auditEvent').value.trim()" in html
+    assert "if(event)query.set('event',event)" in html
+    assert "$('auditEvent').addEventListener('keydown'" in html
+    assert "query=auditFilters();query.set('limit'" in html
+    assert "const query=auditFilters();const response=await fetch" in html
