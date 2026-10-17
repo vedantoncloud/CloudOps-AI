@@ -64,7 +64,7 @@ Administrators can also view the shared AWS account's last 30 complete days of d
 - Operators can filter EC2 inventory by the exact AWS Name tag in the operations console; AWS applies the filter and subsequent pages retain it.
 - Operators can inspect a plan from the console queue and retrieve its current tenant-scoped state, including the full plan details.
 - The operations console can load EC2 fleet efficiency, cost, rightsizing, and security insights from the aggregate APIs; token-mode analysis is limited to authenticated-tenant instances.
-- Authenticated users can browse audit history in the operations console, filter events by resource ID, and load additional bounded pages through the actor-scoped audit API.
+- Authenticated users can browse audit history in the operations console, filter events by resource ID, and load additional bounded pages through the actor-scoped audit API. Administrators can also verify the persisted audit hash chain from the Audit tab, with the event count and first invalid index shown in the console.
 - Operators can page through the pending approval queue and authenticated users can page through their autonomous run history in the operations console, with bounded requests, visible totals, and independent pagination state.
 - Authenticated users can download the complete audit feed matching the console's resource filter as newline-delimited JSON; the export request retains bearer authentication and server-enforced actor scope.
 - The operations console can open EC2 inventory and metrics or S3 bucket details and insights from each resource row, with independent error reporting when one detail request fails.
@@ -80,6 +80,7 @@ Administrators can also view the shared AWS account's last 30 complete days of d
 - Administrators can see the last 30 complete days of unblended spend aggregated by AWS service, ranked by total cost, alongside the daily account totals in the billing console response.
 - Operators can export the complete action-plan result set matching the console search, status, risk, and resource-type filters as CSV; export fetches bounded pages and protects spreadsheet cells against formula injection.
 - The shared control-plane summary, which includes cross-tenant GitOps counts and audit-event details, is restricted to administrators in token mode.
+- Administrators can verify audit hash-chain integrity from the console; the check reports the event count and first invalid index and retains the API's admin-only access policy.
 
 ## Prioritized remaining work
 

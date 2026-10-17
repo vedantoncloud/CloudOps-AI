@@ -48,3 +48,17 @@ def test_console_audit_event_type_filter_is_shared_by_listing_and_export():
     assert "$('auditEvent').addEventListener('keydown'" in html
     assert "query=auditFilters();query.set('limit'" in html
     assert "const query=auditFilters();const response=await fetch" in html
+
+
+def test_console_exposes_admin_audit_integrity_check():
+    response = TestClient(app).get("/console")
+
+    assert response.status_code == 200
+    html = response.text
+    assert 'id="verifyAuditIntegrity"' in html
+    assert 'id="auditIntegrityStatus"' in html
+    assert "async function verifyAuditIntegrity()" in html
+    assert "api('/autonomy/audit/integrity')" in html
+    assert "Audit chain is valid across" in html
+    assert "Audit chain verification failed at event" in html
+    assert "verifyAuditIntegrity()}}));" in html
