@@ -6,6 +6,7 @@ from autonomy.control_loop_api import router as control_loop_router
 from autonomy.control_plane_api import router as control_plane_router
 from autonomy.gitops_api import registry as gitops_registry
 from autonomy.gitops_api import router as gitops_router
+from auth import AccessControlMiddleware, Principal
 
 
 app = FastAPI()
@@ -13,6 +14,7 @@ app.include_router(control_plane_router)
 app.include_router(control_loop_router)
 app.include_router(gitops_router)
 app.include_router(audit_router)
+app.add_middleware(AccessControlMiddleware, mode="development")
 
 client = TestClient(app)
 
@@ -86,7 +88,7 @@ def test_action_trace_returns_complete_gitops_and_audit_history():
     assert data["gitops"]["source_action_id"] == "trace-action-1"
     assert data["gitops"]["status"] == "verified"
     assert data["gitops"]["requires_approval"] is True
-    assert data["gitops"]["approved_by"] == "operator"
+    assert data["gitops"]["approved_by"] == "local-development"
     assert data["gitops"]["change_count"] == 1
 
     change = data["gitops"]["changes"][0]
@@ -184,3 +186,31 @@ def test_action_trace_returns_404_for_unknown_action():
     assert trace.json()["detail"] == (
         "Action trace not found: does-not-exist"
     )
+
+
+def test_action_trace_hides_other_actors_from_tenant_users():
+    audit_trail.record(
+        action_id="private-trace", action_type="inspect", resource_type="ec2",
+        resource_id="i-private", old_status="pending", new_status="approved",
+        event="approval", actor_id="tenant-a",
+    )
+    token_app = FastAPI()
+    token_app.include_router(control_plane_router)
+    token_app.add_middleware(
+        AccessControlMiddleware, mode="token",
+        tokens={"tenant-a-token": Principal("tenant-a", "operator", "tenant-a"),
+                "tenant-b-token": Principal("tenant-b", "operator", "tenant-b")},
+    )
+    token_client = TestClient(token_app)
+
+    trace_url = "/autonomy/control-plane/actions/private-trace/trace"
+    own = token_client.get(
+        trace_url, headers={"Authorization": "Bearer tenant-a-token"}
+    )
+    foreign = token_client.get(
+        trace_url, headers={"Authorization": "Bearer tenant-b-token"}
+    )
+
+    assert own.status_code == 200
+    assert own.json()["audit_events"][0]["actor_id"] == "tenant-a"
+    assert foreign.status_code == 404

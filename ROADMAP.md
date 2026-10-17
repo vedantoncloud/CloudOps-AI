@@ -82,6 +82,7 @@ Administrators can also view the shared AWS account's last 30 complete days of d
 - Operators can export the complete action-plan result set matching the console search, status, risk, and resource-type filters as CSV; export fetches bounded pages and protects spreadsheet cells against formula injection.
 - The shared control-plane summary, which includes cross-tenant GitOps counts and audit-event details, is restricted to administrators in token mode.
 - Administrators can verify audit hash-chain integrity from the console; the check reports the event count and first invalid index and retains the API's admin-only access policy.
+- Authenticated tenant users can inspect control-plane action traces only when the audit history is attributed to their own subject; foreign and unattributed traces are hidden, while administrators retain shared trace access.
 
 ## Prioritized remaining work
 

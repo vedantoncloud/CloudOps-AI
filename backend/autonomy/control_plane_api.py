@@ -1,7 +1,7 @@
 from collections import Counter
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from autonomy.audit_api import audit_trail
@@ -75,6 +75,7 @@ def _audit_summary() -> dict[str, Any]:
                 "new_status": event.new_status,
                 "event": event.event,
                 "timestamp": event.timestamp,
+                "actor_id": event.actor_id,
                 "details": dict(event.details),
             }
             for event in events[-10:]
@@ -105,7 +106,16 @@ def get_control_plane_summary() -> ControlPlaneSummaryResponse:
     "/actions/{action_id}/trace",
     response_model=ControlPlaneActionTraceResponse,
 )
-def get_action_trace(action_id: str) -> ControlPlaneActionTraceResponse:
+def get_action_trace(action_id: str, request: Request) -> ControlPlaneActionTraceResponse:
+    principal = getattr(request.state, "principal", None)
+    if principal is not None and principal.role == "admin":
+        visible_actor_ids = None
+    else:
+        actor_id = getattr(principal, "subject", None)
+        if not actor_id:
+            raise HTTPException(status_code=401, detail="Authenticated principal required")
+        visible_actor_ids = {actor_id}
+
     changes = [
         change_set
         for change_set in gitops_registry.list_all()
@@ -113,6 +123,13 @@ def get_action_trace(action_id: str) -> ControlPlaneActionTraceResponse:
     ]
 
     audit_events = audit_trail.get_events(action_id)
+    if visible_actor_ids is not None:
+        audit_events = [event for event in audit_events if event.actor_id in visible_actor_ids]
+
+    # GitOps traces are exposed only when the caller has an actor-owned audit
+    # event for this action. This also hides legacy/unattributed shared records.
+    if visible_actor_ids is not None and not audit_events:
+        changes = []
 
     if not changes and not audit_events:
         raise HTTPException(
@@ -166,6 +183,7 @@ def get_action_trace(action_id: str) -> ControlPlaneActionTraceResponse:
                 "new_status": event.new_status,
                 "event": event.event,
                 "timestamp": event.timestamp,
+                "actor_id": event.actor_id,
                 "details": dict(event.details),
             }
             for event in audit_events
