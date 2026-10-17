@@ -5,6 +5,7 @@ import re
 import sqlite3
 
 from auth import AccessControlMiddleware, require_role
+from observability import RequestObservabilityMiddleware
 from services.aws_service import AWSService
 from autonomy.api import router as autonomy_router
 from autonomy.control_loop_api import router as control_loop_router
@@ -28,6 +29,7 @@ app = FastAPI(
     version="0.1.0",
 )
 app.add_middleware(AccessControlMiddleware)
+app.add_middleware(RequestObservabilityMiddleware)
 
 CONSOLE_PAGE = Path(__file__).parent / "static" / "console.html"
 
