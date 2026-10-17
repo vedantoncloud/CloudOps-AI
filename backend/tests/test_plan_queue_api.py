@@ -70,6 +70,48 @@ def test_plan_queue_filters_risk_and_resource_type_before_pagination():
     assert [plan["action_id"] for plan in body["plans"]] == ["critical-s3"]
 
 
+def test_plan_queue_search_matches_target_action_and_reason_before_pagination():
+    target_match = _plan("target-match")
+    target_match.target.resource_id = "i-prod-123"
+    reason_match = _plan("reason-match")
+    reason_match.reason = "Investigate a billing anomaly"
+    unrelated = _plan("unrelated")
+    api._store_plans([target_match, reason_match, unrelated])
+
+    target_response = client.get("/autonomy/plans?search=PROD-123&limit=1")
+    reason_response = client.get("/autonomy/plans?search=billing")
+    action_response = client.get("/autonomy/plans?search=REVIEW_INSTANCE_STATE")
+
+    assert target_response.status_code == 200
+    assert target_response.json()["total"] == 1
+    assert target_response.json()["plans"][0]["action_id"] == "target-match"
+    assert reason_response.json()["total"] == 1
+    assert reason_response.json()["plans"][0]["action_id"] == "reason-match"
+    assert action_response.json()["total"] == 3
+
+
+def test_plan_queue_search_is_bounded():
+    response = client.get("/autonomy/plans?search=" + "x" * 201)
+
+    assert response.status_code == 422
+
+
+def test_plan_queue_search_composes_with_filters_before_pagination():
+    matching = _plan("match", risk=RiskLevel.HIGH)
+    matching.target.resource_id = "i-prod-77"
+    nonmatching_risk = _plan("low", risk=RiskLevel.LOW)
+    nonmatching_target = _plan("other")
+    api._store_plans([matching, nonmatching_risk, nonmatching_target])
+
+    response = client.get(
+        "/autonomy/plans?search=prod&risk=high&resource_type=ec2_instance&limit=1"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["total"] == 1
+    assert [plan["action_id"] for plan in response.json()["plans"]] == ["match"]
+
+
 def test_plan_queue_rejects_unknown_risk_filter():
     response = client.get("/autonomy/plans?risk=urgent")
 

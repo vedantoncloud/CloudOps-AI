@@ -59,6 +59,9 @@ def test_console_uses_tenant_api_contracts_and_does_not_persist_bearer_token():
     assert "if(!append)planOffset=0" in response.text
     assert 'id="planRisk"' in response.text
     assert 'id="planResourceType"' in response.text
+    assert 'id="planSearch"' in response.text
+    assert "filters.set('search',$('planSearch').value.trim())" in response.text
+    assert "$('planSearch').addEventListener('keydown'" in response.text
     assert "[['planStatus','status'],['planRisk','risk'],['planResourceType','resource_type']]" in response.text
     assert "$('planRisk').addEventListener('change',()=>loadPlans())" in response.text
     assert "/autonomy/ec2/instances/${encodeURIComponent(resource.id)}/plans" in response.text

@@ -162,6 +162,7 @@ def list_plans(
     status: ActionStatus | None = None,
     risk: RiskLevel | None = None,
     resource_type: str | None = None,
+    search: str | None = None,
     limit: int = 50,
     offset: int = 0,
 ):
@@ -170,6 +171,9 @@ def list_plans(
         raise HTTPException(status_code=422, detail="limit must be between 1 and 200")
     if offset < 0:
         raise HTTPException(status_code=422, detail="offset must be non-negative")
+    if search is not None and len(search) > 200:
+        raise HTTPException(status_code=422, detail="search must be at most 200 characters")
+    normalized_search = search.strip().casefold() if search else ""
     with _registry_lock:
         plans = [
             plan for action_id, plan in _plan_registry.items()
@@ -178,6 +182,9 @@ def list_plans(
             and (status is None or plan.status == status)
             and (risk is None or plan.risk == risk)
             and (resource_type is None or plan.target.resource_type == resource_type)
+            and (not normalized_search or normalized_search in " ".join((
+                plan.action_type, plan.target.resource_id, plan.reason,
+            )).casefold())
         ]
     plans.reverse()
     total = len(plans)

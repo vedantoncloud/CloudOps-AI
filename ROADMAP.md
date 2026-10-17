@@ -34,6 +34,7 @@ Administrators can also view the shared AWS account's last 30 complete days of d
 - Non-admin authenticated users can list and export only their own audit events; admins retain cross-actor audit access.
 - Operators can browse a tenant-scoped, newest-first pending approval queue through `/autonomy/approvals`, with bounded pagination.
 - Operators can filter the tenant-scoped action plan queue by status, risk, and resource type; filtered totals and pagination stay consistent when filters change in the console.
+- Operators can search the action plan queue case-insensitively by action type, target resource ID, or reason; search composes with status/risk/resource filters and keeps totals and pagination consistent.
 - Operators can reject a pending action plan with a required reason; the response records the authenticated reviewer and exposes a distinct `rejected` status.
 - Operators can cancel a pending action plan with the authenticated actor recorded as its decision maker, matching approval and rejection attribution in plan state.
 - Authenticated users can retrieve an action plan's current state through `GET /autonomy/plans/{action_id}`; token-mode lookups hide plans belonging to another tenant.
