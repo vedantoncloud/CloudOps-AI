@@ -12,6 +12,8 @@ def make_app():
 
 def setup_function():
     orchestrator.audit_trail.clear()
+    from autonomy import lifecycle_api
+    lifecycle_api._action_owners.clear()
 
 
 def payload(action_id="e2e-lifecycle-1"):

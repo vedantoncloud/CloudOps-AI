@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from typing import Any
+from threading import RLock
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from autonomy.action_models import (
@@ -23,6 +24,28 @@ router = APIRouter(
 )
 
 orchestrator = AutonomousLifecycleOrchestrator()
+_action_owners: dict[str, str] = {}
+_owner_lock = RLock()
+
+
+def _actor(request: Request, supplied: str | None = None) -> str:
+    principal = getattr(request.state, "principal", None)
+    return principal.subject if principal is not None else (supplied or "local-development")
+
+
+def _scope(request: Request, actor: str) -> str:
+    return request.state.tenant_id if getattr(request.state, "tenant_scoped", False) else actor
+
+
+def _claim_action(action_id: str, scope: str, *, create: bool = True) -> None:
+    with _owner_lock:
+        owner = _action_owners.get(action_id)
+        if owner is not None and owner != scope:
+            raise HTTPException(status_code=404, detail="Lifecycle action not found")
+        if owner is None:
+            if not create:
+                raise HTTPException(status_code=404, detail="Lifecycle action not found")
+            _action_owners[action_id] = scope
 
 
 class LifecycleActionRequest(BaseModel):
@@ -136,15 +159,20 @@ def _result(result: AutonomousLifecycleResult) -> dict[str, Any]:
 
 
 @router.post("/run")
-def run_lifecycle(payload: LifecycleRunRequest) -> dict[str, Any]:
+def run_lifecycle(payload: LifecycleRunRequest, request: Request) -> dict[str, Any]:
     try:
+        actor = _actor(request, payload.approved_by)
+        if getattr(request.state, "principal", None) is not None and payload.approved_by:
+            payload = payload.model_copy(update={"approved_by": actor})
         action = _action(payload)
+        _claim_action(action.action_id, _scope(request, actor))
         result = orchestrator.run(
             action,
             approved_by=payload.approved_by,
             idempotency_key=payload.idempotency_key,
             idempotency_seen=payload.idempotency_seen,
             dry_run=(payload.dry_run if payload.approved_by else False),
+            actor_id=actor,
         )
         return _result(result)
     except HTTPException:
@@ -154,15 +182,20 @@ def run_lifecycle(payload: LifecycleRunRequest) -> dict[str, Any]:
 
 
 @router.post("/approve")
-def approve_lifecycle(payload: LifecycleApproveRequest) -> dict[str, Any]:
+def approve_lifecycle(payload: LifecycleApproveRequest, request: Request) -> dict[str, Any]:
     try:
+        actor = _actor(request, payload.approved_by)
+        if getattr(request.state, "principal", None) is not None:
+            payload = payload.model_copy(update={"approved_by": actor})
         action = _action(payload)
+        _claim_action(action.action_id, _scope(request, actor))
         result = orchestrator.approve_and_run(
             action,
             approved_by=payload.approved_by,
             idempotency_key=payload.idempotency_key,
             idempotency_seen=payload.idempotency_seen,
             dry_run=payload.dry_run,
+            actor_id=actor,
         )
         return _result(result)
     except HTTPException:
@@ -172,14 +205,19 @@ def approve_lifecycle(payload: LifecycleApproveRequest) -> dict[str, Any]:
 
 
 @router.post("/reject")
-def reject_lifecycle(payload: LifecycleRejectRequest) -> dict[str, Any]:
+def reject_lifecycle(payload: LifecycleRejectRequest, request: Request) -> dict[str, Any]:
     try:
+        actor = _actor(request, payload.rejected_by)
+        if getattr(request.state, "principal", None) is not None:
+            payload = payload.model_copy(update={"rejected_by": actor})
         action = _action(payload)
+        _claim_action(action.action_id, _scope(request, actor))
         result = orchestrator.reject(
             action,
             rejected_by=payload.rejected_by,
             reason=payload.rejection_reason,
             dry_run=False,
+            actor_id=actor,
         )
         return _result(result)
     except HTTPException:
@@ -189,10 +227,17 @@ def reject_lifecycle(payload: LifecycleRejectRequest) -> dict[str, Any]:
 
 
 @router.get("/{action_id}/audit")
-def get_lifecycle_audit(action_id: str) -> dict[str, Any]:
+def get_lifecycle_audit(action_id: str, request: Request) -> dict[str, Any]:
     if not action_id.strip():
         raise HTTPException(status_code=400, detail="action_id cannot be empty")
 
+    audit_actor = _actor(request)
+    audit_scope = (
+        _scope(request, audit_actor)
+        if getattr(request.state, "tenant_scoped", False)
+        else _action_owners.get(action_id.strip())
+    )
+    _claim_action(action_id.strip(), audit_scope or audit_actor, create=False)
     events = orchestrator.audit_events(action_id.strip())
     return {
         "action_id": action_id.strip(),
@@ -207,6 +252,7 @@ def get_lifecycle_audit(action_id: str) -> dict[str, Any]:
                 "new_status": event.new_status,
                 "event": event.event,
                 "timestamp": event.timestamp,
+                "actor_id": event.actor_id,
                 "details": dict(event.details),
             }
             for event in events

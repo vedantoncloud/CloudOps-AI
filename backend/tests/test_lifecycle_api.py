@@ -9,6 +9,7 @@ def make_client():
     app = FastAPI()
     app.include_router(lifecycle_api.router)
     lifecycle_api.orchestrator = AutonomousLifecycleOrchestrator()
+    lifecycle_api._action_owners.clear()
     return TestClient(app)
 
 

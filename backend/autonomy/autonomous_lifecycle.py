@@ -273,6 +273,7 @@ class AutonomousLifecycleOrchestrator:
         idempotency_key: str | None = None,
         idempotency_seen: bool = False,
         dry_run: bool = True,
+        actor_id: str | None = None,
     ) -> AutonomousLifecycleResult:
         return self.run(
             action,
@@ -282,6 +283,7 @@ class AutonomousLifecycleOrchestrator:
             idempotency_key=idempotency_key,
             idempotency_seen=idempotency_seen,
             dry_run=dry_run,
+            actor_id=actor_id,
         )
 
     def reject(
@@ -291,12 +293,14 @@ class AutonomousLifecycleOrchestrator:
         rejected_by: str,
         reason: str,
         dry_run: bool = True,
+        actor_id: str | None = None,
     ) -> AutonomousLifecycleResult:
         return self.run(
             action,
             rejected_by=rejected_by,
             rejection_reason=reason,
             dry_run=dry_run,
+            actor_id=actor_id,
         )
 
     def audit_events(self, action_id: str) -> list[Any]:
