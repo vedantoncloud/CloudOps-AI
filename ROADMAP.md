@@ -52,6 +52,7 @@ Administrators can view 7, 30, or 90 complete days of shared AWS account daily u
 - Authenticated users can page through S3 bucket inventory with bounded `MaxBuckets` and AWS continuation tokens; the console can continue bucket pages, and tenant ownership filtering applies to each page.
 - S3 bucket inventory defaults to a bounded 1,000-bucket AWS page and always returns continuation metadata, including when clients omit pagination parameters.
 - Authenticated users can use `/console` to browse EC2/S3 inventory, inspect resource governance, review and decide pending approvals, and view their autonomous run history; bearer credentials stay in page memory.
+- Operators can review tenant-visible GitOps change sets in the console, inspect proposal manifests, approve or reject pending proposals, apply approved changes in dry-run mode, and verify applied proposals; real infrastructure mutation remains disabled.
 - Token-scoped EC2/S3 plan generation verifies the source resource's tenant ownership first; foreign, untagged, missing, or unverifiable resources are hidden before insight analysis.
 - The operations console can create action plans from EC2/S3 resource insights, browse and filter the plan queue, evaluate plans, cancel eligible plans, and run approved plans in dry-run mode.
 - The operations console can browse S3 bucket objects by prefix, choose a bounded page size, and continue through truncated listings.

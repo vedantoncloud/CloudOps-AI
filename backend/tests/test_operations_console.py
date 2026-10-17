@@ -31,6 +31,30 @@ def test_console_is_served_to_authenticated_reader():
     assert 'id="moreAudit"' in response.text
 
 
+def test_console_exposes_gitops_review_dry_run_and_verification_workflow():
+    response = TestClient(app).get("/console")
+
+    assert response.status_code == 200
+    html = response.text
+    assert 'data-tab="gitops"' in html
+    assert 'id="gitopsStatus"' in html
+    assert 'id="gitopsRows"' in html
+    assert 'id="gitopsDetails"' in html
+    assert "api(`/autonomy/gitops/changes${pending?'/pending':''}`)" in html
+    assert "api(`/autonomy/gitops/changes/${encodeURIComponent(changeId)}`)" in html
+    assert "gitopsAction(change.change_id,'approve'" in html
+    assert "gitopsAction(change.change_id,'reject'" in html
+    assert "gitopsAction(change.change_id,'apply',{dry_run:true})" in html
+    assert "gitopsAction(change.change_id,'verify',{})" in html
+    assert "if(button.dataset.tab==='gitops')loadGitops()" in html
+    assert "catch(e){message(e.message,true)}" in html
+    assert "const reason=prompt('Reason for rejecting this change set:')" in html
+    assert 'change.status===\'pending_approval\'' in html
+    assert 'change.status===\'approved\'' in html
+    assert 'change.status===\'applied\'' in html
+    assert 'real infrastructure mutation is disabled' in html
+
+
 def test_console_uses_tenant_api_contracts_and_does_not_persist_bearer_token():
     response = TestClient(app).get("/console")
 
