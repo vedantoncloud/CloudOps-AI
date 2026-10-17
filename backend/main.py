@@ -287,6 +287,7 @@ def aws_s3_objects(
     prefix: str = None,
     max_keys: int = 1000,
     continuation_token: str = None,
+    delimiter: str = None,
 ):
     _require_tenant_s3_bucket(request, bucket_name)
     if max_keys is not None and (max_keys <= 0 or max_keys > 1000):
@@ -300,6 +301,7 @@ def aws_s3_objects(
         prefix=prefix,
         max_keys=max_keys,
         continuation_token=continuation_token,
+        delimiter=delimiter,
     )
 
     if result["status"] == "unhealthy":

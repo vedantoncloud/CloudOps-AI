@@ -506,6 +506,29 @@ def test_get_s3_objects_resumes_from_continuation_token():
     assert result["objects"][0]["key"] == "next.txt"
 
 
+def test_get_s3_objects_lists_folders_and_preserves_page_cursor():
+    mock_s3 = MagicMock()
+    mock_s3.list_objects_v2.return_value = {
+        "Contents": [{"Key": "logs/current.txt", "Size": 4}],
+        "CommonPrefixes": [{"Prefix": "logs/archive/"}],
+        "IsTruncated": True,
+        "NextContinuationToken": "folder-page-2",
+    }
+
+    with patch("services.aws_service.boto3.client", return_value=mock_s3):
+        result = AWSService().get_s3_objects(
+            "cloudops-test", prefix="logs/", max_keys=25, delimiter="/",
+        )
+
+    mock_s3.list_objects_v2.assert_called_once_with(
+        Bucket="cloudops-test", Prefix="logs/", MaxKeys=25, Delimiter="/",
+    )
+    assert result["common_prefixes"] == ["logs/archive/"]
+    assert result["objects"][0]["key"] == "logs/current.txt"
+    assert result["is_truncated"] is True
+    assert result["next_continuation_token"] == "folder-page-2"
+
+
 def test_get_s3_objects_access_denied():
     with patch("services.aws_service.boto3.client") as mock_client:
         mock_s3 = mock_client.return_value

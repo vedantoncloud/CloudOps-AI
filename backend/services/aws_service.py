@@ -355,7 +355,7 @@ class AWSService:
         except (BotoCoreError, ClientError) as error:
             return {"status": "unhealthy", "error": str(error)}
 
-    def get_s3_objects(self, bucket_name, prefix=None, max_keys=None, continuation_token=None):
+    def get_s3_objects(self, bucket_name, prefix=None, max_keys=None, continuation_token=None, delimiter=None):
         try:
             s3 = boto3.client("s3")
 
@@ -369,6 +369,9 @@ class AWSService:
 
                 if prefix:
                     params["Prefix"] = prefix
+
+                if delimiter:
+                    params["Delimiter"] = delimiter
 
                 if max_keys:
                     params["MaxKeys"] = min(max_keys, 1000)
@@ -396,7 +399,7 @@ class AWSService:
                         objects = objects[:max_keys]
                         break
 
-                if starting_token or (max_keys and len(objects) >= max_keys):
+                if delimiter or starting_token or (max_keys and len(objects) >= max_keys):
                     break
 
                 if not response.get("IsTruncated"):
@@ -410,6 +413,7 @@ class AWSService:
                 "bucket": bucket_name,
                 "prefix": prefix,
                 "objects": objects,
+                "common_prefixes": [item.get("Prefix") for item in response.get("CommonPrefixes", []) if item.get("Prefix")],
                 "is_truncated": bool(response.get("IsTruncated")),
                 "next_continuation_token": response.get("NextContinuationToken"),
             }
