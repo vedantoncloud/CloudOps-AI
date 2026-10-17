@@ -404,6 +404,44 @@ def test_ec2_plan_generation_hides_foreign_instances(monkeypatch):
     assert called == []
 
 
+def test_ec2_plan_generation_finds_owned_instance_beyond_inventory_page(monkeypatch):
+    client = tenant_client(monkeypatch)
+    service = FakeAWSService()
+    monkeypatch.setattr("autonomy.api.aws_service", service)
+    instance_id = "i-dddddddd"
+    monkeypatch.setattr(
+        service,
+        "get_ec2_instances",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("plan ownership must use a direct instance lookup")
+        ),
+    )
+    monkeypatch.setattr(
+        service,
+        "get_ec2_instance",
+        lambda requested_id: {
+            "status": "healthy",
+            "instance": {
+                "instance_id": requested_id,
+                "tags": {"CloudOpsTenantId": "tenant-a"},
+            },
+        },
+    )
+    monkeypatch.setattr(
+        service,
+        "get_ec2_insights",
+        lambda requested_id: {"status": "healthy", "insights": []},
+    )
+
+    response = client.post(
+        f"/autonomy/ec2/instances/{instance_id}/plans",
+        headers={"Authorization": "Bearer operator-a"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["plan_count"] == 0
+
+
 @pytest.mark.parametrize("bucket", ["foreign", "untagged", "missing"])
 def test_s3_plan_generation_hides_unowned_buckets(monkeypatch, bucket):
     client = tenant_client(monkeypatch)

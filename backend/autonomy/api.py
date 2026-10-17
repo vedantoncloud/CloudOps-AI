@@ -89,15 +89,12 @@ def _require_tenant_ec2_instance(request: Request, instance_id: str) -> None:
     """Keep plan generation inside the same ownership boundary as EC2 reads."""
     if not getattr(request.state, "tenant_scoped", False):
         return
-    inventory = aws_service.get_ec2_instances()
-    if inventory.get("status") != "healthy":
+    result = aws_service.get_ec2_instance(instance_id)
+    if result.get("status") != "healthy":
         raise HTTPException(status_code=503, detail="EC2 inventory is unavailable")
-    tenant_id = request.state.tenant_id
-    if not any(
-        item.get("instance_id") == instance_id
-        and _resource_tenant({"tags": item.get("tags", {})}) == tenant_id
-        for item in inventory.get("instances", [])
-    ):
+    instance = result.get("instance")
+    if (instance is None
+            or _resource_tenant({"tags": instance.get("tags", {})}) != request.state.tenant_id):
         raise HTTPException(status_code=404, detail="EC2 instance not found")
 
 
