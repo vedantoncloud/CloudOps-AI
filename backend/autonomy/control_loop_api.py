@@ -1,6 +1,6 @@
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from autonomy.action_models import ActionPlan, ActionStatus, ActionTarget, RiskLevel
@@ -111,7 +111,7 @@ def _audit_gate_result(action: ActionPlan, provider_name: str, gate_result: Any)
 
 
 @router.post("/evaluate", response_model=ControlLoopEvaluateResponse)
-def evaluate_control_loop(request: ControlLoopEvaluateRequest) -> ControlLoopEvaluateResponse:
+def evaluate_control_loop(request: ControlLoopEvaluateRequest, http_request: Request) -> ControlLoopEvaluateResponse:
     try:
         provider = provider_registry.get(request.provider)
 
@@ -194,7 +194,15 @@ def evaluate_control_loop(request: ControlLoopEvaluateRequest) -> ControlLoopEva
             gitops_created = result.gitops.created
             if result.gitops.change_set is not None:
                 change_set = result.gitops.change_set
+                if getattr(http_request.state, "tenant_scoped", False):
+                    change_set.metadata["tenant_id"] = http_request.state.tenant_id
                 existing = gitops_registry.get(change_set.change_id)
+                if (
+                    existing is not None
+                    and getattr(http_request.state, "tenant_scoped", False)
+                    and existing.metadata.get("tenant_id") != http_request.state.tenant_id
+                ):
+                    raise HTTPException(status_code=409, detail="GitOps change identifier conflict")
                 if existing is None:
                     existing = gitops_registry.register(change_set)
                 gitops_change_id = existing.change_id

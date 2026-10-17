@@ -1,6 +1,6 @@
 ﻿from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from autonomy.audit_api import audit_trail
@@ -77,14 +77,31 @@ def _serialize_change_set(change_set) -> GitOpsChangeResponse:
     )
 
 
+def _visible_change(change_set, request: Request):
+    """Apply fail-closed tenant visibility to change sets in token mode."""
+    if (
+        getattr(request.state, "tenant_scoped", False)
+        and change_set.metadata.get("tenant_id") != request.state.tenant_id
+    ):
+        raise HTTPException(status_code=404, detail="GitOps change set not found")
+    return change_set
+
+
+def _change_actor(request: Request, claimed_actor: str) -> str:
+    principal = getattr(request.state, "principal", None)
+    return principal.subject if principal is not None else claimed_actor
+
+
 @router.get(
     "/changes",
     response_model=list[GitOpsChangeResponse],
 )
-def list_gitops_changes() -> list[GitOpsChangeResponse]:
+def list_gitops_changes(request: Request) -> list[GitOpsChangeResponse]:
     return [
         _serialize_change_set(change_set)
         for change_set in registry.list_all()
+        if not getattr(request.state, "tenant_scoped", False)
+        or change_set.metadata.get("tenant_id") == request.state.tenant_id
     ]
 
 
@@ -92,10 +109,12 @@ def list_gitops_changes() -> list[GitOpsChangeResponse]:
     "/changes/pending",
     response_model=list[GitOpsChangeResponse],
 )
-def list_pending_gitops_changes() -> list[GitOpsChangeResponse]:
+def list_pending_gitops_changes(request: Request) -> list[GitOpsChangeResponse]:
     return [
         _serialize_change_set(change_set)
         for change_set in registry.list_pending()
+        if not getattr(request.state, "tenant_scoped", False)
+        or change_set.metadata.get("tenant_id") == request.state.tenant_id
     ]
 
 
@@ -103,7 +122,7 @@ def list_pending_gitops_changes() -> list[GitOpsChangeResponse]:
     "/changes/{change_id}",
     response_model=GitOpsChangeResponse,
 )
-def get_gitops_change(change_id: str) -> GitOpsChangeResponse:
+def get_gitops_change(change_id: str, request: Request) -> GitOpsChangeResponse:
     change_set = registry.get(change_id)
 
     if change_set is None:
@@ -112,7 +131,7 @@ def get_gitops_change(change_id: str) -> GitOpsChangeResponse:
             detail=f"GitOps change set not found: {change_id}",
         )
 
-    return _serialize_change_set(change_set)
+    return _serialize_change_set(_visible_change(change_set, request))
 
 
 @router.post(
@@ -122,14 +141,16 @@ def get_gitops_change(change_id: str) -> GitOpsChangeResponse:
 def approve_gitops_change(
     change_id: str,
     request: ApprovalRequest,
+    http_request: Request,
 ) -> GitOpsChangeResponse:
     try:
+        _visible_change(registry.require(change_id), http_request)
         change_set = registry.approve(
             change_id,
-            request.approved_by,
+            _change_actor(http_request, request.approved_by),
             engine=engine,
         )
-        return _serialize_change_set(change_set)
+        return _serialize_change_set(_visible_change(change_set, http_request))
 
     except KeyError as exc:
         raise HTTPException(
@@ -151,15 +172,17 @@ def approve_gitops_change(
 def reject_gitops_change(
     change_id: str,
     request: RejectionRequest,
+    http_request: Request,
 ) -> GitOpsChangeResponse:
     try:
+        _visible_change(registry.require(change_id), http_request)
         change_set = registry.reject(
             change_id,
-            request.rejected_by,
+            _change_actor(http_request, request.rejected_by),
             request.reason,
             engine=engine,
         )
-        return _serialize_change_set(change_set)
+        return _serialize_change_set(_visible_change(change_set, http_request))
 
     except KeyError as exc:
         raise HTTPException(
@@ -181,8 +204,10 @@ def reject_gitops_change(
 def apply_gitops_change(
     change_id: str,
     request: ApplyRequest,
+    http_request: Request,
 ) -> ApplyResponse:
     try:
+        _visible_change(registry.require(change_id), http_request)
         result = registry.apply(
             change_id,
             dry_run=request.dry_run,
@@ -212,8 +237,10 @@ def apply_gitops_change(
 def verify_gitops_change(
     change_id: str,
     request: VerifyRequest,
+    http_request: Request,
 ) -> VerifyResponse:
     try:
+        _visible_change(registry.require(change_id), http_request)
         verified = registry.verify(
             change_id,
             observed_values=request.observed_values,

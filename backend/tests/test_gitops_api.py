@@ -1,5 +1,6 @@
 ﻿from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from auth import AccessControlMiddleware, Principal
 
 from autonomy.gitops import GitOpsChange, GitOpsEngine
 from autonomy.gitops_api import registry, router
@@ -9,6 +10,19 @@ def make_app():
     app = FastAPI()
     app.include_router(router)
     return app
+
+
+def make_tenant_client():
+    app = make_app()
+    app.add_middleware(
+        AccessControlMiddleware,
+        mode="token",
+        tokens={
+            "tenant-a": Principal("alice", "operator", "tenant-a"),
+            "tenant-b": Principal("bob", "operator", "tenant-b"),
+        },
+    )
+    return TestClient(app)
 
 
 def make_change_set(*, requires_approval=True):
@@ -354,3 +368,49 @@ def test_verify_missing_change_returns_404():
     )
 
     assert response.status_code == 404
+
+
+def test_gitops_change_lists_and_detail_are_tenant_scoped():
+    owned = make_change_set()
+    owned.metadata["tenant_id"] = "tenant-a"
+    foreign = make_change_set()
+    foreign.change_id = "change-foreign"
+    foreign.metadata["tenant_id"] = "tenant-b"
+    registry.register(owned)
+    registry.register(foreign)
+    client = make_tenant_client()
+    headers = {"Authorization": "Bearer tenant-a"}
+
+    listed = client.get("/autonomy/gitops/changes", headers=headers)
+    assert [item["change_id"] for item in listed.json()] == [owned.change_id]
+    assert client.get(
+        f"/autonomy/gitops/changes/{foreign.change_id}", headers=headers
+    ).status_code == 404
+
+
+def test_foreign_gitops_change_cannot_be_mutated_and_actor_is_authenticated():
+    foreign = make_change_set()
+    foreign.metadata["tenant_id"] = "tenant-b"
+    registry.register(foreign)
+    client = make_tenant_client()
+    headers = {"Authorization": "Bearer tenant-a"}
+
+    denied = client.post(
+        f"/autonomy/gitops/changes/{foreign.change_id}/approve",
+        headers=headers,
+        json={"approved_by": "forged"},
+    )
+    assert denied.status_code == 404
+    assert foreign.status.value == "pending_approval"
+
+    owned = make_change_set()
+    owned.metadata["tenant_id"] = "tenant-a"
+    owned.change_id = "change-owned"
+    registry.register(owned)
+    approved = client.post(
+        f"/autonomy/gitops/changes/{owned.change_id}/approve",
+        headers=headers,
+        json={"approved_by": "forged"},
+    )
+    assert approved.status_code == 200
+    assert approved.json()["approved_by"] == "alice"
