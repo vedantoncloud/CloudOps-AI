@@ -171,6 +171,16 @@ def test_run_history_groups_events_and_only_returns_current_actors_runs(monkeypa
     assert data["runs"][0]["dry_run"] is True
     assert client.get("/autonomy/runs?offset=1").json()["runs"][0]["action_id"] == "owned-older"
 
+    details = client.get("/autonomy/runs/owned")
+    assert details.status_code == 200
+    assert [event["event"] for event in details.json()["events"]] == [
+        "autonomous_lifecycle_started",
+        "autonomous_lifecycle_completed",
+    ]
+    assert details.json()["events"][0]["details"] == {"dry_run": True}
+    assert client.get("/autonomy/runs/foreign").status_code == 404
+    assert client.get("/autonomy/runs/missing").status_code == 404
+
 
 def test_run_history_paginates_and_validates_bounds(monkeypatch):
     monkeypatch.setattr(api, "audit_trail", AuditTrail())

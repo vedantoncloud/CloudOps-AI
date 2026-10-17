@@ -43,6 +43,9 @@ def test_console_uses_tenant_api_contracts_and_does_not_persist_bearer_token():
     assert 'id="runPageStatus"' in response.text
     assert "loadApprovals(true)" in response.text
     assert "loadRuns(true)" in response.text
+    assert 'id="runDetails"' in response.text
+    assert "api(`/autonomy/runs/${encodeURIComponent(actionId)}`)" in response.text
+    assert "inspectRun(r.action_id)" in response.text
     assert "$('moreApprovals').disabled=approvalOffset>=data.total" in response.text
     assert "$('moreRuns').disabled=runOffset>=data.total" in response.text
     assert "$('approvalRows').append(tr)" in response.text

@@ -75,6 +75,40 @@ def list_autonomous_runs(
     return {"runs": runs[offset:offset + limit], "total": total, "limit": limit, "offset": offset}
 
 
+@router.get("/runs/{action_id}")
+def get_autonomous_run(action_id: str, request: Request) -> dict[str, Any]:
+    """Return lifecycle events for one run owned by the authenticated actor."""
+    principal = getattr(request.state, "principal", None)
+    actor_id = getattr(principal, "subject", None)
+    if not actor_id:
+        raise HTTPException(status_code=401, detail="Authenticated principal required")
+
+    events = [
+        event for event in audit_trail.get_events(action_id=action_id)
+        if event.actor_id == actor_id and event.event.startswith("autonomous_")
+    ]
+    if not events:
+        raise HTTPException(status_code=404, detail="Autonomous run not found")
+
+    return {
+        "action_id": action_id,
+        "actor_id": actor_id,
+        "events": [
+            {
+                "event": event.event,
+                "timestamp": event.timestamp,
+                "old_status": event.old_status,
+                "new_status": event.new_status,
+                "action_type": event.action_type,
+                "resource_type": event.resource_type,
+                "resource_id": event.resource_id,
+                "details": event.details,
+            }
+            for event in events
+        ],
+    }
+
+
 class AutonomousRunRequest(BaseModel):
     provider: str = Field(default="aws", min_length=1)
     action_id: str = Field(min_length=1)

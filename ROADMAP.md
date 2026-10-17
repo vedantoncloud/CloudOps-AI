@@ -26,6 +26,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 - Authenticated users can retrieve an individual EC2 inventory record through `GET /cloud/aws/ec2/instances/{instance_id}` using a direct instance lookup, independent of inventory pagination; token-mode results hide foreign, untagged, and missing IDs uniformly.
 - Tenant-scoped EC2 detail, metrics, status, and insight checks look up the requested instance directly, so ownership checks work for instances beyond the first inventory page.
 - Authenticated operators can list their durable autonomous run history through `/autonomy/runs`, with lifecycle summaries and bounded pagination.
+- Authenticated operators can inspect an individual run's lifecycle events and recorded evidence from the console; run detail is restricted to the authenticated actor and hides foreign or missing runs uniformly.
 - Authenticated users can browse the in-memory action-plan queue through `/autonomy/plans`, filter by lifecycle status, and page through results; token-mode plan access is restricted to the tenant that created each plan.
 - Non-admin authenticated users can list and export only their own audit events; admins retain cross-actor audit access.
 - Operators can browse a tenant-scoped, newest-first pending approval queue through `/autonomy/approvals`, with bounded pagination.
