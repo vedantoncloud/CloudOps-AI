@@ -87,6 +87,7 @@ Administrators can view 7, 30, or 90 complete days of shared AWS account daily u
 - The shared control-plane summary, which includes cross-tenant GitOps counts and audit-event details, is restricted to administrators in token mode.
 - Administrators can verify audit hash-chain integrity from the console; the check reports the event count and first invalid index and retains the API's admin-only access policy.
 - Authenticated tenant users can inspect control-plane action traces only when the audit history is attributed to their own subject; foreign and unattributed traces are hidden, while administrators retain shared trace access.
+- Action plans generated from EC2 or S3 insights create durable `plan_created` audit events with the authenticated actor and tenant; plan records are not exposed if the audit write fails.
 
 ## Prioritized remaining work
 

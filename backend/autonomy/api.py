@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from autonomy.action_models import ActionStatus, RiskLevel
 from autonomy.action_planner import ActionPlanner
+from autonomy.audit_api import audit_trail
 from autonomy.approval import ApprovalManager
 from autonomy.executor import ActionExecutor
 from autonomy.policy_engine import PolicyEngine
@@ -70,6 +71,20 @@ def _get_plan(action_id: str, request: Request | None = None):
 
 def _plan_response(plans, request: Request):
     tenant_id = request.state.tenant_id if getattr(request.state, "tenant_scoped", False) else None
+    principal = getattr(request.state, "principal", None)
+    actor_id = getattr(principal, "subject", None)
+    for plan in plans:
+        audit_trail.record(
+            action_id=plan.action_id,
+            action_type=plan.action_type,
+            resource_type=plan.target.resource_type,
+            resource_id=plan.target.resource_id,
+            old_status="none",
+            new_status=plan.status.value,
+            event="plan_created",
+            actor_id=actor_id,
+            details={"tenant_id": tenant_id} if tenant_id is not None else {},
+        )
     _store_plans(plans, tenant_id)
     return {
         "status": "healthy",
