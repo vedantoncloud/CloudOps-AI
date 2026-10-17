@@ -1,6 +1,6 @@
-﻿# CloudOps AI Roadmap
+# CloudOps AI Roadmap
 
-**Repository audit:** 2026-10-17, updated after adding actor filtering to console audit history. This roadmap contains **9 remaining tasks**: the nine numbered incomplete outcomes below. Sub-bullets and acceptance criteria do not count separately. Recount only when a complete outcome ships or scope is explicitly changed.
+**Repository audit:** 2026-10-17, updated after adding admin-only AWS account billing to the operations console. This roadmap contains **9 remaining tasks**: the nine numbered incomplete outcomes below. Sub-bullets and acceptance criteria do not count separately. Recount only when a complete outcome ships or scope is explicitly changed.
 
 ## Current state
 
@@ -8,7 +8,9 @@ CloudOps AI is a FastAPI backend with AWS EC2/S3 inventory and insight routes, p
 
 Recent commits added configurable bearer-token access control, admin-only audit diagnostics, autonomous-run audit attribution, provider-neutral resource tenant filtering, and tenant filtering for EC2 inventory/summary/detail and aggregate insights. In token mode, the `CloudOpsTenantId` tag scopes provider-neutral `/autonomy/resources` inventory/governance, EC2 inventory/summary/detail/aggregate insights, and direct S3 bucket inventory/detail/object/insight routes. S3 bucket access fails closed when its ownership tag cannot be read; deployments need `s3:GetBucketTagging` for those checks. Tenant users also receive sanitized responses from AWS status and service health checks; admins retain diagnostics. The AWS client/account context is shared rather than selected by tenant. Development remains the default environment and authentication mode, but `CLOUDOPS_ENV=production` now requires token mode and a nonempty token registry at startup. Tokens and claim validation exist; token issuance, rotation, revocation, and federation remain upstream responsibilities. Autonomous-run events include the authenticated subject; attribution is not consistently wired through other operations.
 
-The audit trail and idempotency/reconciliation state persist to SQLite files and have substantial validation and concurrency coverage. This is not a shared production database architecture. `ActionExecutor` rejects real infrastructure execution; execution remains dry-run only. Autonomous lifecycle audit events now back an authenticated, actor-scoped, paginated `/autonomy/runs` history endpoint. `/console` serves a lightweight authenticated browser console for inventory, governance, approvals, and run history. The repository has a README and roadmap, but `docs/` is empty. No Docker/container setup, CI workflow, Terraform/Kubernetes configuration, migration framework, or LLM integration was found. Requirements are pinned, but no supported Python version is documented. Cost insights describe qualitative estimates, not live billing data.
+The audit trail and idempotency/reconciliation state persist to SQLite files and have substantial validation and concurrency coverage. This is not a shared production database architecture. `ActionExecutor` rejects real infrastructure execution; execution remains dry-run only. Autonomous lifecycle audit events now back an authenticated, actor-scoped, paginated `/autonomy/runs` history endpoint. `/console` serves a lightweight authenticated browser console for inventory, governance, approvals, and run history. The repository has a README and roadmap, but `docs/` is empty. No Docker/container setup, CI workflow, Terraform/Kubernetes configuration, migration framework, or LLM integration was found. Requirements are pinned, but no supported Python version is documented. EC2/S3 cost insights remain qualitative, while administrators can inspect shared-account daily billing totals through Cost Explorer.
+
+Administrators can also view the shared AWS account's last 30 complete days of daily unblended spend through Cost Explorer in the console. This endpoint is admin-only because the AWS account and billing data are shared; it does not provide tenant- or resource-level charge attribution.
 
 ## Completed work
 
@@ -69,6 +71,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 - The operations console shows per-instance EC2 insights beside inventory and selectable-window metrics, with independent error reporting for each detail request.
 - EC2 and S3 action-plan generation uses `POST` because it creates plan records; token-mode readers are denied and operators can create tenant-scoped plans.
 - S3 object-list API requests default to a bounded 1,000-object page and expose AWS continuation state, so ordinary browser/API requests do not scan an entire bucket.
+- Administrators can view the shared AWS account's total daily unblended cost for the last 30 complete days in the console; the account-level endpoint is admin-only in token mode and reports billing permission or availability failures without exposing SDK details.
 
 ## Prioritized remaining work
 
@@ -102,7 +105,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 - `/health` remains a static liveness check; `/ready` checks AWS and configured persistence stores but does not yet provide structured logs, request correlation, metrics, or actionable diagnostic signals.
 - No CI workflow, deployment/container configuration, IaC, or substantive operator documentation was found; `docs/` is empty. The console is a lightweight browser client served by FastAPI, with inventory/governance, plan generation, inspection and review, approvals, and run history.
 - No supported Python runtime or automated dependency update/security workflow is documented.
-- Cost insights are qualitative; live billing/pricing integration is not present.
+- EC2/S3 optimization insights remain qualitative and do not attribute Cost Explorer charges to tenants or individual resources; the admin-only account billing view reports daily shared-account totals.
 - The checkout contains untracked SQLite database files. They were left untouched and are not part of this roadmap change.
 
 ## Scope and count

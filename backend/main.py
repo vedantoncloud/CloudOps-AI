@@ -4,7 +4,7 @@ from pathlib import Path
 import re
 import sqlite3
 
-from auth import AccessControlMiddleware
+from auth import AccessControlMiddleware, require_role
 from services.aws_service import AWSService
 from autonomy.api import router as autonomy_router
 from autonomy.control_loop_api import router as control_loop_router
@@ -150,6 +150,16 @@ def aws_service_health(service_name: str, request: Request):
             for key in ("service", "status", "message")
             if key in result
         }
+    return result
+
+
+@app.get("/cloud/aws/account-costs")
+def aws_account_costs(request: Request):
+    # Cost Explorer reports the shared AWS account, so never expose it to tenant users.
+    require_role(request.state.principal, "admin")
+    result = aws_service.get_account_costs()
+    if result["status"] == "unhealthy":
+        raise HTTPException(status_code=503, detail="AWS billing data is unavailable")
     return result
 
 

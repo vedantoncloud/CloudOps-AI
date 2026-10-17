@@ -4,6 +4,37 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 
 class AWSService:
+    def get_account_costs(self):
+        """Return the last 30 complete days of account-level AWS spend."""
+        end = datetime.now(timezone.utc).date()
+        start = end - timedelta(days=30)
+        try:
+            client = boto3.client("ce", region_name="us-east-1")
+            response = client.get_cost_and_usage(
+                TimePeriod={"Start": start.isoformat(), "End": end.isoformat()},
+                Granularity="DAILY",
+                Metrics=["UnblendedCost"],
+            )
+            daily = []
+            currency = None
+            for item in response.get("ResultsByTime", []):
+                amount = item.get("Total", {}).get("UnblendedCost", {})
+                currency = currency or amount.get("Unit")
+                daily.append({
+                    "date": item.get("TimePeriod", {}).get("Start"),
+                    "amount": float(amount.get("Amount", 0)),
+                })
+            return {
+                "service": "aws-cost-explorer",
+                "status": "healthy",
+                "period": {"start": start.isoformat(), "end_exclusive": end.isoformat()},
+                "currency": currency,
+                "total": round(sum(day["amount"] for day in daily), 6),
+                "daily": daily,
+            }
+        except (BotoCoreError, ClientError) as error:
+            return {"service": "aws-cost-explorer", "status": "unhealthy", "error": str(error)}
+
     def get_status(self):
         try:
             sts = boto3.client("sts")
