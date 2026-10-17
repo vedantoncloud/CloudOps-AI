@@ -17,10 +17,10 @@ def _aws_client(service_name, **kwargs):
 
 
 class AWSService:
-    def get_account_costs(self):
-        """Return the last 30 complete days of account-level AWS spend."""
+    def get_account_costs(self, days=30):
+        """Return a bounded window of complete days of account-level AWS spend."""
         end = datetime.now(timezone.utc).date()
-        start = end - timedelta(days=30)
+        start = end - timedelta(days=days)
         try:
             client = _aws_client("ce", region_name="us-east-1")
             response = client.get_cost_and_usage(

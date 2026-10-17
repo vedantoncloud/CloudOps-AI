@@ -167,10 +167,12 @@ def aws_service_health(service_name: str, request: Request):
 
 
 @app.get("/cloud/aws/account-costs")
-def aws_account_costs(request: Request):
+def aws_account_costs(request: Request, days: int = 30):
     # Cost Explorer reports the shared AWS account, so never expose it to tenant users.
     require_role(request.state.principal, "admin")
-    result = aws_service.get_account_costs()
+    if not 7 <= days <= 90:
+        raise HTTPException(status_code=400, detail="days must be between 7 and 90")
+    result = aws_service.get_account_costs(days=days)
     if result["status"] == "unhealthy":
         raise HTTPException(status_code=503, detail="AWS billing data is unavailable")
     return result
