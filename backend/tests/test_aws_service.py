@@ -295,6 +295,19 @@ def test_get_s3_buckets_returns_bounded_continuation_page():
     assert result["next_continuation_token"] == "next-page"
 
 
+def test_get_s3_buckets_defaults_to_bounded_page_and_returns_cursor():
+    response = {"Buckets": [{"Name": "first-page"}], "ContinuationToken": "next-page"}
+    with patch("services.aws_service.boto3.client") as mock_client:
+        s3 = mock_client.return_value
+        s3.list_buckets.return_value = response
+        result = AWSService().get_s3_buckets()
+
+    s3.list_buckets.assert_called_once_with(MaxBuckets=1000)
+    assert result["buckets"][0]["name"] == "first-page"
+    assert result["is_truncated"] is True
+    assert result["next_continuation_token"] == "next-page"
+
+
 def test_get_s3_buckets_when_access_denied():
     with patch("services.aws_service.boto3.client") as mock_client:
         mock_s3 = mock_client.return_value
@@ -331,6 +344,17 @@ def test_s3_bucket_page_parameters_reach_service():
 
     assert response.status_code == 200
     get_buckets.assert_called_once_with(250, "page-token")
+
+
+def test_s3_bucket_inventory_uses_bounded_default_page():
+    with patch("main.aws_service.get_s3_buckets", return_value={
+        "service": "s3", "status": "healthy", "buckets": [],
+        "is_truncated": False, "next_continuation_token": None,
+    }) as get_buckets:
+        response = TestClient(app).get("/cloud/aws/s3/buckets")
+
+    assert response.status_code == 200
+    get_buckets.assert_called_once_with(1000, None)
 
 
 def test_s3_bucket_details():

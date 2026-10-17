@@ -230,15 +230,12 @@ def aws_ec2_instances(request: Request, state: str = None, tag: str = None, max_
 @app.get("/cloud/aws/s3/buckets")
 def aws_s3_buckets(
     request: Request,
-    max_buckets: int = None,
+    max_buckets: int = 1000,
     continuation_token: str = None,
 ):
     if max_buckets is not None and not 1 <= max_buckets <= 10000:
         raise HTTPException(status_code=400, detail="max_buckets must be between 1 and 10000")
-    if max_buckets is None and continuation_token is None:
-        result = aws_service.get_s3_buckets()
-    else:
-        result = aws_service.get_s3_buckets(max_buckets, continuation_token)
+    result = aws_service.get_s3_buckets(max_buckets, continuation_token)
     if result.get("status") != "healthy" or not getattr(request.state, "tenant_scoped", False):
         return result
     result = dict(result)

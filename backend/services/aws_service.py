@@ -271,7 +271,7 @@ class AWSService:
         except (BotoCoreError, ClientError) as error:
             return {"service": "ec2", "status": "unhealthy", "error": str(error)}
 
-    def get_s3_buckets(self, max_buckets=None, continuation_token=None):
+    def get_s3_buckets(self, max_buckets=1000, continuation_token=None):
         try:
             s3 = boto3.client("s3")
             request = {}

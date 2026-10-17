@@ -51,7 +51,7 @@ class FakeAWSService:
             "error": "internal AWS diagnostic for account 123456789012",
         }
 
-    def get_s3_buckets(self):
+    def get_s3_buckets(self, max_buckets=1000, continuation_token=None):
         return {
             "service": "s3",
             "status": "healthy",
@@ -460,7 +460,7 @@ def test_ec2_inventory_page_is_tenant_filtered_and_cursor_is_forwarded(monkeypat
     client = tenant_client(monkeypatch)
     calls = []
 
-    def page(state=None, tag=None, max_results=None, next_token=None):
+    def page(state=None, tag=None, max_results=None, next_token=None, name=None):
         calls.append((max_results, next_token))
         return {
             "status": "healthy",
