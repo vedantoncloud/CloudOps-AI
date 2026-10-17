@@ -167,10 +167,20 @@ def aws_account_costs(request: Request):
 def aws_ec2_summary(request: Request):
     if not getattr(request.state, "tenant_scoped", False):
         return aws_service.get_ec2_summary()
-    inventory = _tenant_ec2_instances(request, None, None)
-    if inventory.get("status") != "healthy":
-        return inventory
-    instances = inventory.get("instances", [])
+    instances = []
+    next_token = None
+    seen_tokens = set()
+    while True:
+        inventory = _tenant_ec2_instances(request, None, None, 1000, next_token)
+        if inventory.get("status") != "healthy":
+            return inventory
+        instances.extend(inventory.get("instances", []))
+        next_token = inventory.get("next_token")
+        if not next_token:
+            break
+        if next_token in seen_tokens:
+            return {"service": "ec2", "status": "unhealthy"}
+        seen_tokens.add(next_token)
     return {
         "service": "ec2",
         "status": "healthy",

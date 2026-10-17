@@ -121,6 +121,24 @@ def test_get_ec2_summary():
     }
 
 
+def test_get_ec2_summary_aggregates_all_aws_pages():
+    with patch("services.aws_service.boto3.client") as mock_client:
+        ec2 = mock_client.return_value
+        ec2.describe_instances.side_effect = [
+            {"Reservations": [{"Instances": [{"State": {"Name": "running"}}]}], "NextToken": "page-2"},
+            {"Reservations": [{"Instances": [{"State": {"Name": "stopped"}}]}]},
+        ]
+
+        result = AWSService().get_ec2_summary()
+
+    assert result == {
+        "service": "ec2", "status": "healthy", "total_instances": 2,
+        "running_instances": 1, "stopped_instances": 1,
+    }
+    assert ec2.describe_instances.call_args_list[0].kwargs == {"MaxResults": 1000}
+    assert ec2.describe_instances.call_args_list[1].kwargs == {"MaxResults": 1000, "NextToken": "page-2"}
+
+
 def test_get_ec2_instances():
     fake_response = {
         "Reservations": [

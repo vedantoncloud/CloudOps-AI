@@ -12,7 +12,9 @@ class FakeAWSService:
             return lambda *args, **kwargs: {"status": "healthy", "service": "ec2"}
         raise AttributeError(name)
 
-    def get_ec2_instances(self, state=None, tag=None):
+    def get_ec2_instances(self, state=None, tag=None, max_results=None, next_token=None, name=None):
+        if next_token:
+            return {"service": "ec2", "status": "healthy", "instances": [], "next_token": None}
         return {
             "service": "ec2",
             "status": "healthy",
@@ -167,6 +169,42 @@ def test_ec2_summary_counts_only_the_authenticated_tenants_instances(monkeypatch
         "running_instances": 1,
         "stopped_instances": 0,
     }
+
+
+def test_ec2_summary_counts_tenant_instances_across_all_pages(monkeypatch):
+    service = FakeAWSService()
+    calls = []
+
+    def page(state=None, tag=None, max_results=None, next_token=None, name=None):
+        calls.append(next_token)
+        if next_token is None:
+            return {
+                "service": "ec2", "status": "healthy",
+                "instances": [{"state": "running", "tags": {"CloudOpsTenantId": "tenant-a"}}],
+                "next_token": "page-2",
+            }
+        return {
+            "service": "ec2", "status": "healthy",
+            "instances": [
+                {"state": "stopped", "tags": {"CloudOpsTenantId": "tenant-a"}},
+                {"state": "running", "tags": {"CloudOpsTenantId": "tenant-b"}},
+            ],
+            "next_token": None,
+        }
+
+    service.get_ec2_instances = page
+    client = tenant_client(monkeypatch)
+    monkeypatch.setattr(main, "aws_service", service)
+    response = client.get(
+        "/cloud/aws/ec2/summary", headers={"Authorization": "Bearer token-a"}
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "service": "ec2", "status": "healthy", "total_instances": 2,
+        "running_instances": 1, "stopped_instances": 1,
+    }
+    assert calls == [None, "page-2"]
 
 
 def test_ec2_instance_details_returns_only_owned_inventory_record(monkeypatch):

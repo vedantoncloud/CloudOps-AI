@@ -26,6 +26,7 @@ Administrators can also view the shared AWS account's last 30 complete days of d
 - Authenticated tenant users receive a sanitized AWS status response without the shared AWS account ID, principal ARN, or raw diagnostics; admins retain full status details.
 - Authenticated tenant users receive sanitized AWS service health responses without raw shared-account SDK errors; admins retain full diagnostics.
 - Authenticated users can retrieve an individual EC2 inventory record through `GET /cloud/aws/ec2/instances/{instance_id}` using a direct instance lookup, independent of inventory pagination; token-mode results hide foreign, untagged, and missing IDs uniformly.
+- EC2 fleet summaries aggregate every AWS inventory page; tenant summaries apply ownership filtering to each page before counting, so fleets larger than one page report complete scoped totals.
 - Operators can inspect CPU utilization and inbound/outbound network trends as accessible charts in EC2 details, with latest/peak summaries and explicit empty states when CloudWatch has no datapoints.
 - Tenant-scoped EC2 detail, metrics, status, and insight checks look up the requested instance directly, so ownership checks work for instances beyond the first inventory page.
 - Tenant-scoped EC2 action-plan creation checks ownership with a direct instance lookup, so operators can create plans for owned instances beyond the first inventory page.
