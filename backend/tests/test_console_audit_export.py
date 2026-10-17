@@ -24,3 +24,15 @@ def test_console_can_download_actor_scoped_audit_export_with_current_filter():
     assert "Start time must be at or before end time." in html
     assert "$('auditStart').addEventListener('change',()=>loadAudit())" in html
     assert "$('auditEnd').addEventListener('change',()=>loadAudit())" in html
+
+
+def test_console_audit_actor_filter_is_shared_by_listing_and_export():
+    response = TestClient(app).get("/console")
+
+    assert response.status_code == 200
+    html = response.text
+    assert 'id="auditActor"' in html
+    assert "actor=$('auditActor').value.trim()" in html
+    assert "if(actor)query.set('actor_id',actor)" in html
+    assert "$('auditActor').addEventListener('keydown'" in html
+    assert "const query=auditFilters();const response=await fetch" in html
