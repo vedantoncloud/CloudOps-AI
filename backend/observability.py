@@ -3,6 +3,7 @@
 import json
 import logging
 import re
+import threading
 import time
 from uuid import uuid4
 
@@ -12,10 +13,94 @@ from starlette.requests import Request
 
 _REQUEST_ID = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 _logger = logging.getLogger("cloudops.http")
+_LATENCY_BUCKETS = (0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0)
+_KNOWN_METHODS = {
+    "GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "TRACE", "CONNECT"
+}
+
+
+class RequestMetrics:
+    """Thread-safe in-process request counters and latency histogram."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._requests = {}
+        self._durations = {}
+
+    def observe(self, method: str, route: str, status_code: int, duration: float):
+        method = method if method in _KNOWN_METHODS else "OTHER"
+        key = (method, route, status_code)
+        with self._lock:
+            self._requests[key] = self._requests.get(key, 0) + 1
+            summary = self._durations.setdefault(
+                key, [0] * len(_LATENCY_BUCKETS) + [0, 0.0]
+            )
+            for index, bound in enumerate(_LATENCY_BUCKETS):
+                if duration <= bound:
+                    summary[index] += 1
+            summary[-2] += 1
+            summary[-1] += duration
+
+    def prometheus_text(self) -> str:
+        """Render a Prometheus text exposition snapshot."""
+        with self._lock:
+            requests = dict(self._requests)
+            durations = {key: list(values) for key, values in self._durations.items()}
+
+        lines = [
+            "# HELP cloudops_http_requests_total Total completed HTTP requests.",
+            "# TYPE cloudops_http_requests_total counter",
+        ]
+        for (method, route, status), count in sorted(requests.items()):
+            labels = _format_labels(method, route, status)
+            lines.append(f"cloudops_http_requests_total{labels} {count}")
+        lines.extend(
+            (
+                "# HELP cloudops_http_request_duration_seconds HTTP request duration in seconds.",
+                "# TYPE cloudops_http_request_duration_seconds histogram",
+            )
+        )
+        for key in sorted(durations):
+            method, route, status = key
+            summary = durations[key]
+            for index, bound in enumerate(_LATENCY_BUCKETS):
+                labels = _format_labels(method, route, status, le=_float_label(bound))
+                lines.append(
+                    f"cloudops_http_request_duration_seconds_bucket{labels} {summary[index]}"
+                )
+            labels = _format_labels(method, route, status, le="+Inf")
+            lines.append(f"cloudops_http_request_duration_seconds_bucket{labels} {summary[-2]}")
+            base = _format_labels(method, route, status)
+            lines.append(f"cloudops_http_request_duration_seconds_sum{base} {summary[-1]:.9g}")
+            lines.append(f"cloudops_http_request_duration_seconds_count{base} {summary[-2]}")
+        return "\n".join(lines) + "\n"
+
+
+def _float_label(value: float) -> str:
+    return str(value)
+
+
+def _format_labels(method: str, route: str, status: int, **extra: str) -> str:
+    labels = {"method": method, "route": route, "status": str(status), **extra}
+    def escape_label(value: str) -> str:
+        return value.replace("\\", "\\\\").replace('"', '\\"')
+
+    rendered = ",".join(
+        f'{name}="{escape_label(value)}"'
+        for name, value in labels.items()
+    )
+    return "{" + rendered + "}"
+
+
+request_metrics = RequestMetrics()
 
 
 class RequestObservabilityMiddleware(BaseHTTPMiddleware):
     """Attach a correlation ID and log one sanitized JSON record per request."""
+
+    def __init__(self, app, metrics: RequestMetrics | None = None):
+        super().__init__(app)
+        self.metrics = metrics or request_metrics
 
     async def dispatch(self, request: Request, call_next):
         supplied_id = request.headers.get("x-request-id", "")
@@ -29,6 +114,13 @@ class RequestObservabilityMiddleware(BaseHTTPMiddleware):
             response.headers["X-Request-ID"] = request_id
             return response
         finally:
+            route = getattr(request.scope.get("route"), "path", "<unmatched>")
+            self.metrics.observe(
+                request.method,
+                route,
+                status_code,
+                time.perf_counter() - started,
+            )
             _logger.info(
                 json.dumps(
                     {

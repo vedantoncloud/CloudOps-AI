@@ -1,11 +1,11 @@
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from pathlib import Path
 import re
 import sqlite3
 
 from auth import AccessControlMiddleware, require_role
-from observability import RequestObservabilityMiddleware
+from observability import RequestObservabilityMiddleware, request_metrics
 from services.aws_service import AWSService
 from autonomy.api import router as autonomy_router
 from autonomy.control_loop_api import router as control_loop_router
@@ -84,6 +84,15 @@ def health_check():
         "status": "healthy",
         "service": "cloudops-ai",
     }
+
+
+@app.get("/metrics", include_in_schema=False)
+def metrics():
+    """Expose bounded-cardinality HTTP counters and latency histograms."""
+    return PlainTextResponse(
+        request_metrics.prometheus_text(),
+        media_type="text/plain; version=0.0.4; charset=utf-8",
+    )
 
 
 @app.get("/ready")
