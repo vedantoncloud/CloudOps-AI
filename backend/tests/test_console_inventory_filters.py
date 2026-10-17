@@ -78,3 +78,18 @@ def test_console_exports_loaded_inventory_as_search_aware_csv():
     assert "link.download=($('kind').value==='ec2'?'ec2-inventory':'s3-bucket-inventory')+'.csv'" in html
     assert "loadedInventory.push(...normalized)" in html
     assert "$('exportInventory').addEventListener('click',exportInventory)" in html
+
+
+def test_console_exports_all_filtered_action_plan_pages_as_safe_csv():
+    response = TestClient(app).get("/console")
+    assert response.status_code == 200
+    html = response.text
+    assert 'id="exportPlans"' in html
+    assert "async function exportPlans()" in html
+    assert "limit:'200',offset:'0'" in html
+    assert "filters.set('search',$('planSearch').value.trim())" in html
+    assert "['planStatus','status'],['planRisk','risk'],['planResourceType','resource_type']" in html
+    assert "while(plans.length<total)" in html
+    assert "row.map(csvCell)" in html
+    assert "link.download='action-plans.csv'" in html
+    assert "$('exportPlans').addEventListener('click',exportPlans)" in html

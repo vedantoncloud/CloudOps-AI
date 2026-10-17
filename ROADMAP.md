@@ -76,6 +76,7 @@ Administrators can also view the shared AWS account's last 30 complete days of d
 - S3 object-list API requests default to a bounded 1,000-object page and expose AWS continuation state, so ordinary browser/API requests do not scan an entire bucket.
 - Administrators can view the shared AWS account's total daily unblended cost for the last 30 complete days in the console; the account-level endpoint is admin-only in token mode and reports billing permission or availability failures without exposing SDK details.
 - Administrators can see the last 30 complete days of unblended spend aggregated by AWS service, ranked by total cost, alongside the daily account totals in the billing console response.
+- Operators can export the complete action-plan result set matching the console search, status, risk, and resource-type filters as CSV; export fetches bounded pages and protects spreadsheet cells against formula injection.
 - The shared control-plane summary, which includes cross-tenant GitOps counts and audit-event details, is restricted to administrators in token mode.
 
 ## Prioritized remaining work
