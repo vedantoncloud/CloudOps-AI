@@ -49,6 +49,13 @@ isolation remains incomplete.
 - FastAPI
 - AWS
 
+The API applies a per-process fixed-window request limit of 120 requests per
+authenticated subject (or client address before authentication) per 60 seconds.
+Set `CLOUDOPS_RATE_LIMIT_REQUESTS` and `CLOUDOPS_RATE_LIMIT_WINDOW_SECONDS` to
+positive integers to adjust it. Exceeded limits return HTTP 429 with a
+`Retry-After` header. Each application process tracks its own counters; use a
+shared gateway or limiter when a deployment needs a cluster-wide quota.
+
 The console is a small browser client served directly by FastAPI. Shared
 production persistence, container deployment, CI, infrastructure as code, and
 LLM integration are not currently provided.

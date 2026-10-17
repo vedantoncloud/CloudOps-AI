@@ -6,6 +6,7 @@ import sqlite3
 
 from auth import AccessControlMiddleware, require_role
 from observability import RequestObservabilityMiddleware, request_metrics
+from rate_limit import RateLimitMiddleware
 from services.aws_service import AWSService
 from autonomy.api import router as autonomy_router
 from autonomy.control_loop_api import router as control_loop_router
@@ -29,6 +30,7 @@ app = FastAPI(
     description="AI-powered Cloud Operations Platform",
     version="0.1.0",
 )
+app.add_middleware(RateLimitMiddleware)
 app.add_middleware(AccessControlMiddleware)
 app.add_middleware(RequestObservabilityMiddleware)
 
