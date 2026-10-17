@@ -14,9 +14,11 @@ class AWSService:
                 TimePeriod={"Start": start.isoformat(), "End": end.isoformat()},
                 Granularity="DAILY",
                 Metrics=["UnblendedCost"],
+                GroupBy=[{"Type": "DIMENSION", "Key": "SERVICE"}],
             )
             daily = []
             currency = None
+            service_totals = {}
             for item in response.get("ResultsByTime", []):
                 amount = item.get("Total", {}).get("UnblendedCost", {})
                 currency = currency or amount.get("Unit")
@@ -24,6 +26,13 @@ class AWSService:
                     "date": item.get("TimePeriod", {}).get("Start"),
                     "amount": float(amount.get("Amount", 0)),
                 })
+                for group in item.get("Groups", []):
+                    name = (group.get("Keys") or ["Unknown"])[0]
+                    group_amount = group.get("Metrics", {}).get("UnblendedCost", {})
+                    currency = currency or group_amount.get("Unit")
+                    service_totals[name] = service_totals.get(name, 0.0) + float(
+                        group_amount.get("Amount", 0)
+                    )
             return {
                 "service": "aws-cost-explorer",
                 "status": "healthy",
@@ -31,6 +40,12 @@ class AWSService:
                 "currency": currency,
                 "total": round(sum(day["amount"] for day in daily), 6),
                 "daily": daily,
+                "services": [
+                    {"service": name, "amount": round(amount, 6)}
+                    for name, amount in sorted(
+                        service_totals.items(), key=lambda entry: (-entry[1], entry[0].casefold())
+                    )
+                ],
             }
         except (BotoCoreError, ClientError) as error:
             return {"service": "aws-cost-explorer", "status": "unhealthy", "error": str(error)}

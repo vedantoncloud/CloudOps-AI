@@ -12,16 +12,27 @@ def test_account_costs_requests_daily_unblended_totals():
     with patch("services.aws_service.boto3.client") as factory:
         client = factory.return_value
         client.get_cost_and_usage.return_value = {"ResultsByTime": [
-            {"TimePeriod": {"Start": "2026-10-01"}, "Total": {"UnblendedCost": {"Amount": "1.25", "Unit": "USD"}}},
-            {"TimePeriod": {"Start": "2026-10-02"}, "Total": {"UnblendedCost": {"Amount": "2.50", "Unit": "USD"}}},
+            {"TimePeriod": {"Start": "2026-10-01"}, "Total": {"UnblendedCost": {"Amount": "1.25", "Unit": "USD"}}, "Groups": [
+                {"Keys": ["Amazon EC2"], "Metrics": {"UnblendedCost": {"Amount": "1.00", "Unit": "USD"}}},
+                {"Keys": ["Amazon S3"], "Metrics": {"UnblendedCost": {"Amount": "0.25", "Unit": "USD"}}},
+            ]},
+            {"TimePeriod": {"Start": "2026-10-02"}, "Total": {"UnblendedCost": {"Amount": "2.50", "Unit": "USD"}}, "Groups": [
+                {"Keys": ["Amazon EC2"], "Metrics": {"UnblendedCost": {"Amount": "2.00", "Unit": "USD"}}},
+                {"Keys": ["Amazon S3"], "Metrics": {"UnblendedCost": {"Amount": "0.50", "Unit": "USD"}}},
+            ]},
         ]}
         result = AWSService().get_account_costs()
     factory.assert_called_once_with("ce", region_name="us-east-1")
     args = client.get_cost_and_usage.call_args.kwargs
     assert args["Granularity"] == "DAILY" and args["Metrics"] == ["UnblendedCost"]
+    assert args["GroupBy"] == [{"Type": "DIMENSION", "Key": "SERVICE"}]
     assert args["TimePeriod"]["End"] == datetime.now(timezone.utc).date().isoformat()
     assert result["currency"] == "USD" and result["total"] == 3.75
     assert result["daily"] == [{"date": "2026-10-01", "amount": 1.25}, {"date": "2026-10-02", "amount": 2.5}]
+    assert result["services"] == [
+        {"service": "Amazon EC2", "amount": 3.0},
+        {"service": "Amazon S3", "amount": 0.75},
+    ]
 
 
 def test_account_costs_service_returns_unhealthy_on_aws_error():

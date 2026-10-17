@@ -10,7 +10,7 @@ Recent commits added configurable bearer-token access control, admin-only audit 
 
 The audit trail and idempotency/reconciliation state persist to SQLite files and have substantial validation and concurrency coverage. This is not a shared production database architecture. `ActionExecutor` rejects real infrastructure execution; execution remains dry-run only. Autonomous lifecycle audit events now back an authenticated, actor-scoped, paginated `/autonomy/runs` history endpoint. `/console` serves a lightweight authenticated browser console for inventory, governance, approvals, and run history. The repository has a README and roadmap, but `docs/` is empty. No Docker/container setup, CI workflow, Terraform/Kubernetes configuration, migration framework, or LLM integration was found. Requirements are pinned, but no supported Python version is documented. EC2/S3 cost insights remain qualitative, while administrators can inspect shared-account daily billing totals through Cost Explorer.
 
-Administrators can also view the shared AWS account's last 30 complete days of daily unblended spend through Cost Explorer in the console. This endpoint is admin-only because the AWS account and billing data are shared; it does not provide tenant- or resource-level charge attribution.
+Administrators can also view the shared AWS account's last 30 complete days of daily unblended spend and service-level totals through Cost Explorer in the console. This endpoint is admin-only because the AWS account and billing data are shared; it does not provide tenant- or resource-level charge attribution.
 
 ## Completed work
 
@@ -72,6 +72,7 @@ Administrators can also view the shared AWS account's last 30 complete days of d
 - EC2 and S3 action-plan generation uses `POST` because it creates plan records; token-mode readers are denied and operators can create tenant-scoped plans.
 - S3 object-list API requests default to a bounded 1,000-object page and expose AWS continuation state, so ordinary browser/API requests do not scan an entire bucket.
 - Administrators can view the shared AWS account's total daily unblended cost for the last 30 complete days in the console; the account-level endpoint is admin-only in token mode and reports billing permission or availability failures without exposing SDK details.
+- Administrators can see the last 30 complete days of unblended spend aggregated by AWS service, ranked by total cost, alongside the daily account totals in the billing console response.
 
 ## Prioritized remaining work
 
