@@ -124,6 +124,20 @@ def test_console_exposes_ec2_and_s3_resource_details_and_metrics():
     assert "Promise.allSettled(paths.map(([,path])=>api(path)))" in response.text
 
 
+def test_console_renders_ec2_metric_series_as_accessible_trend_charts():
+    response = TestClient(app).get("/console")
+
+    assert response.status_code == 200
+    assert "function metricChart(title,points,unit)" in response.text
+    assert "function renderMetricCharts(metrics)" in response.text
+    assert "metrics?.cpu?.datapoints" in response.text
+    assert "metrics?.network?.datapoints?.[name]" in response.text
+    assert "No datapoints available for this time window." in response.text
+    assert "svg.setAttribute('role','img')" in response.text
+    assert "svg.setAttribute('aria-label',`${title} over time`)" in response.text
+    assert "box.append(renderMetricCharts(result.value))" in response.text
+
+
 def test_console_exposes_bounded_s3_bucket_analysis_with_independent_results():
     response = TestClient(app).get("/console")
 
