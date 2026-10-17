@@ -182,20 +182,10 @@ def aws_account_costs(request: Request, days: int = 30):
 def aws_ec2_summary(request: Request):
     if not getattr(request.state, "tenant_scoped", False):
         return aws_service.get_ec2_summary()
-    instances = []
-    next_token = None
-    seen_tokens = set()
-    while True:
-        inventory = _tenant_ec2_instances(request, None, None, 1000, next_token)
-        if inventory.get("status") != "healthy":
-            return inventory
-        instances.extend(inventory.get("instances", []))
-        next_token = inventory.get("next_token")
-        if not next_token:
-            break
-        if next_token in seen_tokens:
-            return {"service": "ec2", "status": "unhealthy"}
-        seen_tokens.add(next_token)
+    inventory = _all_tenant_ec2_instances(request)
+    if inventory.get("status") != "healthy":
+        return inventory
+    instances = inventory["instances"]
     return {
         "service": "ec2",
         "status": "healthy",
@@ -203,6 +193,25 @@ def aws_ec2_summary(request: Request):
         "running_instances": sum(item.get("state") == "running" for item in instances),
         "stopped_instances": sum(item.get("state") == "stopped" for item in instances),
     }
+
+
+def _all_tenant_ec2_instances(request: Request):
+    """Load every EC2 page and apply tenant ownership before aggregation."""
+    instances = []
+    next_token = None
+    seen_tokens = set()
+    while True:
+        inventory = _tenant_ec2_instances(request, None, None, 1000, next_token)
+        if inventory.get("status") != "healthy":
+            return {**inventory, "instances": instances + inventory.get("instances", [])}
+        instances.extend(inventory.get("instances", []))
+        next_token = inventory.get("next_token")
+        if not next_token:
+            break
+        if next_token in seen_tokens:
+            return {"service": "ec2", "status": "unhealthy", "instances": []}
+        seen_tokens.add(next_token)
+    return {"service": "ec2", "status": "healthy", "instances": instances}
 
 
 def _tenant_ec2_instances(request: Request, state: str | None, tag: str | None, max_results=None, next_token=None, name=None):
@@ -565,7 +574,7 @@ def aws_ec2_instance_details(instance_id: str, request: Request):
 @app.get("/cloud/aws/ec2/efficiency-insights")
 def aws_ec2_efficiency_insights(request: Request):
     if getattr(request.state, "tenant_scoped", False):
-        inventory = _tenant_ec2_instances(request, None, None)
+        inventory = _all_tenant_ec2_instances(request)
         if inventory.get("status") != "healthy":
             return inventory
         result = aws_service.get_ec2_efficiency_insights(instances=inventory.get("instances", []))
@@ -584,7 +593,7 @@ def aws_ec2_efficiency_insights(request: Request):
 @app.get("/cloud/aws/ec2/cost-insights")
 def aws_ec2_cost_insights(request: Request):
     if getattr(request.state, "tenant_scoped", False):
-        inventory = _tenant_ec2_instances(request, None, None)
+        inventory = _all_tenant_ec2_instances(request)
         if inventory.get("status") != "healthy":
             return inventory
         result = aws_service.get_ec2_cost_insights(instances=inventory.get("instances", []))
@@ -603,7 +612,7 @@ def aws_ec2_cost_insights(request: Request):
 @app.get("/cloud/aws/ec2/rightsizing-insights")
 def aws_ec2_rightsizing_insights(request: Request):
     if getattr(request.state, "tenant_scoped", False):
-        inventory = _tenant_ec2_instances(request, None, None)
+        inventory = _all_tenant_ec2_instances(request)
         if inventory.get("status") != "healthy":
             return inventory
         result = aws_service.get_ec2_rightsizing_insights(instances=inventory.get("instances", []))
@@ -622,7 +631,7 @@ def aws_ec2_rightsizing_insights(request: Request):
 @app.get("/cloud/aws/ec2/security-insights")
 def aws_ec2_security_insights(request: Request):
     if getattr(request.state, "tenant_scoped", False):
-        inventory = _tenant_ec2_instances(request, None, None)
+        inventory = _all_tenant_ec2_instances(request)
         if inventory.get("status") != "healthy":
             return inventory
         result = aws_service.get_ec2_security_insights(instances=inventory.get("instances", []))

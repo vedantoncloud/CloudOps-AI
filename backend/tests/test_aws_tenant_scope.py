@@ -329,6 +329,76 @@ def test_aggregate_ec2_insights_analyze_only_authenticated_tenant_instances(monk
     assert response.json()["instance_count"] == 1
 
 
+@pytest.mark.parametrize("path,method", [
+    ("/cloud/aws/ec2/efficiency-insights", "get_ec2_efficiency_insights"),
+    ("/cloud/aws/ec2/cost-insights", "get_ec2_cost_insights"),
+    ("/cloud/aws/ec2/rightsizing-insights", "get_ec2_rightsizing_insights"),
+    ("/cloud/aws/ec2/security-insights", "get_ec2_security_insights"),
+])
+def test_aggregate_ec2_insights_include_owned_instances_from_every_page(monkeypatch, path, method):
+    client = tenant_client(monkeypatch)
+    service = main.aws_service
+    calls = []
+    pages = {
+        None: {
+            "status": "healthy", "instances": [
+                {"instance_id": "i-first", "tags": {"CloudOpsTenantId": "tenant-a"}},
+                {"instance_id": "i-foreign", "tags": {"CloudOpsTenantId": "tenant-b"}},
+            ], "next_token": "page-2",
+        },
+        "page-2": {
+            "status": "healthy", "instances": [
+                {"instance_id": "i-second", "tags": {"CloudOpsTenantId": "tenant-a"}},
+                {"instance_id": "i-untagged", "tags": {}},
+            ], "next_token": None,
+        },
+    }
+
+    def get_page(state=None, tag=None, max_results=None, next_token=None, name=None):
+        calls.append(next_token)
+        return pages[next_token]
+
+    seen = []
+    monkeypatch.setattr(service, "get_ec2_instances", get_page)
+    monkeypatch.setattr(service, method, lambda instances: seen.extend(instances) or {
+        "status": "healthy", "instance_count": len(instances), "insights": [],
+    })
+
+    response = client.get(path, headers={"Authorization": "Bearer token-a"})
+
+    assert response.status_code == 200
+    assert calls == [None, "page-2"]
+    assert [item["instance_id"] for item in seen] == ["i-first", "i-second"]
+    assert response.json()["instance_count"] == 2
+
+
+@pytest.mark.parametrize("path,method", [
+    ("/cloud/aws/ec2/efficiency-insights", "get_ec2_efficiency_insights"),
+    ("/cloud/aws/ec2/cost-insights", "get_ec2_cost_insights"),
+    ("/cloud/aws/ec2/rightsizing-insights", "get_ec2_rightsizing_insights"),
+    ("/cloud/aws/ec2/security-insights", "get_ec2_security_insights"),
+])
+def test_aggregate_ec2_insights_do_not_run_on_partial_inventory(monkeypatch, path, method):
+    client = tenant_client(monkeypatch)
+    service = main.aws_service
+    def get_page(state=None, tag=None, max_results=None, next_token=None, name=None):
+        if next_token is None:
+            return {
+                "status": "healthy", "instances": [
+                    {"instance_id": "i-first", "tags": {"CloudOpsTenantId": "tenant-a"}},
+                ], "next_token": "page-2",
+            }
+        return {"status": "unhealthy", "error": "AWS unavailable", "instances": []}
+
+    monkeypatch.setattr(service, "get_ec2_instances", get_page)
+    monkeypatch.setattr(service, method, lambda **kwargs: pytest.fail("partial inventory must not be analyzed"))
+
+    response = client.get(path, headers={"Authorization": "Bearer token-a"})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "unhealthy"
+
+
 @pytest.mark.parametrize("path", [
     "/cloud/aws/ec2/instances/i-bbbbbbbb/insights",
     "/cloud/aws/ec2/instances/i-bbbbbbbb/cpu",

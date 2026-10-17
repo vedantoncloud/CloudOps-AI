@@ -23,6 +23,7 @@ Administrators can view 7, 30, or 90 complete days of shared AWS account daily u
 - Configurable development/token access modes, method-based reader/operator/admin authorization, tenant claim/header checks, admin-only audit diagnostics, autonomous-run actor attribution, and partial resource/EC2/S3 tenant filtering.
 - Production environment startup validation rejects permissive development authentication and requires configured bearer tokens.
 - Aggregate EC2 efficiency, cost, rightsizing, and security insights analyze only authenticated-tenant inventory in token mode.
+- Tenant-scoped EC2 fleet summaries and aggregate efficiency, cost, rightsizing, and security insights now traverse every AWS inventory page before computing results; a failed later page prevents insights from being computed on partial inventory.
 - Authenticated tenant users receive a sanitized AWS status response without the shared AWS account ID, principal ARN, or raw diagnostics; admins retain full status details.
 - Authenticated tenant users receive sanitized AWS service health responses without raw shared-account SDK errors; admins retain full diagnostics.
 - Every HTTP request receives a validated or generated `X-Request-ID`; sanitized JSON access logs record its ID, method, route path, status, and duration without query strings or credentials.
