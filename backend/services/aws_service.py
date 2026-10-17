@@ -1,6 +1,19 @@
 import boto3
 from datetime import datetime, timedelta, timezone
+from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
+
+
+AWS_CLIENT_CONFIG = Config(
+    connect_timeout=3,
+    read_timeout=30,
+    retries={"mode": "standard", "total_max_attempts": 3},
+)
+
+
+def _aws_client(service_name, **kwargs):
+    """Create an AWS client with bounded network waits and standard retries."""
+    return boto3.client(service_name, config=AWS_CLIENT_CONFIG, **kwargs)
 
 
 class AWSService:
@@ -9,7 +22,7 @@ class AWSService:
         end = datetime.now(timezone.utc).date()
         start = end - timedelta(days=30)
         try:
-            client = boto3.client("ce", region_name="us-east-1")
+            client = _aws_client("ce", region_name="us-east-1")
             response = client.get_cost_and_usage(
                 TimePeriod={"Start": start.isoformat(), "End": end.isoformat()},
                 Granularity="DAILY",
@@ -52,10 +65,10 @@ class AWSService:
 
     def get_status(self):
         try:
-            sts = boto3.client("sts")
+            sts = _aws_client("sts")
             identity = sts.get_caller_identity()
 
-            ec2 = boto3.client("ec2")
+            ec2 = _aws_client("ec2")
             response = ec2.describe_instances()
 
             total_instances = 0
@@ -101,7 +114,7 @@ class AWSService:
     def get_service_health(self, service_name):
         if service_name == "sts":
             try:
-                sts = boto3.client("sts")
+                sts = _aws_client("sts")
                 sts.get_caller_identity()
 
                 return {
@@ -118,7 +131,7 @@ class AWSService:
 
         if service_name == "ec2":
             try:
-                ec2 = boto3.client("ec2")
+                ec2 = _aws_client("ec2")
                 ec2.describe_instances()
 
                 return {
@@ -141,7 +154,7 @@ class AWSService:
 
     def get_ec2_summary(self):
         try:
-            ec2 = boto3.client("ec2")
+            ec2 = _aws_client("ec2")
             total_instances = 0
             running_instances = 0
             stopped_instances = 0
@@ -187,7 +200,7 @@ class AWSService:
 
     def get_ec2_instances(self, state=None, tag=None, max_results=None, next_token=None, name=None):
         try:
-            ec2 = boto3.client("ec2")
+            ec2 = _aws_client("ec2")
 
             filters = []
 
@@ -291,7 +304,7 @@ class AWSService:
     def get_ec2_instance(self, instance_id):
         """Look up one instance directly, independent of inventory pagination."""
         try:
-            response = boto3.client("ec2").describe_instances(InstanceIds=[instance_id])
+            response = _aws_client("ec2").describe_instances(InstanceIds=[instance_id])
             instances = [
                 instance
                 for reservation in response.get("Reservations", [])
@@ -330,7 +343,7 @@ class AWSService:
 
     def get_s3_buckets(self, max_buckets=1000, continuation_token=None):
         try:
-            s3 = boto3.client("s3")
+            s3 = _aws_client("s3")
             request = {}
             if max_buckets is not None:
                 request["MaxBuckets"] = max_buckets
@@ -371,7 +384,7 @@ class AWSService:
 
     def get_s3_bucket_details(self, bucket_name):
         try:
-            s3 = boto3.client("s3")
+            s3 = _aws_client("s3")
 
             response = s3.get_bucket_location(
                 Bucket=bucket_name
@@ -400,7 +413,7 @@ class AWSService:
     def get_s3_bucket_tags(self, bucket_name):
         """Return a bucket's tags for tenant ownership checks."""
         try:
-            response = boto3.client("s3").get_bucket_tagging(Bucket=bucket_name)
+            response = _aws_client("s3").get_bucket_tagging(Bucket=bucket_name)
             return {
                 "status": "healthy",
                 "tags": {
@@ -414,7 +427,7 @@ class AWSService:
 
     def get_s3_objects(self, bucket_name, prefix=None, max_keys=None, continuation_token=None, delimiter=None):
         try:
-            s3 = boto3.client("s3")
+            s3 = _aws_client("s3")
 
             objects = []
             next_continuation_token = None
@@ -486,7 +499,7 @@ class AWSService:
     def get_s3_object_metadata(self, bucket_name, object_key):
         """Return useful object metadata without downloading its body."""
         try:
-            response = boto3.client("s3").head_object(Bucket=bucket_name, Key=object_key)
+            response = _aws_client("s3").head_object(Bucket=bucket_name, Key=object_key)
             return {
                 "service": "s3",
                 "status": "healthy",
@@ -509,7 +522,7 @@ class AWSService:
         """Create a short-lived URL that downloads one S3 object as an attachment."""
         expires_in = 300
         try:
-            url = boto3.client("s3").generate_presigned_url(
+            url = _aws_client("s3").generate_presigned_url(
                 "get_object",
                 Params={
                     "Bucket": bucket_name,
@@ -531,7 +544,7 @@ class AWSService:
 
     def get_s3_object_statistics(self, bucket_name, prefix=None, max_keys=None):
         try:
-            s3 = boto3.client("s3")
+            s3 = _aws_client("s3")
 
             total_objects = 0
             total_size = 0
@@ -587,7 +600,7 @@ class AWSService:
 
     def get_s3_largest_objects(self, bucket_name, prefix=None, max_keys=None, top_n=5):
         try:
-            s3 = boto3.client("s3")
+            s3 = _aws_client("s3")
 
             objects = []
             continuation_token = None
@@ -869,7 +882,7 @@ class AWSService:
 
     def get_ec2_cpu_utilization(self, instance_id, lookback_hours=1):
         try:
-            cloudwatch = boto3.client("cloudwatch")
+            cloudwatch = _aws_client("cloudwatch")
 
             end_time = datetime.now(timezone.utc)
             start_time = end_time - timedelta(hours=lookback_hours)
@@ -931,7 +944,7 @@ class AWSService:
 
     def get_ec2_network_utilization(self, instance_id, lookback_hours=1):
         try:
-            cloudwatch = boto3.client("cloudwatch")
+            cloudwatch = _aws_client("cloudwatch")
 
             end_time = datetime.now(timezone.utc)
             start_time = end_time - timedelta(hours=lookback_hours)
@@ -1368,7 +1381,7 @@ class AWSService:
 
     def get_s3_security_insights(self, bucket_name):
         try:
-            s3 = boto3.client("s3")
+            s3 = _aws_client("s3")
 
             insights = []
             configuration = {
@@ -1582,7 +1595,7 @@ class AWSService:
 
     def get_ec2_instance_status(self, instance_id):
         try:
-            ec2 = boto3.client("ec2")
+            ec2 = _aws_client("ec2")
 
             response = ec2.describe_instance_status(
                 InstanceIds=[instance_id],

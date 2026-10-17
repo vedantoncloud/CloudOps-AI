@@ -26,6 +26,7 @@ Administrators can also view the shared AWS account's last 30 complete days of d
 - Authenticated tenant users receive a sanitized AWS status response without the shared AWS account ID, principal ARN, or raw diagnostics; admins retain full status details.
 - Authenticated tenant users receive sanitized AWS service health responses without raw shared-account SDK errors; admins retain full diagnostics.
 - Every HTTP request receives a validated or generated `X-Request-ID`; sanitized JSON access logs record its ID, method, route path, status, and duration without query strings or credentials.
+- All AWS SDK clients use bounded 3-second connection and 30-second response timeouts with standard retries capped at three total attempts, so AWS-backed requests fail predictably during network and throttling problems.
 - Authenticated users can retrieve an individual EC2 inventory record through `GET /cloud/aws/ec2/instances/{instance_id}` using a direct instance lookup, independent of inventory pagination; token-mode results hide foreign, untagged, and missing IDs uniformly.
 - EC2 fleet summaries aggregate every AWS inventory page; tenant summaries apply ownership filtering to each page before counting, so fleets larger than one page report complete scoped totals.
 - Operators can inspect CPU utilization and inbound/outbound network trends as accessible charts in EC2 details, with latest/peak summaries and explicit empty states when CloudWatch has no datapoints.
@@ -96,7 +97,7 @@ Administrators can also view the shared AWS account's last 30 complete days of d
 
 6. **Make health and operations observable (P1).** `/health` provides liveness and `/ready` reports AWS and persistent-store readiness with sanitized responses. HTTP request correlation and sanitized structured access logs are implemented. Add metrics and actionable AWS/database failure signals without exposing secrets or sensitive audit payloads. **Done when:** operators can distinguish application health from dependency health and diagnose failures using documented telemetry.
 
-7. **Harden API and AWS operational limits (P1).** Set request/response size limits, pagination bounds beyond EC2 inventory, S3 bucket inventory, and S3 object listing, timeouts, rate limits, AWS retry/backoff and throttling behavior, and consistent error contracts. **Done when:** limits are explicit and covered for malformed, oversized, throttled, and unavailable-dependency conditions.
+7. **Harden API and AWS operational limits (P1).** Set request/response size limits, pagination bounds beyond EC2 inventory, S3 bucket inventory, and S3 object listing, and rate limits. AWS client connection/response timeouts and standard retry/backoff are now bounded. Continue toward consistent error contracts. **Done when:** limits are explicit and covered for malformed, oversized, throttled, and unavailable-dependency conditions.
 
 8. **Specify audit trust, retention, and recovery guarantees (P1).** Document the hash-chain threat model and external key/anchor strategy; define tamper detection, export verification, retention, access, backup, and disaster recovery. A hash chain stored in a writable database cannot by itself prevent an attacker with full store access from rewriting the history and recomputing the chain. **Done when:** an operator can independently verify exported history and follow tested backup/restore and incident procedures.
 
@@ -113,6 +114,7 @@ Administrators can also view the shared AWS account's last 30 complete days of d
 - Persistent audit stores are SQLite local files; there is no shared production database, migration, backup, or restore workflow.
 - Real infrastructure mutations are intentionally disabled; planning, governance, and simulation must not be represented as completed remediation.
 - `/health` remains a static liveness check; `/ready` checks AWS and configured persistence stores. Request IDs and structured HTTP access logs are available, but metrics and actionable AWS/database failure signals remain outstanding.
+- AWS SDK calls now have bounded connection/response timeouts and standard retries capped at three attempts; API request/response limits, rate limits, and broader error-contract coverage remain outstanding.
 - No CI workflow, deployment/container configuration, IaC, or substantive operator documentation was found; `docs/` is empty. The console is a lightweight browser client served by FastAPI, with inventory/governance, plan generation, inspection and review, approvals, and run history.
 - No supported Python runtime or automated dependency update/security workflow is documented.
 - EC2/S3 optimization insights remain qualitative and do not attribute Cost Explorer charges to tenants or individual resources; the admin-only account billing view reports daily shared-account totals.

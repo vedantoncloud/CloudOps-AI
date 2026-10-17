@@ -8,6 +8,22 @@ from services.aws_service import AWSService
 from main import app
 
 
+def test_aws_clients_use_bounded_timeouts_and_standard_retries():
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_client.return_value.describe_instances.return_value = {"Reservations": []}
+
+        result = AWSService().get_ec2_instance("i-aaaaaaaa")
+
+    assert result["status"] == "healthy"
+    config = mock_client.call_args.kwargs["config"]
+    assert config.connect_timeout == 3
+    assert config.read_timeout == 30
+    assert config.retries == {
+        "mode": "standard",
+        "total_max_attempts": 3,
+    }
+
+
 def test_get_ec2_instance_uses_direct_instance_id_lookup():
     with patch("services.aws_service.boto3.client") as mock_client:
         mock_ec2 = mock_client.return_value
