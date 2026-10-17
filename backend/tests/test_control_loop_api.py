@@ -1,6 +1,9 @@
 ﻿from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from auth import AccessControlMiddleware, Principal
+from autonomy import control_loop_api
+from autonomy.audit import AuditTrail
 from autonomy.control_loop_api import router
 
 
@@ -144,3 +147,26 @@ def test_control_loop_api_does_not_execute_infrastructure_changes():
     data = response.json()
 
     assert data["gitops_status"] == "pending_approval"
+
+
+def test_control_loop_audit_events_include_authenticated_actor(monkeypatch):
+    trail = AuditTrail()
+    monkeypatch.setattr(control_loop_api, "audit_trail", trail)
+    app = FastAPI()
+    app.add_middleware(
+        AccessControlMiddleware,
+        mode="token",
+        tokens={"operator-token": Principal("operator-17", "operator", "tenant-a")},
+    )
+    app.include_router(router)
+
+    response = TestClient(app).post(
+        "/autonomy/control-loop/evaluate",
+        json=make_payload(action_id="actor-attributed-action"),
+        headers={"Authorization": "Bearer operator-token"},
+    )
+
+    assert response.status_code == 200
+    events = trail.get_events("actor-attributed-action")
+    assert events
+    assert all(event.actor_id == "operator-17" for event in events)

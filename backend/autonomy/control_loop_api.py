@@ -62,7 +62,12 @@ class ControlLoopEvaluateResponse(BaseModel):
     evidence: dict[str, Any]
 
 
-def _audit_gate_result(action: ActionPlan, provider_name: str, gate_result: Any) -> None:
+def _audit_gate_result(
+    action: ActionPlan,
+    provider_name: str,
+    gate_result: Any,
+    actor_id: str | None = None,
+) -> None:
     decision = gate_result.decision.value
     event = (
         "control_loop_governance_blocked"
@@ -81,6 +86,7 @@ def _audit_gate_result(action: ActionPlan, provider_name: str, gate_result: Any)
         event=event,
         old_status="pending",
         new_status=decision,
+        actor_id=actor_id,
         details={
             "provider": provider_name,
             "policy_decision": decision,
@@ -100,6 +106,7 @@ def _audit_gate_result(action: ActionPlan, provider_name: str, gate_result: Any)
             event="control_loop_blocked",
             old_status="pending",
             new_status="blocked",
+            actor_id=actor_id,
             details={
                 "provider": provider_name,
                 "policy_decision": decision,
@@ -113,6 +120,7 @@ def _audit_gate_result(action: ActionPlan, provider_name: str, gate_result: Any)
 @router.post("/evaluate", response_model=ControlLoopEvaluateResponse)
 def evaluate_control_loop(request: ControlLoopEvaluateRequest, http_request: Request) -> ControlLoopEvaluateResponse:
     try:
+        actor_id = getattr(getattr(http_request.state, "principal", None), "subject", None)
         provider = provider_registry.get(request.provider)
 
         action = ActionPlan(
@@ -145,7 +153,7 @@ def evaluate_control_loop(request: ControlLoopEvaluateRequest, http_request: Req
         pipeline_evidence = dict(pipeline.evidence)
 
         if not pipeline.allowed_for_decision:
-            _audit_gate_result(action, provider.provider_name, governance)
+            _audit_gate_result(action, provider.provider_name, governance, actor_id)
             recommendation = "deny" if pipeline.blocked else "review"
 
             return ControlLoopEvaluateResponse(
@@ -227,6 +235,7 @@ def evaluate_control_loop(request: ControlLoopEvaluateRequest, http_request: Req
             event=audit_event,
             old_status="pending",
             new_status=audit_status,
+            actor_id=actor_id,
             details={
                 "provider": provider.provider_name,
                 "recommendation": result.decision.recommendation.value,

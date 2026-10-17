@@ -33,6 +33,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 - Operators can reject a pending action plan with a required reason; the response records the authenticated reviewer and exposes a distinct `rejected` status.
 - Operators can cancel a pending action plan with the authenticated actor recorded as its decision maker, matching approval and rejection attribution in plan state.
 - Authenticated users can retrieve an action plan's current state through `GET /autonomy/plans/{action_id}`; token-mode lookups hide plans belonging to another tenant.
+- Control-loop evaluation and governance audit events identify the authenticated principal that requested each evaluation.
 - Operators can distinguish process liveness (`/health`) from dependency readiness (`/ready`); readiness checks AWS and both persistent SQLite stores, returns 503 when any dependency is unavailable, and does not expose account or error details.
 - Authenticated users can resume S3 object listings from an AWS continuation token through `/cloud/aws/s3/buckets/{bucket_name}/objects`; responses expose truncation state and the next token for incremental browsing.
 - Authenticated users can resume EC2 inventory listings from an AWS `NextToken` through `/cloud/aws/ec2/instances`; page sizes are bounded from 5 to 1,000 and results preserve tenant filtering.
@@ -92,7 +93,7 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 
 - Authentication defaults to permissive development mode unless `CLOUDOPS_ENV=production` is set; production then requires token mode and configured tokens. The token boundary does not itself provide credential lifecycle management.
 - Tenant isolation is partial: provider-neutral resources, EC2 list/summary/detail and aggregate insights, direct S3 bucket routes, and GitOps change sets created through the authenticated control loop are tenant-scoped, while AWS account credentials are not tenant-scoped. S3 checks require bucket-tag read permission and hide resources when ownership cannot be established. The shared AWS account identity remains available to admins through `/cloud/aws/status`.
-- Audit actor attribution is implemented for autonomous runs and approval/rejection/cancellation plan state, but not consistently for all API operations. Audit event listing/export is actor-scoped for non-admin users; the underlying shared trail and operational diagnostics still require broader tenant and attribution work.
+- Audit actor attribution is implemented for autonomous runs, approval/rejection/cancellation plan state, and control-loop evaluations, but not consistently for all API operations. Audit event listing/export is actor-scoped for non-admin users; the underlying shared trail and operational diagnostics still require broader tenant and attribution work.
 - Persistent audit stores are SQLite local files; there is no shared production database, migration, backup, or restore workflow.
 - Real infrastructure mutations are intentionally disabled; planning, governance, and simulation must not be represented as completed remediation.
 - `/health` remains a static liveness check; `/ready` checks AWS and configured persistence stores but does not yet provide structured logs, request correlation, metrics, or actionable diagnostic signals.
