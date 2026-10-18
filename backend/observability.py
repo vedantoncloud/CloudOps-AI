@@ -75,6 +75,23 @@ class RequestMetrics:
             lines.append(f"cloudops_http_request_duration_seconds_count{base} {summary[-2]}")
         return "\n".join(lines) + "\n"
 
+    def failure_snapshot(self) -> dict:
+        """Return cumulative server-error counts grouped by bounded route labels."""
+        with self._lock:
+            failures = [
+                {"method": method, "route": route, "status": status, "count": count}
+                for (method, route, status), count in self._requests.items()
+                if status >= 500
+            ]
+        return {
+            "scope": "since_process_start",
+            "total": sum(item["count"] for item in failures),
+            "failures": sorted(
+                failures,
+                key=lambda item: (-item["count"], item["route"], item["status"]),
+            ),
+        }
+
 
 def _float_label(value: float) -> str:
     return str(value)

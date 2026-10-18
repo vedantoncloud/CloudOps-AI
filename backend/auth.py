@@ -27,6 +27,7 @@ PUBLIC_PATHS = {"/", "/health", "/ready"}
 # read-only. Approval decisions remain operator-level POST operations.
 ADMIN_ONLY_PATHS = {
     "/cloud/aws/account-costs",
+    "/operations/failures",
     "/autonomy/audit/health",
     "/autonomy/audit/pending",
     "/autonomy/audit/reconciliation",

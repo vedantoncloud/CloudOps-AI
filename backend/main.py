@@ -100,6 +100,13 @@ def metrics():
     )
 
 
+@app.get("/operations/failures")
+def operation_failures(request: Request):
+    """Summarize server-side request failures without exposing error payloads."""
+    require_role(request.state.principal, "admin")
+    return request_metrics.failure_snapshot()
+
+
 @app.get("/ready")
 def readiness_check():
     """Report whether the service can currently reach its AWS dependency.
