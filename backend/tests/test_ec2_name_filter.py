@@ -3,6 +3,7 @@
 from fastapi.testclient import TestClient
 
 from main import app
+from botocore.exceptions import ClientError
 from services.aws_service import AWSService
 
 
@@ -38,3 +39,37 @@ def test_ec2_inventory_rejects_blank_or_oversized_name_filter():
     client = TestClient(app)
     assert client.get("/cloud/aws/ec2/instances?name=%20%20").status_code == 400
     assert client.get("/cloud/aws/ec2/instances?name=" + "a" * 129).status_code == 400
+
+
+def test_ec2_inventory_forwards_selected_region_and_rejects_malformed_region():
+    with patch("main.aws_service.get_ec2_instances", return_value={"status": "healthy", "instances": []}) as get_instances:
+        response = TestClient(app).get("/cloud/aws/ec2/instances?region=ap-south-1&max_results=100")
+
+    assert response.status_code == 200
+    get_instances.assert_called_once_with(None, None, 100, None, name=None, region="ap-south-1")
+    assert TestClient(app).get("/cloud/aws/ec2/instances?region=invalid-region").status_code == 400
+
+
+def test_ec2_service_creates_regional_client_for_inventory():
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_client.return_value.describe_instances.return_value = {"Reservations": []}
+
+        result = AWSService().get_ec2_instances(region="ap-south-1")
+
+    assert result["status"] == "healthy"
+    assert mock_client.call_args.args == ("ec2",)
+    assert mock_client.call_args.kwargs["region_name"] == "ap-south-1"
+
+
+def test_ec2_regional_inventory_preserves_aws_failure_response():
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_client.return_value.describe_instances.side_effect = ClientError(
+            {"Error": {"Code": "ServiceUnavailable", "Message": "provider unavailable"}},
+            "DescribeInstances",
+        )
+
+        result = AWSService().get_ec2_instances(region="eu-west-3")
+
+    assert result["status"] == "unhealthy"
+    assert "provider unavailable" in result["error"]
+    assert mock_client.call_args.kwargs["region_name"] == "eu-west-3"

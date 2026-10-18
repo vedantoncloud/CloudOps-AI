@@ -233,11 +233,12 @@ def _all_tenant_ec2_instances(request: Request):
     return {"service": "ec2", "status": "healthy", "instances": instances}
 
 
-def _tenant_ec2_instances(request: Request, state: str | None, tag: str | None, max_results=None, next_token=None, name=None):
+def _tenant_ec2_instances(request: Request, state: str | None, tag: str | None, max_results=None, next_token=None, name=None, region=None):
+    region_kwargs = {"region": region} if region else {}
     if max_results is None and next_token is None:
-        result = aws_service.get_ec2_instances(state, tag, name=name) if name else aws_service.get_ec2_instances(state, tag)
+        result = aws_service.get_ec2_instances(state, tag, name=name, **region_kwargs) if name else aws_service.get_ec2_instances(state, tag, **region_kwargs)
     else:
-        result = aws_service.get_ec2_instances(state, tag, max_results, next_token, name=name)
+        result = aws_service.get_ec2_instances(state, tag, max_results, next_token, name=name, **region_kwargs)
     if result.get("status") != "healthy" or not getattr(request.state, "tenant_scoped", False):
         return result
     tenant_id = request.state.tenant_id
@@ -271,7 +272,7 @@ def _validate_ec2_instance_id(instance_id: str) -> None:
 
 
 @app.get("/cloud/aws/ec2/instances")
-def aws_ec2_instances(request: Request, state: str = None, tag: str = None, max_results: int = None, next_token: str = None, name: str = None):
+def aws_ec2_instances(request: Request, state: str = None, tag: str = None, max_results: int = None, next_token: str = None, name: str = None, region: str = None):
     valid_states = {
         "pending",
         "running",
@@ -293,7 +294,10 @@ def aws_ec2_instances(request: Request, state: str = None, tag: str = None, max_
     if name is not None and (not name.strip() or len(name) > 128):
         raise HTTPException(status_code=400, detail="name must contain 1 to 128 characters")
 
-    return _tenant_ec2_instances(request, state, tag, max_results, next_token, name.strip() if name else None)
+    if region is not None and not re.fullmatch(r"[a-z]{2}(?:-[a-z0-9]+)+-[0-9]", region):
+        raise HTTPException(status_code=400, detail="Invalid AWS region")
+
+    return _tenant_ec2_instances(request, state, tag, max_results, next_token, name.strip() if name else None, region)
 
 
 @app.get("/cloud/aws/s3/buckets")

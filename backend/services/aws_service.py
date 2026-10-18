@@ -200,9 +200,9 @@ class AWSService:
                 "error": str(error),
             }
 
-    def get_ec2_instances(self, state=None, tag=None, max_results=None, next_token=None, name=None):
+    def get_ec2_instances(self, state=None, tag=None, max_results=None, next_token=None, name=None, region=None):
         try:
-            ec2 = _aws_client("ec2")
+            ec2 = _aws_client("ec2", **({"region_name": region} if region else {}))
 
             filters = []
 

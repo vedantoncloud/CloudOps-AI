@@ -18,6 +18,8 @@ Operators can filter the tenant-scoped pending approval queue by risk and resour
 
 Administrators can review cumulative AWS operation call and failure counts in the Operations console, including unhealthy provider results returned with HTTP 200; fixed method labels exclude resource identifiers and provider error details.
 
+Operators can browse paginated EC2 inventory in a selected AWS region from the operations console; the selected region is retained for subsequent pages and complete CSV exports.
+
 ## Completed work
 
 - FastAPI application and AWS service status/connectivity checks.
@@ -139,6 +141,7 @@ Administrators can review cumulative AWS operation call and failure counts in th
 - No CI workflow, deployment/container configuration, IaC, or substantive operator documentation was found; `docs/` is empty. The console is a lightweight browser client served by FastAPI, with inventory/governance, plan generation, inspection and review, approvals, and run history.
 - No supported Python runtime or automated dependency update/security workflow is documented.
 - EC2/S3 optimization insights remain qualitative and do not attribute Cost Explorer charges to tenants or individual resources; the admin-only account billing view reports daily shared-account totals.
+- EC2 inventory browsing accepts an explicit AWS region; instance details, metrics, action plans, and fleet insights still use the configured AWS region.
 - The checkout contains untracked SQLite database files. They were left untouched and are not part of this roadmap change.
 
 ## Scope and count
