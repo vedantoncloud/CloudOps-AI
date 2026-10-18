@@ -1,7 +1,8 @@
 from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
 
 from autonomy.action_models import ActionPlan, ActionStatus, ActionTarget, RiskLevel
 from autonomy import api
@@ -55,6 +56,71 @@ def test_approval_queue_is_scoped_to_authenticated_tenant(monkeypatch):
 
     assert result["total"] == 1
     assert [item["action_id"] for item in result["approvals"]] == ["a"]
+
+
+def test_approval_queue_filters_search_risk_and_resource_before_pagination(monkeypatch):
+    ec2 = _plan("ec2-target", ActionStatus.PENDING_APPROVAL)
+    ec2.risk = RiskLevel.HIGH
+    ec2.reason = "Investigate payment worker"
+    s3 = _plan("s3-target", ActionStatus.PENDING_APPROVAL)
+    s3.target.resource_type = "s3_bucket"
+    s3.risk = RiskLevel.HIGH
+    other_risk = _plan("other-risk", ActionStatus.PENDING_APPROVAL)
+    other_risk.risk = RiskLevel.LOW
+    monkeypatch.setattr(api, "_plan_registry", {
+        "ec2-target": ec2, "s3-target": s3, "other-risk": other_risk,
+    })
+
+    result = api.list_pending_approvals(
+        _request(), risk=RiskLevel.HIGH, resource_type=" ec2_instance ",
+        search=" PAYMENT ", limit=1,
+    )
+
+    assert result["total"] == 1
+    assert [item["action_id"] for item in result["approvals"]] == ["ec2-target"]
+
+
+def test_approval_queue_search_includes_action_id_and_returns_empty_page(monkeypatch):
+    monkeypatch.setattr(api, "_plan_registry", {
+        "specific-run-42": _plan("specific-run-42", ActionStatus.PENDING_APPROVAL),
+    })
+
+    result = api.list_pending_approvals(_request(), search="RUN-42", offset=5)
+
+    assert result["total"] == 1
+    assert result["approvals"] == []
+    assert result["offset"] == 5
+
+
+def test_approval_queue_rejects_oversized_search():
+    with pytest.raises(HTTPException) as error:
+        api.list_pending_approvals(_request(), search="x" * 201)
+
+    assert error.value.status_code == 422
+
+
+def test_approval_queue_http_rejects_invalid_risk_filter():
+    app = FastAPI()
+    app.include_router(api.router)
+
+    response = TestClient(app).get("/autonomy/approvals?risk=extreme")
+
+    assert response.status_code == 422
+
+
+def test_approval_console_exposes_and_submits_filters():
+    from pathlib import Path
+
+    html = (Path(__file__).parents[1] / "static" / "console.html").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'id="approvalSearch"' in html
+    assert 'id="approvalRisk"' in html
+    assert 'id="approvalResourceType"' in html
+    assert "query.set('search',$('approvalSearch').value.trim())" in html
+    assert "query.set('risk',$('approvalRisk').value)" in html
+    assert "query.set('resource_type',$('approvalResourceType').value)" in html
 
 
 @pytest.mark.parametrize("kwargs", [{"limit": 0}, {"limit": 201}, {"offset": -1}])

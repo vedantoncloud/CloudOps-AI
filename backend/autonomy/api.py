@@ -217,18 +217,37 @@ def get_plan(action_id: str, request: Request):
 
 
 @router.get("/approvals")
-def list_pending_approvals(request: Request, limit: int = 50, offset: int = 0):
+def list_pending_approvals(
+    request: Request,
+    limit: int = 50,
+    offset: int = 0,
+    risk: RiskLevel | None = None,
+    resource_type: str | None = None,
+    search: str | None = None,
+):
     """List the pending approval queue visible to this tenant."""
     if not 1 <= limit <= 200:
         raise HTTPException(status_code=422, detail="limit must be between 1 and 200")
     if offset < 0:
         raise HTTPException(status_code=422, detail="offset must be non-negative")
+    if search is not None and len(search) > 200:
+        raise HTTPException(status_code=422, detail="search must be at most 200 characters")
+    normalized_search = search.strip().casefold() if search else ""
+    normalized_resource_type = resource_type.strip() if resource_type else None
+    if normalized_resource_type is not None and not normalized_resource_type:
+        normalized_resource_type = None
     with _registry_lock:
         approvals = [
             plan for action_id, plan in _plan_registry.items()
             if plan.status == ActionStatus.PENDING_APPROVAL
             and (not getattr(request.state, "tenant_scoped", False)
                  or _plan_tenants.get(action_id) == request.state.tenant_id)
+            and (risk is None or plan.risk == risk)
+            and (normalized_resource_type is None
+                 or plan.target.resource_type == normalized_resource_type)
+            and (not normalized_search or normalized_search in " ".join((
+                action_id, plan.action_type, plan.target.resource_id, plan.reason,
+            )).casefold())
         ]
     approvals.reverse()
     total = len(approvals)
