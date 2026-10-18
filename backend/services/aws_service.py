@@ -549,6 +549,7 @@ class AWSService:
             total_objects = 0
             total_size = 0
             continuation_token = None
+            scan_complete = True
 
             while True:
                 params = {
@@ -574,6 +575,7 @@ class AWSService:
                         break
 
                 if max_keys and total_objects >= max_keys:
+                    scan_complete = not response.get("IsTruncated", False)
                     break
 
                 if not response.get("IsTruncated"):
@@ -588,6 +590,8 @@ class AWSService:
                 "prefix": prefix,
                 "total_objects": total_objects,
                 "total_size_bytes": total_size,
+                "scan_complete": scan_complete,
+                "scan_limit": max_keys,
             }
 
         except (BotoCoreError, ClientError) as error:
@@ -604,6 +608,7 @@ class AWSService:
 
             objects = []
             continuation_token = None
+            scan_complete = True
 
             while True:
                 params = {
@@ -634,6 +639,7 @@ class AWSService:
 
                 if max_keys and len(objects) >= max_keys:
                     objects = objects[:max_keys]
+                    scan_complete = not response.get("IsTruncated", False)
                     break
 
                 if not response.get("IsTruncated"):
@@ -667,6 +673,8 @@ class AWSService:
                 "total_objects": total_objects,
                 "total_size_bytes": total_size_bytes,
                 "average_object_size_bytes": average_object_size_bytes,
+                "scan_complete": scan_complete,
+                "scan_limit": max_keys,
                 "largest_object": largest_object,
                 "objects": largest_objects,
             }
@@ -715,6 +723,8 @@ class AWSService:
                 "total_size_bytes": insights["total_size_bytes"],
                 "average_object_size_bytes": insights["average_object_size_bytes"],
                 "largest_object": insights["largest_object"],
+                "scan_complete": insights.get("scan_complete", True),
+                "scan_limit": insights.get("scan_limit"),
             }
 
         except (BotoCoreError, ClientError) as error:
@@ -790,6 +800,8 @@ class AWSService:
                 "total_size_bytes": total_size_bytes,
                 "average_object_size_bytes": average_object_size_bytes,
                 "largest_object": largest_object,
+                "scan_complete": storage.get("scan_complete", True),
+                "scan_limit": storage.get("scan_limit"),
             }
 
         except (BotoCoreError, ClientError) as error:
@@ -870,6 +882,8 @@ class AWSService:
                 "total_size_bytes": total_size_bytes,
                 "average_object_size_bytes": average_object_size_bytes,
                 "largest_object": largest_object,
+                "scan_complete": storage.get("scan_complete", True),
+                "scan_limit": storage.get("scan_limit"),
             }
 
         except (BotoCoreError, ClientError) as error:

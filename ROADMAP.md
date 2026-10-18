@@ -10,7 +10,7 @@ Recent commits added configurable bearer-token access control, admin-only audit 
 
 The audit trail and idempotency/reconciliation state persist to SQLite files and have substantial validation and concurrency coverage. This is not a shared production database architecture. `ActionExecutor` rejects real infrastructure execution; execution remains dry-run only. Autonomous lifecycle audit events now back an authenticated, actor-scoped, paginated `/autonomy/runs` history endpoint. `/console` serves a lightweight authenticated browser console for inventory, governance, approvals, and run history. EC2 instance details include accessible CPU and network trend charts alongside the underlying CloudWatch samples. The repository has a README and roadmap, but `docs/` is empty. No Docker/container setup, CI workflow, Terraform/Kubernetes configuration, migration framework, or LLM integration was found. Requirements are pinned, but no supported Python version is documented. EC2/S3 cost insights remain qualitative, while administrators can inspect shared-account daily billing totals through Cost Explorer.
 
-Administrators can view 7, 30, or 90 complete days of shared AWS account daily unblended spend and service-level totals through Cost Explorer in the console. This endpoint is admin-only because the AWS account and billing data are shared; it does not provide tenant- or resource-level charge attribution.
+Administrators can view 7, 30, or 90 complete days of shared AWS account daily unblended spend and service-level totals through Cost Explorer in the console. This endpoint is admin-only because the AWS account and billing data are shared; it does not provide tenant- or resource-level charge attribution. S3 bucket analysis responses identify whether object scans completed or stopped at their configured limit.
 
 ## Completed work
 
@@ -63,6 +63,7 @@ Administrators can view 7, 30, or 90 complete days of shared AWS account daily u
 - Operators can navigate S3 bucket folder prefixes in the console; delimiter-based listings show common prefixes as folders, support moving up one level, and retain bounded continuation pagination.
 - The operations console appends subsequent S3 object pages to the visible listing, reports the cumulative loaded count, and preserves earlier results if a later page fails.
 - Operators can inspect S3 object metadata from the console, including size, content type, ETag, storage class, encryption, modification time, and user metadata; the lookup uses `HeadObject` and enforces the bucket tenant boundary.
+- S3 object statistics, largest-object results, and derived bucket health and insight responses report whether the scan covered the complete matching set or stopped at its object limit, along with the configured limit.
 - Operators can download S3 objects from the console through five-minute presigned attachment URLs; URL issuance enforces the bucket tenant boundary.
 - The operations console can analyze an S3 bucket by optional prefix, showing object statistics, storage health, security findings, cost opportunities, and largest objects from bounded scans of up to 1,000 objects; each analysis result reports failures independently.
 - The operations console can page through action plans in batches of 50, append older plans, and reset pagination when the status filter or refresh changes.
