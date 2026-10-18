@@ -5,7 +5,7 @@ from threading import Lock
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 
-from autonomy.action_models import ActionStatus, RiskLevel
+from autonomy.action_models import ActionPlan, ActionStatus, RiskLevel
 from autonomy.action_planner import ActionPlanner
 from autonomy.audit_api import audit_trail
 from autonomy.approval import ApprovalManager
@@ -14,6 +14,7 @@ from autonomy.policy_engine import PolicyEngine
 from autonomy.recovery import RecoveryCoordinator
 from autonomy.verifier import ActionVerifier
 from autonomy.resource_inventory_api import _resource_tenant
+from autonomy.action_plan_store import ActionPlanStore
 import re
 from services.aws_service import AWSService
 
@@ -31,6 +32,10 @@ recovery_coordinator = RecoveryCoordinator(verifier=action_verifier)
 _plan_registry = {}
 _plan_tenants = {}
 _registry_lock = Lock()
+action_plan_store = ActionPlanStore()
+for _stored_plan, _stored_tenant in action_plan_store.load_all():
+    _plan_registry[_stored_plan.action_id] = _stored_plan
+    _plan_tenants[_stored_plan.action_id] = _stored_tenant
 
 
 def _serialize(value):
@@ -54,6 +59,7 @@ def _serialize(value):
 
 def _store_plans(plans, tenant_id=None):
     with _registry_lock:
+        action_plan_store.save_many(plans, tenant_id)
         for plan in plans:
             _plan_registry[plan.action_id] = plan
             _plan_tenants[plan.action_id] = tenant_id
@@ -68,6 +74,13 @@ def _get_plan(action_id: str, request: Request | None = None):
             if _plan_tenants.get(action_id) != request.state.tenant_id:
                 return None
         return plan
+
+
+def _persist_plan(plan: ActionPlan) -> None:
+    with _registry_lock:
+        action_plan_store.save_many(
+            [plan], _plan_tenants.get(plan.action_id)
+        )
 
 
 def _plan_response(plans, request: Request):
@@ -276,6 +289,7 @@ def evaluate_plan(action_id: str, request: Request):
     except (ValueError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    _persist_plan(evaluated)
     return _action_response(evaluated)
 
 
@@ -294,6 +308,7 @@ def approve_plan(action_id: str, request: Request):
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
+    _persist_plan(approved)
     return _action_response(approved)
 
 
@@ -318,6 +333,7 @@ def reject_plan(action_id: str, payload: RejectionRequest, request: Request):
         rejected = approval_manager.reject(action, reviewer, payload.reason)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    _persist_plan(rejected)
     return _action_response(rejected)
 
 
@@ -336,6 +352,7 @@ def cancel_plan(action_id: str, request: Request):
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
+    _persist_plan(cancelled)
     return _action_response(cancelled)
 
 
@@ -384,6 +401,8 @@ def execute_plan(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except (ValueError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    _persist_plan(final_action)
 
     return {
         "status": "healthy",

@@ -34,6 +34,7 @@ def test_readiness_reports_aws_dependency_without_exposing_account_details(monke
             "aws": "healthy",
             "audit_events": "healthy",
             "audit_idempotency": "healthy",
+            "action_plans": "healthy",
         },
     }
 
@@ -56,6 +57,7 @@ def test_readiness_returns_service_unavailable_when_aws_is_down(monkeypatch):
                 "aws": "unhealthy",
                 "audit_events": "healthy",
                 "audit_idempotency": "healthy",
+                "action_plans": "healthy",
             },
         }
     }
@@ -108,4 +110,18 @@ def test_readiness_fails_when_a_persistent_store_is_unavailable(monkeypatch):
         "aws": "healthy",
         "audit_events": "unhealthy",
         "audit_idempotency": "healthy",
+        "action_plans": "healthy",
     }
+
+
+def test_readiness_fails_when_action_plan_store_is_unavailable(monkeypatch):
+    monkeypatch.setattr(main.aws_service, "get_status", lambda: {"status": "connected"})
+    monkeypatch.setattr(
+        main, "_sqlite_store_ready",
+        lambda path: path != main.action_plan_store.database_path,
+    )
+
+    response = TestClient(main.app).get("/ready")
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["dependencies"]["action_plans"] == "unhealthy"

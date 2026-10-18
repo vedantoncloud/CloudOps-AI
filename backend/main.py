@@ -10,6 +10,7 @@ from rate_limit import RateLimitMiddleware
 from request_limits import RequestSizeLimitMiddleware, ResponseSizeLimitMiddleware
 from services.aws_service import AWSService
 from autonomy.api import router as autonomy_router
+from autonomy.api import action_plan_store
 from autonomy.control_loop_api import router as control_loop_router
 from autonomy.gitops_api import router as gitops_router
 from autonomy.control_plane_api import router as control_plane_router
@@ -140,6 +141,9 @@ def readiness_check():
         ),
         "audit_idempotency": (
             "healthy" if _sqlite_store_ready(DEFAULT_DB_PATH) else "unhealthy"
+        ),
+        "action_plans": (
+            "healthy" if _sqlite_store_ready(action_plan_store.database_path) else "unhealthy"
         ),
     }
     ready = aws_ready and all(status == "healthy" for status in persistence.values())
