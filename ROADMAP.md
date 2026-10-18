@@ -92,6 +92,7 @@ Operators can filter their autonomous run history by outcome and search action I
 - Administrators can view the shared AWS account's total daily unblended cost for the last 30 complete days in the console; the account-level endpoint is admin-only in token mode and reports billing permission or availability failures without exposing SDK details.
 - Administrators can see the last 30 complete days of unblended spend aggregated by AWS service, ranked by total cost, alongside the daily account totals in the billing console response.
 - Administrators can select a 7, 30, or 90 complete-day billing window in the console; the account-cost API validates the bounded range and retains the 30-day default.
+- Administrators can review shared-account billing as readable daily and service-level tables, with the total and selected period summarized; the complete report can be downloaded as CSV with spreadsheet formula-injection protection.
 - Operators can export the complete action-plan result set matching the console search, status, risk, and resource-type filters as CSV; export fetches bounded pages and protects spreadsheet cells against formula injection.
 - The shared control-plane summary, which includes cross-tenant GitOps counts and audit-event details, is restricted to administrators in token mode.
 - Administrators can verify audit hash-chain integrity from the console; the check reports the event count and first invalid index and retains the API's admin-only access policy.

@@ -101,3 +101,13 @@ def test_console_exposes_admin_account_billing_option():
     assert 'id="billingWindow"' in html
     assert 'value="7">Last 7 complete days' in html and 'value="90">Last 90 complete days' in html
     assert "account-costs?days=${encodeURIComponent($('billingWindow').value)}" in html
+    assert 'id="billingDaily"' in html and 'id="billingServices"' in html
+    assert 'id="exportBilling" disabled' in html
+    assert "data.daily.map(x=>[x.date,Number(x.amount).toFixed(2),data.currency||''])" in html
+    assert "data.services.map(x=>[x.service,Number(x.amount).toFixed(2),data.currency||''])" in html
+    assert "if(category==='billing'){box.textContent='Billing data loaded.';renderBilling(data)}" in html
+    assert "billingData.daily.map(x=>['daily',x.date,x.amount,currency])" in html
+    assert "row=>row.map(csvCell).join(',')" in html
+    assert "data.daily.some(x=>!x||!x.date||!Number.isFinite(Number(x.amount)))" in html
+    assert "data.services.some(x=>!x||typeof x.service!=='string'||!Number.isFinite(Number(x.amount)))" in html
+    assert "$('billingReport').classList.add('hidden');$('exportBilling').disabled=true;billingData=null" in html
