@@ -77,6 +77,7 @@ Administrators can view 7, 30, or 90 complete days of shared AWS account daily u
 - Authenticated users can download the complete audit feed matching the console's resource filter as newline-delimited JSON; the export request retains bearer authentication and server-enforced actor scope.
 - The operations console can open EC2 inventory and metrics or S3 bucket details and insights from each resource row, with independent error reporting when one detail request fails.
 - Operators can download the loaded EC2 or S3 inventory pages as search-aware CSV, with correctly quoted cells and spreadsheet formula-injection protection.
+- Operators can export all matching EC2 or S3 inventory pages as CSV without first loading each page; the export carries EC2 filters and local search across pages, and stops without a partial download on page errors or invalid/repeated cursors.
 - Operators can filter audit history by a local start/end time range; the console converts the selected times to UTC and applies the same range to paged results and JSONL export.
 - Authenticated users can filter audit history by actor ID in the operations console; the filter applies to paged results and JSONL export while the API enforces self-only visibility for non-admins.
 - Operators can filter audit history by exact event type in the operations console; the filter applies to both paged results and JSONL export.
