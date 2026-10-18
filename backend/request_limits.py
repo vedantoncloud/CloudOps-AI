@@ -6,6 +6,7 @@ from starlette.responses import JSONResponse
 
 
 DEFAULT_MAX_REQUEST_BYTES = 1_048_576
+DEFAULT_MAX_RESPONSE_BYTES = 4_194_304
 
 
 def _positive_int(value: str, name: str) -> int:
@@ -82,3 +83,53 @@ class RequestSizeLimitMiddleware:
             content={"detail": f"Request body exceeds the {self.max_bytes}-byte limit"},
         )
         await response(scope, receive, send)
+
+
+class ResponseSizeLimitMiddleware:
+    """Bound buffered HTTP responses and replace oversized bodies consistently."""
+
+    def __init__(self, app, max_bytes: int | None = None):
+        self.app = app
+        if max_bytes is None:
+            max_bytes = _positive_int(
+                os.getenv("CLOUDOPS_MAX_RESPONSE_BYTES", str(DEFAULT_MAX_RESPONSE_BYTES)),
+                "CLOUDOPS_MAX_RESPONSE_BYTES",
+            )
+        if max_bytes <= 0:
+            raise ValueError("max_bytes must be a positive integer")
+        self.max_bytes = max_bytes
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        messages = []
+        size = 0
+        oversized = False
+
+        async def capture(message):
+            nonlocal size, oversized
+            if message["type"] == "http.response.body":
+                size += len(message.get("body", b""))
+                if size > self.max_bytes:
+                    oversized = True
+                    return
+            if not oversized:
+                messages.append(message)
+
+        await self.app(scope, receive, capture)
+        if oversized:
+            body = b'{"detail":"Response exceeds the configured size limit"}'
+            await send({
+                "type": "http.response.start",
+                "status": 500,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"content-length", str(len(body)).encode("ascii")),
+                ],
+            })
+            await send({"type": "http.response.body", "body": body, "more_body": False})
+            return
+        for message in messages:
+            await send(message)

@@ -1,8 +1,9 @@
 import pytest
 from fastapi import FastAPI, Request
+from starlette.responses import StreamingResponse
 from fastapi.testclient import TestClient
 
-from request_limits import RequestSizeLimitMiddleware
+from request_limits import RequestSizeLimitMiddleware, ResponseSizeLimitMiddleware
 
 
 def build_app(limit=8):
@@ -48,3 +49,59 @@ def test_request_limit_configuration_must_be_positive(monkeypatch):
 
     with pytest.raises(RuntimeError, match="CLOUDOPS_MAX_REQUEST_BYTES must be a positive integer"):
         RequestSizeLimitMiddleware(lambda *_: None)
+
+
+def build_response_app(limit=16):
+    app = FastAPI()
+    app.add_middleware(ResponseSizeLimitMiddleware, max_bytes=limit)
+
+    @app.get("/small")
+    def small():
+        return {"value": "1234"}
+
+    @app.get("/large")
+    def large():
+        return {"value": "123456789"}
+
+    @app.get("/stream")
+    def stream():
+        return StreamingResponse(iter([b"1234567890", b"abcdefghij"]))
+
+    return app
+
+
+def test_response_at_limit_is_returned_unchanged():
+    app = FastAPI()
+    app.add_middleware(ResponseSizeLimitMiddleware, max_bytes=8)
+
+    @app.get("/exact")
+    def exact():
+        return "123456"  # JSON string encoding occupies exactly eight bytes.
+
+    response = TestClient(app).get("/exact")
+
+    assert response.status_code == 200
+    assert response.content == b'"123456"'
+
+
+def test_small_response_is_returned_unchanged():
+    response = TestClient(build_response_app()).get("/small")
+
+    assert response.status_code == 200
+    assert response.json() == {"value": "1234"}
+
+
+@pytest.mark.parametrize("path", ["/large", "/stream"])
+def test_oversized_buffered_or_streamed_response_is_replaced(path):
+    response = TestClient(build_response_app()).get(path)
+
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Response exceeds the configured size limit"}
+    assert int(response.headers["content-length"]) == len(response.content)
+
+
+def test_response_limit_configuration_must_be_positive(monkeypatch):
+    monkeypatch.setenv("CLOUDOPS_MAX_RESPONSE_BYTES", "0")
+
+    with pytest.raises(RuntimeError, match="CLOUDOPS_MAX_RESPONSE_BYTES must be a positive integer"):
+        ResponseSizeLimitMiddleware(lambda *_: None)
