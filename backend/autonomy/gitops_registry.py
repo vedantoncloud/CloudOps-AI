@@ -18,7 +18,9 @@ class GitOpsChangeSetRegistry:
         self._changes: dict[str, GitOpsChangeSet] = {}
         self._lock = RLock()
 
-    def register(self, change_set: GitOpsChangeSet) -> GitOpsChangeSet:
+    def register(
+        self, change_set: GitOpsChangeSet, *, actor_id: str | None = None
+    ) -> GitOpsChangeSet:
         if not change_set.change_id.strip():
             raise ValueError("change_id cannot be empty")
 
@@ -39,6 +41,7 @@ class GitOpsChangeSetRegistry:
                 old_status="none",
                 new_status=change_set.status.value,
                 details={"change_count": change_set.change_count},
+                actor_id=actor_id,
             )
 
         return change_set
@@ -74,6 +77,7 @@ class GitOpsChangeSetRegistry:
         approved_by: str,
         *,
         engine: GitOpsEngine | None = None,
+        actor_id: str | None = None,
     ) -> GitOpsChangeSet:
         change_set = self.require(change_id)
 
@@ -92,6 +96,7 @@ class GitOpsChangeSetRegistry:
             old_status=old_status,
             new_status=change_set.status.value,
             details={"approved_by": approved_by},
+            actor_id=actor_id,
         )
 
         return change_set
@@ -103,6 +108,7 @@ class GitOpsChangeSetRegistry:
         reason: str,
         *,
         engine: GitOpsEngine | None = None,
+        actor_id: str | None = None,
     ) -> GitOpsChangeSet:
         change_set = self.require(change_id)
 
@@ -124,6 +130,7 @@ class GitOpsChangeSetRegistry:
                 "rejected_by": rejected_by,
                 "reason": reason,
             },
+            actor_id=actor_id,
         )
 
         return change_set
@@ -134,6 +141,7 @@ class GitOpsChangeSetRegistry:
         *,
         dry_run: bool = True,
         engine: GitOpsEngine | None = None,
+        actor_id: str | None = None,
     ) -> GitOpsApplyResult:
         change_set = self.require(change_id)
 
@@ -166,6 +174,7 @@ class GitOpsChangeSetRegistry:
                 "applied_changes": result.applied_changes,
                 "message": result.message,
             },
+            actor_id=actor_id,
         )
 
         return result
@@ -176,6 +185,7 @@ class GitOpsChangeSetRegistry:
         *,
         observed_values: dict[str, object] | None = None,
         engine: GitOpsEngine | None = None,
+        actor_id: str | None = None,
     ) -> bool:
         change_set = self.require(change_id)
 
@@ -206,6 +216,7 @@ class GitOpsChangeSetRegistry:
                 "verified": verified,
                 "observed_values_provided": observed_values is not None,
             },
+            actor_id=actor_id,
         )
 
         return verified

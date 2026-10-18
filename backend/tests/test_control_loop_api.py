@@ -152,6 +152,7 @@ def test_control_loop_api_does_not_execute_infrastructure_changes():
 def test_control_loop_audit_events_include_authenticated_actor(monkeypatch):
     trail = AuditTrail()
     monkeypatch.setattr(control_loop_api, "audit_trail", trail)
+    monkeypatch.setattr(control_loop_api.gitops_registry, "audit_trail", trail)
     app = FastAPI()
     app.add_middleware(
         AccessControlMiddleware,
@@ -170,3 +171,7 @@ def test_control_loop_audit_events_include_authenticated_actor(monkeypatch):
     events = trail.get_events("actor-attributed-action")
     assert events
     assert all(event.actor_id == "operator-17" for event in events)
+    assert any(
+        event.event == "gitops_change_registered" and event.actor_id == "operator-17"
+        for event in events
+    )

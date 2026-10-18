@@ -99,6 +99,11 @@ def _change_actor(request: Request, claimed_actor: str) -> str:
     return principal.subject if principal is not None else claimed_actor
 
 
+def _authenticated_actor(request: Request) -> str | None:
+    principal = getattr(request.state, "principal", None)
+    return principal.subject if principal is not None else None
+
+
 @router.get(
     "/changes",
     response_model=GitOpsChangePageResponse,
@@ -185,6 +190,7 @@ def approve_gitops_change(
             change_id,
             _change_actor(http_request, request.approved_by),
             engine=engine,
+            actor_id=_change_actor(http_request, request.approved_by),
         )
         return _serialize_change_set(_visible_change(change_set, http_request))
 
@@ -217,6 +223,7 @@ def reject_gitops_change(
             _change_actor(http_request, request.rejected_by),
             request.reason,
             engine=engine,
+            actor_id=_change_actor(http_request, request.rejected_by),
         )
         return _serialize_change_set(_visible_change(change_set, http_request))
 
@@ -248,6 +255,7 @@ def apply_gitops_change(
             change_id,
             dry_run=request.dry_run,
             engine=engine,
+            actor_id=_authenticated_actor(http_request),
         )
 
         return ApplyResponse(
@@ -281,6 +289,7 @@ def verify_gitops_change(
             change_id,
             observed_values=request.observed_values,
             engine=engine,
+            actor_id=_authenticated_actor(http_request),
         )
 
         change_set = registry.require(change_id)

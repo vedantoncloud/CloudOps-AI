@@ -212,7 +212,7 @@ def evaluate_control_loop(request: ControlLoopEvaluateRequest, http_request: Req
                 ):
                     raise HTTPException(status_code=409, detail="GitOps change identifier conflict")
                 if existing is None:
-                    existing = gitops_registry.register(change_set)
+                    existing = gitops_registry.register(change_set, actor_id=actor_id)
                 gitops_change_id = existing.change_id
                 gitops_status = existing.status.value
 
