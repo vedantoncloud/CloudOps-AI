@@ -16,6 +16,8 @@ Operators can filter their autonomous run history by outcome and search action I
 
 Operators can filter the tenant-scoped pending approval queue by risk and resource type, and search action IDs, action types, resource IDs, and reasons. Filters are applied before pagination so totals and queue pages match the active criteria.
 
+Operators can search tenant-visible GitOps change sets by change ID, source action, resource, field, or reason, filter by lifecycle status, and page through newest changes first. Results are tenant-scoped before filtering and pagination, with matching totals for the console.
+
 Administrators can review cumulative AWS operation call and failure counts in the Operations console, including unhealthy provider results returned with HTTP 200; fixed method labels exclude resource identifiers and provider error details.
 
 Operators can browse paginated EC2 inventory in a selected AWS region from the operations console; the selected region is retained for subsequent pages and complete CSV exports.
@@ -69,6 +71,7 @@ When an operator selects an EC2 region, per-instance detail, metrics, insights, 
 - S3 bucket inventory defaults to a bounded 1,000-bucket AWS page and always returns continuation metadata, including when clients omit pagination parameters.
 - Authenticated users can use `/console` to browse EC2/S3 inventory, inspect resource governance, review and decide pending approvals, and view their autonomous run history; bearer credentials stay in page memory.
 - Operators can review tenant-visible GitOps change sets in the console, inspect proposal manifests, approve or reject pending proposals, apply approved changes in dry-run mode, and verify applied proposals; real infrastructure mutation remains disabled.
+- Operators can search and status-filter tenant-visible GitOps change sets through bounded newest-first API and console pagination; matching totals and tenant filtering are applied before page slicing.
 - Token-scoped EC2/S3 plan generation verifies the source resource's tenant ownership first; foreign, untagged, missing, or unverifiable resources are hidden before insight analysis.
 - The operations console can create action plans from EC2/S3 resource insights, browse and filter the plan queue, evaluate plans, cancel eligible plans, and run approved plans in dry-run mode.
 - The operations console can browse S3 bucket objects by prefix, choose a bounded page size, and continue through truncated listings.

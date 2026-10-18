@@ -38,9 +38,14 @@ def test_console_exposes_gitops_review_dry_run_and_verification_workflow():
     html = response.text
     assert 'data-tab="gitops"' in html
     assert 'id="gitopsStatus"' in html
+    assert 'id="gitopsSearch"' in html
     assert 'id="gitopsRows"' in html
+    assert 'id="moreGitops"' in html
     assert 'id="gitopsDetails"' in html
-    assert "api(`/autonomy/gitops/changes${pending?'/pending':''}`)" in html
+    assert "api(`/autonomy/gitops/changes?${query}`)" in html
+    assert "query.set('status',status)" in html
+    assert "query.set('search',search)" in html
+    assert "loadGitops(true)" in html
     assert "api(`/autonomy/gitops/changes/${encodeURIComponent(changeId)}`)" in html
     assert "gitopsAction(change.change_id,'approve'" in html
     assert "gitopsAction(change.change_id,'reject'" in html
@@ -148,7 +153,7 @@ def test_console_exposes_ec2_and_s3_resource_details_and_metrics():
     assert 'id="resourceDetails"' in response.text
     assert "details.textContent='Details'" in response.text
     assert "inspectDetails(x,aws?'ec2':'s3')" in response.text
-    assert "['Metrics',root+'/metrics?lookback_hours='+metricsWindow.value]" in response.text
+    assert "['Metrics',root+'/metrics?lookback_hours='+metricsWindow.value+(regional?'&'+regional.slice(1):'')]" in response.text
     assert "['Insights',root+'/insights']" in response.text
     assert "Promise.allSettled(paths.map(([,path])=>api(path)))" in response.text
 

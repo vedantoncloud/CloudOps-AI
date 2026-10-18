@@ -52,7 +52,7 @@ def test_list_changes_starts_empty():
     response = client.get("/autonomy/gitops/changes")
 
     assert response.status_code == 200
-    assert response.json() == []
+    assert response.json() == {"changes": [], "total": 0, "limit": 50, "offset": 0}
 
 
 def test_get_missing_change_returns_404():
@@ -94,7 +94,8 @@ def test_list_changes_returns_registered_changes():
     response = client.get("/autonomy/gitops/changes")
 
     assert response.status_code == 200
-    assert len(response.json()) == 1
+    assert response.json()["total"] == 1
+    assert len(response.json()["changes"]) == 1
 
 
 def test_pending_endpoint_returns_pending_changes():
@@ -382,10 +383,63 @@ def test_gitops_change_lists_and_detail_are_tenant_scoped():
     headers = {"Authorization": "Bearer tenant-a"}
 
     listed = client.get("/autonomy/gitops/changes", headers=headers)
-    assert [item["change_id"] for item in listed.json()] == [owned.change_id]
+    assert [item["change_id"] for item in listed.json()["changes"]] == [owned.change_id]
     assert client.get(
         f"/autonomy/gitops/changes/{foreign.change_id}", headers=headers
     ).status_code == 404
+
+
+def test_change_list_filters_search_and_status_before_pagination():
+    first = make_change_set()
+    first.change_id = "change-first"
+    first.metadata["tenant_id"] = "tenant-a"
+    second = make_change_set()
+    second.change_id = "change-special-second"
+    second.metadata["tenant_id"] = "tenant-a"
+    foreign = make_change_set()
+    foreign.change_id = "change-foreign"
+    foreign.change_id = "change-special-foreign"
+    foreign.metadata["tenant_id"] = "tenant-b"
+    registry.register(first)
+    registry.register(second)
+    registry.register(foreign)
+    client = make_tenant_client()
+
+    response = client.get(
+        "/autonomy/gitops/changes?search=SPECIAL&status=pending_approval&limit=1&offset=0",
+        headers={"Authorization": "Bearer tenant-a"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 1
+    assert data["limit"] == 1
+    assert [item["change_id"] for item in data["changes"]] == [second.change_id]
+
+
+def test_change_list_paginates_newest_first_and_allows_empty_offset_page():
+    older = make_change_set()
+    older.change_id = "change-older"
+    newer = make_change_set()
+    newer.change_id = "change-newer"
+    registry.register(older)
+    registry.register(newer)
+    client = TestClient(make_app())
+
+    first = client.get("/autonomy/gitops/changes?limit=1&offset=0").json()
+    beyond_end = client.get("/autonomy/gitops/changes?limit=1&offset=2").json()
+
+    assert first["total"] == 2
+    assert [item["change_id"] for item in first["changes"]] == [newer.change_id]
+    assert beyond_end["total"] == 2
+    assert beyond_end["changes"] == []
+
+
+def test_change_list_rejects_invalid_status_and_bounds_page_size():
+    client = TestClient(make_app())
+
+    assert client.get("/autonomy/gitops/changes?status=unknown").status_code == 400
+    assert client.get("/autonomy/gitops/changes?limit=201").status_code == 422
 
 
 def test_foreign_gitops_change_cannot_be_mutated_and_actor_is_authenticated():

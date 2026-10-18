@@ -1,6 +1,6 @@
 ﻿from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from autonomy.audit_api import audit_trail
@@ -27,6 +27,13 @@ class GitOpsChangeResponse(BaseModel):
     commit_message: str
     changes: list[dict[str, Any]]
     metadata: dict[str, Any]
+
+
+class GitOpsChangePageResponse(BaseModel):
+    changes: list[GitOpsChangeResponse]
+    total: int
+    limit: int
+    offset: int
 
 
 class ApprovalRequest(BaseModel):
@@ -94,15 +101,44 @@ def _change_actor(request: Request, claimed_actor: str) -> str:
 
 @router.get(
     "/changes",
-    response_model=list[GitOpsChangeResponse],
+    response_model=GitOpsChangePageResponse,
 )
-def list_gitops_changes(request: Request) -> list[GitOpsChangeResponse]:
-    return [
-        _serialize_change_set(change_set)
-        for change_set in registry.list_all()
-        if not getattr(request.state, "tenant_scoped", False)
-        or change_set.metadata.get("tenant_id") == request.state.tenant_id
+def list_gitops_changes(
+    request: Request,
+    status: str | None = None,
+    search: str | None = Query(default=None, max_length=200),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> GitOpsChangePageResponse:
+    valid_statuses = {item.value for item in GitOpsChangeStatus}
+    if status is not None and status not in valid_statuses:
+        raise HTTPException(status_code=400, detail="Invalid GitOps change status")
+    normalized_search = search.strip().casefold() if search else ""
+    visible = [
+        change_set
+        for change_set in reversed(registry.list_all())
+        if (
+            not getattr(request.state, "tenant_scoped", False)
+            or change_set.metadata.get("tenant_id") == request.state.tenant_id
+        )
+        and (status is None or change_set.status.value == status)
+        and (
+            not normalized_search
+            or normalized_search in " ".join((
+                change_set.change_id,
+                change_set.source_action_id,
+                change_set.commit_message,
+                *(f"{change.resource_type} {change.resource_id} {change.field} {change.reason}"
+                  for change in change_set.changes),
+            )).casefold()
+        )
     ]
+    return GitOpsChangePageResponse(
+        changes=[_serialize_change_set(item) for item in visible[offset:offset + limit]],
+        total=len(visible),
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get(
