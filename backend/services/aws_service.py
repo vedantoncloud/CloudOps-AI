@@ -303,10 +303,10 @@ class AWSService:
                 "error": str(error),
             }
 
-    def get_ec2_instance(self, instance_id):
+    def get_ec2_instance(self, instance_id, region=None):
         """Look up one instance directly, independent of inventory pagination."""
         try:
-            response = _aws_client("ec2").describe_instances(InstanceIds=[instance_id])
+            response = _aws_client("ec2", **({"region_name": region} if region else {})).describe_instances(InstanceIds=[instance_id])
             instances = [
                 instance
                 for reservation in response.get("Reservations", [])
@@ -896,9 +896,9 @@ class AWSService:
                 "error": str(error),
             }
 
-    def get_ec2_cpu_utilization(self, instance_id, lookback_hours=1):
+    def get_ec2_cpu_utilization(self, instance_id, lookback_hours=1, region=None):
         try:
-            cloudwatch = _aws_client("cloudwatch")
+            cloudwatch = _aws_client("cloudwatch", **({"region_name": region} if region else {}))
 
             end_time = datetime.now(timezone.utc)
             start_time = end_time - timedelta(hours=lookback_hours)
@@ -958,9 +958,9 @@ class AWSService:
                 "error": str(error),
             }
 
-    def get_ec2_network_utilization(self, instance_id, lookback_hours=1):
+    def get_ec2_network_utilization(self, instance_id, lookback_hours=1, region=None):
         try:
-            cloudwatch = _aws_client("cloudwatch")
+            cloudwatch = _aws_client("cloudwatch", **({"region_name": region} if region else {}))
 
             end_time = datetime.now(timezone.utc)
             start_time = end_time - timedelta(hours=lookback_hours)
@@ -1016,11 +1016,12 @@ class AWSService:
                 "error": str(error),
             }
 
-    def get_ec2_metrics(self, instance_id, lookback_hours=1):
+    def get_ec2_metrics(self, instance_id, lookback_hours=1, region=None):
         try:
-            cpu = self.get_ec2_cpu_utilization(instance_id, lookback_hours)
-            network = self.get_ec2_network_utilization(instance_id, lookback_hours)
-            status = self.get_ec2_instance_status(instance_id)
+            regional = {"region": region} if region else {}
+            cpu = self.get_ec2_cpu_utilization(instance_id, lookback_hours, **regional)
+            network = self.get_ec2_network_utilization(instance_id, lookback_hours, **regional)
+            status = self.get_ec2_instance_status(instance_id, **regional)
 
             if (
                 cpu["status"] == "unhealthy"
@@ -1054,9 +1055,9 @@ class AWSService:
             }
 
 
-    def get_ec2_insights(self, instance_id):
+    def get_ec2_insights(self, instance_id, region=None):
         try:
-            metrics = self.get_ec2_metrics(instance_id)
+            metrics = self.get_ec2_metrics(instance_id, **({"region": region} if region else {}))
 
             if metrics["status"] == "unhealthy":
                 return metrics
@@ -1609,9 +1610,9 @@ class AWSService:
                 "error": str(error),
             }
 
-    def get_ec2_instance_status(self, instance_id):
+    def get_ec2_instance_status(self, instance_id, region=None):
         try:
-            ec2 = _aws_client("ec2")
+            ec2 = _aws_client("ec2", **({"region_name": region} if region else {}))
 
             response = ec2.describe_instance_status(
                 InstanceIds=[instance_id],

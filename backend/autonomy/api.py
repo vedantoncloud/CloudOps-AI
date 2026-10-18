@@ -14,6 +14,7 @@ from autonomy.policy_engine import PolicyEngine
 from autonomy.recovery import RecoveryCoordinator
 from autonomy.verifier import ActionVerifier
 from autonomy.resource_inventory_api import _resource_tenant
+import re
 from services.aws_service import AWSService
 
 
@@ -100,11 +101,11 @@ def _action_response(action):
     }
 
 
-def _require_tenant_ec2_instance(request: Request, instance_id: str) -> None:
+def _require_tenant_ec2_instance(request: Request, instance_id: str, region: str | None = None) -> None:
     """Keep plan generation inside the same ownership boundary as EC2 reads."""
     if not getattr(request.state, "tenant_scoped", False):
         return
-    result = aws_service.get_ec2_instance(instance_id)
+    result = aws_service.get_ec2_instance(instance_id, **({"region": region} if region else {}))
     if result.get("status") != "healthy":
         raise HTTPException(status_code=503, detail="EC2 inventory is unavailable")
     instance = result.get("instance")
@@ -124,9 +125,13 @@ def _require_tenant_s3_bucket(request: Request, bucket_name: str) -> None:
 
 
 @router.post("/ec2/instances/{instance_id}/plans")
-def plan_ec2_actions(instance_id: str, request: Request):
-    _require_tenant_ec2_instance(request, instance_id)
-    result = aws_service.get_ec2_insights(instance_id)
+def plan_ec2_actions(instance_id: str, request: Request, region: str | None = None):
+    if not re.fullmatch(r"i-[0-9a-fA-F]{8,17}", instance_id):
+        raise HTTPException(status_code=400, detail="Invalid EC2 instance ID")
+    if region is not None and not re.fullmatch(r"[a-z]{2}(?:-[a-z0-9]+)+-[0-9]", region):
+        raise HTTPException(status_code=400, detail="Invalid AWS region")
+    _require_tenant_ec2_instance(request, instance_id, region)
+    result = aws_service.get_ec2_insights(instance_id, **({"region": region} if region else {}))
 
     if result["status"] == "unhealthy":
         raise HTTPException(status_code=403, detail=result["error"])

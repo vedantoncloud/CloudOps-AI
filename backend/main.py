@@ -250,11 +250,11 @@ def _tenant_ec2_instances(request: Request, state: str | None, tag: str | None, 
     return result
 
 
-def _require_tenant_ec2_instance(request: Request, instance_id: str) -> None:
+def _require_tenant_ec2_instance(request: Request, instance_id: str, region: str | None = None) -> None:
     """Hide EC2 instances that are not explicitly owned by this tenant."""
     if not getattr(request.state, "tenant_scoped", False):
         return
-    result = aws_service.get_ec2_instance(instance_id)
+    result = aws_service.get_ec2_instance(instance_id, **({"region": region} if region else {}))
     if result.get("status") != "healthy":
         raise HTTPException(status_code=503, detail="EC2 inventory is unavailable")
     tenant_id = request.state.tenant_id
@@ -269,6 +269,11 @@ def _validate_ec2_instance_id(instance_id: str) -> None:
     """Reject malformed identifiers before making provider calls."""
     if not re.fullmatch(r"i-[0-9a-fA-F]{8,17}", instance_id):
         raise HTTPException(status_code=400, detail="Invalid EC2 instance ID")
+
+
+def _validate_ec2_region(region: str | None) -> None:
+    if region is not None and not re.fullmatch(r"[a-z]{2}(?:-[a-z0-9]+)+-[0-9]", region):
+        raise HTTPException(status_code=400, detail="Invalid AWS region")
 
 
 @app.get("/cloud/aws/ec2/instances")
@@ -294,8 +299,7 @@ def aws_ec2_instances(request: Request, state: str = None, tag: str = None, max_
     if name is not None and (not name.strip() or len(name) > 128):
         raise HTTPException(status_code=400, detail="name must contain 1 to 128 characters")
 
-    if region is not None and not re.fullmatch(r"[a-z]{2}(?:-[a-z0-9]+)+-[0-9]", region):
-        raise HTTPException(status_code=400, detail="Invalid AWS region")
+    _validate_ec2_region(region)
 
     return _tenant_ec2_instances(request, state, tag, max_results, next_token, name.strip() if name else None, region)
 
@@ -561,11 +565,11 @@ def aws_s3_bucket_optimization(
 
 
 @app.get("/cloud/aws/ec2/instances/{instance_id}/insights")
-def aws_ec2_insights(instance_id: str, request: Request):
+def aws_ec2_insights(instance_id: str, request: Request, region: str | None = None):
     _validate_ec2_instance_id(instance_id)
-
-    _require_tenant_ec2_instance(request, instance_id)
-    result = aws_service.get_ec2_insights(instance_id)
+    _validate_ec2_region(region)
+    _require_tenant_ec2_instance(request, instance_id, region)
+    result = aws_service.get_ec2_insights(instance_id, **({"region": region} if region else {}))
 
     if result["status"] == "unhealthy":
         raise HTTPException(
@@ -577,11 +581,12 @@ def aws_ec2_insights(instance_id: str, request: Request):
 
 
 @app.get("/cloud/aws/ec2/instances/{instance_id}")
-def aws_ec2_instance_details(instance_id: str, request: Request):
+def aws_ec2_instance_details(instance_id: str, request: Request, region: str | None = None):
     """Return one EC2 inventory record, applying the same tenant scope as lists."""
     _validate_ec2_instance_id(instance_id)
+    _validate_ec2_region(region)
 
-    result = aws_service.get_ec2_instance(instance_id)
+    result = aws_service.get_ec2_instance(instance_id, **({"region": region} if region else {}))
     if result.get("status") != "healthy":
         raise HTTPException(status_code=503, detail="EC2 inventory is unavailable")
 
@@ -672,10 +677,11 @@ def aws_ec2_security_insights(request: Request):
 
 
 @app.get("/cloud/aws/ec2/instances/{instance_id}/cpu")
-def aws_ec2_cpu(instance_id: str, request: Request):
+def aws_ec2_cpu(instance_id: str, request: Request, region: str | None = None):
     _validate_ec2_instance_id(instance_id)
-    _require_tenant_ec2_instance(request, instance_id)
-    result = aws_service.get_ec2_cpu_utilization(instance_id)
+    _validate_ec2_region(region)
+    _require_tenant_ec2_instance(request, instance_id, region)
+    result = aws_service.get_ec2_cpu_utilization(instance_id, **({"region": region} if region else {}))
 
     if result["status"] == "unhealthy":
         raise HTTPException(
@@ -687,10 +693,11 @@ def aws_ec2_cpu(instance_id: str, request: Request):
 
 
 @app.get("/cloud/aws/ec2/instances/{instance_id}/network")
-def aws_ec2_network_utilization(instance_id: str, request: Request):
+def aws_ec2_network_utilization(instance_id: str, request: Request, region: str | None = None):
     _validate_ec2_instance_id(instance_id)
-    _require_tenant_ec2_instance(request, instance_id)
-    result = aws_service.get_ec2_network_utilization(instance_id)
+    _validate_ec2_region(region)
+    _require_tenant_ec2_instance(request, instance_id, region)
+    result = aws_service.get_ec2_network_utilization(instance_id, **({"region": region} if region else {}))
 
     if result["status"] == "unhealthy":
         raise HTTPException(
@@ -745,10 +752,11 @@ def aws_s3_bucket_cost_insights(
 
 
 @app.get("/cloud/aws/ec2/instances/{instance_id}/status")
-def aws_ec2_instance_status(instance_id: str, request: Request):
+def aws_ec2_instance_status(instance_id: str, request: Request, region: str | None = None):
     _validate_ec2_instance_id(instance_id)
-    _require_tenant_ec2_instance(request, instance_id)
-    result = aws_service.get_ec2_instance_status(instance_id)
+    _validate_ec2_region(region)
+    _require_tenant_ec2_instance(request, instance_id, region)
+    result = aws_service.get_ec2_instance_status(instance_id, **({"region": region} if region else {}))
 
     if result["status"] == "unhealthy":
         raise HTTPException(
@@ -760,13 +768,13 @@ def aws_ec2_instance_status(instance_id: str, request: Request):
 
 
 @app.get("/cloud/aws/ec2/instances/{instance_id}/metrics")
-def aws_ec2_metrics(instance_id: str, request: Request, lookback_hours: int = 1):
+def aws_ec2_metrics(instance_id: str, request: Request, lookback_hours: int = 1, region: str | None = None):
     _validate_ec2_instance_id(instance_id)
-
-    _require_tenant_ec2_instance(request, instance_id)
+    _validate_ec2_region(region)
+    _require_tenant_ec2_instance(request, instance_id, region)
     if not 1 <= lookback_hours <= 24:
         raise HTTPException(status_code=400, detail="lookback_hours must be between 1 and 24")
-    result = aws_service.get_ec2_metrics(instance_id, lookback_hours=lookback_hours)
+    result = aws_service.get_ec2_metrics(instance_id, lookback_hours=lookback_hours, **({"region": region} if region else {}))
 
     if result["status"] == "unhealthy":
         raise HTTPException(

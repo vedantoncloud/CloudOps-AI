@@ -130,7 +130,7 @@ def test_full_inventory_export_paginates_filters_and_fails_closed():
     script = r"""
 const assert = require('node:assert/strict');
 const source = JSON.parse(process.argv[1]);
-const elements = {exportAllInventory:{disabled:false},kind:{value:'ec2'},inventorySearch:{value:'second'},instanceState:{value:'running'},instanceTag:{value:'Owner:ops'},instanceName:{value:'web'}};
+const elements = {exportAllInventory:{disabled:false},kind:{value:'ec2'},inventorySearch:{value:'second'},instanceState:{value:'running'},instanceTag:{value:'Owner:ops'},instanceName:{value:'web'},instanceRegion:{value:''}};
 let downloads=[],messages=[],blobs=[],calls=[];
 const document={body:{append(link){downloads.push(link)}},createElement(){return {click(){},remove(){}}}};
 const URL={createObjectURL(blob){blobs.push(blob);return 'blob:test'},revokeObjectURL(){}};
