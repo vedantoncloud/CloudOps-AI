@@ -62,3 +62,16 @@ def test_console_exposes_admin_audit_integrity_check():
     assert "Audit chain is valid across" in html
     assert "Audit chain verification failed at event" in html
     assert "addEventListener('click',()=>verifyAuditIntegrity())" in html
+
+
+def test_console_audit_rows_expose_safe_event_evidence_inspection():
+    html = TestClient(app).get("/console").text
+
+    assert '<th>Evidence</th>' in html
+    assert 'id="auditDetails"' in html
+    assert 'id="auditDetailsContent"' in html
+    assert "function inspectAuditEvent(event)" in html
+    assert "inspect.addEventListener('click',()=>inspectAuditEvent(e))" in html
+    assert "content.textContent=JSON.stringify(event,null,2)||'No event details available.'" in html
+    assert "content.innerHTML" not in html
+    assert "rows($('auditRows'),mapped,6)" in html

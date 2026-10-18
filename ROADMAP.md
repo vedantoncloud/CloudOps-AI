@@ -93,6 +93,7 @@ When an operator selects an EC2 region, inventory, fleet-wide aggregate insights
 - Operators can inspect a plan from the console queue and retrieve its current tenant-scoped state, including the full plan details.
 - The operations console can load EC2 fleet efficiency, cost, rightsizing, and security insights from the aggregate APIs; token-mode analysis is limited to authenticated-tenant instances.
 - Authenticated users can browse audit history in the operations console, filter events by resource ID, and load additional bounded pages through the actor-scoped audit API. Administrators can also verify the persisted audit hash chain from the Audit tab, with the event count and first invalid index shown in the console.
+- Operators can inspect the complete recorded payload and evidence for each visible audit event from the console; event content is rendered as text, with an explicit empty-data fallback.
 - Operators can page through the pending approval queue and authenticated users can page through their autonomous run history in the operations console, with bounded requests, visible totals, and independent pagination state.
 - Authenticated users can download the complete audit feed matching the console's resource filter as newline-delimited JSON; the export request retains bearer authentication and server-enforced actor scope.
 - The operations console can open EC2 inventory and metrics or S3 bucket details and insights from each resource row, with independent error reporting when one detail request fails.
