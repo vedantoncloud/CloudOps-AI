@@ -6,6 +6,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from observability import observed_sqlite_connection
 
 
 @dataclass(frozen=True)
@@ -36,7 +37,7 @@ class PersistentAuditIdempotencyStore:
         return connection
 
     def _initialize(self) -> None:
-        with self._connect() as connection:
+        with observed_sqlite_connection(self._connect, "audit_idempotency") as connection:
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS audit_idempotency (
@@ -100,7 +101,7 @@ class PersistentAuditIdempotencyStore:
         token = uuid.uuid4().hex
         now = __import__("time").time()
 
-        with self._connect() as connection:
+        with observed_sqlite_connection(self._connect, "audit_idempotency") as connection:
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
                 """
@@ -170,7 +171,7 @@ class PersistentAuditIdempotencyStore:
         if not claim_token:
             raise ValueError("claim_token is required")
 
-        with self._connect() as connection:
+        with observed_sqlite_connection(self._connect, "audit_idempotency") as connection:
             cursor = connection.execute(
                 """
                 UPDATE audit_idempotency
@@ -190,7 +191,7 @@ class PersistentAuditIdempotencyStore:
         if not run_id or not event_type:
             return False
 
-        with self._connect() as connection:
+        with observed_sqlite_connection(self._connect, "audit_idempotency") as connection:
             row = connection.execute(
                 """
                 SELECT 1

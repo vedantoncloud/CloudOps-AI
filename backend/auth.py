@@ -29,6 +29,7 @@ ADMIN_ONLY_PATHS = {
     "/cloud/aws/account-costs",
     "/operations/failures",
     "/operations/aws-failures",
+    "/operations/database-failures",
     "/autonomy/audit/health",
     "/autonomy/audit/pending",
     "/autonomy/audit/reconciliation",

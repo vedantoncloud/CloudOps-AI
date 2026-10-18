@@ -10,6 +10,7 @@ from threading import RLock
 from typing import Any
 
 from autonomy.audit import AuditEvent, AuditIntegrityResult, AuditTrail
+from observability import observed_sqlite_connection
 
 
 class PersistentAuditTrail(AuditTrail):
@@ -22,7 +23,7 @@ class PersistentAuditTrail(AuditTrail):
     def __init__(self, database_path: str | Path) -> None:
         self.database_path = str(database_path)
         self._lock = RLock()
-        with self._connect() as connection:
+        with observed_sqlite_connection(self._connect, "audit_events") as connection:
             connection.execute(
                 """CREATE TABLE IF NOT EXISTS audit_events (
                     sequence INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,7 +42,7 @@ class PersistentAuditTrail(AuditTrail):
         # copies, and canonical JSON validation before opening a write txn.
         validator = AuditTrail()
         event = validator.record(**kwargs)
-        with self._lock, self._connect() as connection:
+        with self._lock, observed_sqlite_connection(self._connect, "audit_events") as connection:
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
                 "SELECT event_hash FROM audit_events ORDER BY sequence DESC LIMIT 1"
@@ -55,7 +56,7 @@ class PersistentAuditTrail(AuditTrail):
         return event
 
     def get_events(self, action_id: str | None = None) -> list[AuditEvent]:
-        with self._connect() as connection:
+        with observed_sqlite_connection(self._connect, "audit_events") as connection:
             rows = connection.execute(
                 "SELECT event_json FROM audit_events ORDER BY sequence"
             ).fetchall()
@@ -70,7 +71,7 @@ class PersistentAuditTrail(AuditTrail):
         return AuditEvent(**data)
 
     def get_integrity_diagnostics(self) -> AuditIntegrityResult:
-        with self._lock, self._connect() as connection:
+        with self._lock, observed_sqlite_connection(self._connect, "audit_events") as connection:
             rows = connection.execute(
                 "SELECT event_json, event_hash FROM audit_events ORDER BY sequence"
             ).fetchall()
@@ -99,6 +100,6 @@ class PersistentAuditTrail(AuditTrail):
         return result.valid, result.event_count
 
     def clear(self) -> None:
-        with self._lock, self._connect() as connection:
+        with self._lock, observed_sqlite_connection(self._connect, "audit_events") as connection:
             connection.execute("DELETE FROM audit_events")
             connection.execute("DELETE FROM sqlite_sequence WHERE name = 'audit_events'")

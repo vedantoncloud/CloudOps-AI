@@ -3,8 +3,10 @@
 import json
 import logging
 import re
+import sqlite3
 import threading
 import time
+from contextlib import contextmanager
 from uuid import uuid4
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -94,12 +96,13 @@ class RequestMetrics:
 
 
 class OperationMetrics:
-    """Bounded counters for failed provider operations, without error payloads."""
+    """Bounded counters for named operations, without error payloads."""
 
-    def __init__(self):
+    def __init__(self, include_successes: bool = False):
         self._lock = threading.Lock()
         self._failures = {}
         self._calls = {}
+        self._include_successes = include_successes
 
     def observe(self, operation: str, failed: bool):
         with self._lock:
@@ -116,7 +119,8 @@ class OperationMetrics:
             "total_failures": sum(failures.values()),
             "operations": [
                 {"operation": operation, "calls": calls[operation], "failures": count}
-                for operation, count in sorted(failures.items())
+                for operation in sorted(calls if self._include_successes else failures)
+                for count in (failures.get(operation, 0),)
             ],
         }
 
@@ -139,6 +143,25 @@ def _format_labels(method: str, route: str, status: int, **extra: str) -> str:
 
 request_metrics = RequestMetrics()
 aws_operation_metrics = OperationMetrics()
+database_operation_metrics = OperationMetrics(include_successes=True)
+
+
+@contextmanager
+def observed_sqlite_connection(connect, operation: str):
+    """Count completed store operations and SQLite failures without details."""
+    failed = False
+    connection = None
+    try:
+        connection = connect()
+        with connection:
+            yield connection
+    except sqlite3.Error:
+        failed = True
+        raise
+    finally:
+        if connection is not None:
+            connection.close()
+        database_operation_metrics.observe(operation, failed)
 
 
 class RequestObservabilityMiddleware(BaseHTTPMiddleware):
