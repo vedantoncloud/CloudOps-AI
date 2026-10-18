@@ -221,13 +221,13 @@ def aws_ec2_summary(request: Request):
     }
 
 
-def _all_tenant_ec2_instances(request: Request):
-    """Load every EC2 page and apply tenant ownership before aggregation."""
+def _all_tenant_ec2_instances(request: Request, region: str | None = None):
+    """Load every EC2 page in a region and apply tenant ownership before aggregation."""
     instances = []
     next_token = None
     seen_tokens = set()
     while True:
-        inventory = _tenant_ec2_instances(request, None, None, 1000, next_token)
+        inventory = _tenant_ec2_instances(request, None, None, 1000, next_token, region=region)
         if inventory.get("status") != "healthy":
             return {**inventory, "instances": instances + inventory.get("instances", [])}
         instances.extend(inventory.get("instances", []))
@@ -608,14 +608,15 @@ def aws_ec2_instance_details(instance_id: str, request: Request, region: str | N
 
 
 @app.get("/cloud/aws/ec2/efficiency-insights")
-def aws_ec2_efficiency_insights(request: Request):
-    if getattr(request.state, "tenant_scoped", False):
-        inventory = _all_tenant_ec2_instances(request)
+def aws_ec2_efficiency_insights(request: Request, region: str | None = None):
+    _validate_ec2_region(region)
+    if not getattr(request.state, "tenant_scoped", False) and not region:
+        result = aws_service.get_ec2_efficiency_insights()
+    else:
+        inventory = _all_tenant_ec2_instances(request, region)
         if inventory.get("status") != "healthy":
             return inventory
-        result = aws_service.get_ec2_efficiency_insights(instances=inventory.get("instances", []))
-    else:
-        result = aws_service.get_ec2_efficiency_insights()
+        result = aws_service.get_ec2_efficiency_insights(instances=inventory.get("instances", []), **({"region": region} if region else {}))
 
     if result["status"] == "unhealthy":
         raise HTTPException(
@@ -627,14 +628,15 @@ def aws_ec2_efficiency_insights(request: Request):
 
 
 @app.get("/cloud/aws/ec2/cost-insights")
-def aws_ec2_cost_insights(request: Request):
-    if getattr(request.state, "tenant_scoped", False):
-        inventory = _all_tenant_ec2_instances(request)
+def aws_ec2_cost_insights(request: Request, region: str | None = None):
+    _validate_ec2_region(region)
+    if not getattr(request.state, "tenant_scoped", False) and not region:
+        result = aws_service.get_ec2_cost_insights()
+    else:
+        inventory = _all_tenant_ec2_instances(request, region)
         if inventory.get("status") != "healthy":
             return inventory
-        result = aws_service.get_ec2_cost_insights(instances=inventory.get("instances", []))
-    else:
-        result = aws_service.get_ec2_cost_insights()
+        result = aws_service.get_ec2_cost_insights(instances=inventory.get("instances", []), **({"region": region} if region else {}))
 
     if result["status"] == "unhealthy":
         raise HTTPException(
@@ -646,14 +648,15 @@ def aws_ec2_cost_insights(request: Request):
 
 
 @app.get("/cloud/aws/ec2/rightsizing-insights")
-def aws_ec2_rightsizing_insights(request: Request):
-    if getattr(request.state, "tenant_scoped", False):
-        inventory = _all_tenant_ec2_instances(request)
+def aws_ec2_rightsizing_insights(request: Request, region: str | None = None):
+    _validate_ec2_region(region)
+    if not getattr(request.state, "tenant_scoped", False) and not region:
+        result = aws_service.get_ec2_rightsizing_insights()
+    else:
+        inventory = _all_tenant_ec2_instances(request, region)
         if inventory.get("status") != "healthy":
             return inventory
-        result = aws_service.get_ec2_rightsizing_insights(instances=inventory.get("instances", []))
-    else:
-        result = aws_service.get_ec2_rightsizing_insights()
+        result = aws_service.get_ec2_rightsizing_insights(instances=inventory.get("instances", []), **({"region": region} if region else {}))
 
     if result["status"] == "unhealthy":
         raise HTTPException(
@@ -665,14 +668,15 @@ def aws_ec2_rightsizing_insights(request: Request):
 
 
 @app.get("/cloud/aws/ec2/security-insights")
-def aws_ec2_security_insights(request: Request):
-    if getattr(request.state, "tenant_scoped", False):
-        inventory = _all_tenant_ec2_instances(request)
+def aws_ec2_security_insights(request: Request, region: str | None = None):
+    _validate_ec2_region(region)
+    if not getattr(request.state, "tenant_scoped", False) and not region:
+        result = aws_service.get_ec2_security_insights()
+    else:
+        inventory = _all_tenant_ec2_instances(request, region)
         if inventory.get("status") != "healthy":
             return inventory
-        result = aws_service.get_ec2_security_insights(instances=inventory.get("instances", []))
-    else:
-        result = aws_service.get_ec2_security_insights()
+        result = aws_service.get_ec2_security_insights(instances=inventory.get("instances", []), **({"region": region} if region else {}))
 
     if result["status"] == "unhealthy":
         raise HTTPException(

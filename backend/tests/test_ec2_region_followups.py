@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -44,3 +45,55 @@ def test_ec2_service_uses_region_for_instance_and_cloudwatch_calls():
 
     assert create_client.call_args_list[0].kwargs["region_name"] == "eu-west-3"
     assert create_client.call_args_list[1].kwargs["region_name"] == "eu-west-3"
+
+
+def test_aggregate_insights_use_selected_region_for_inventory_and_analysis(monkeypatch):
+    from main import aws_service
+
+    inventory_calls = []
+    insight_calls = []
+
+    def instances(state=None, tag=None, max_results=None, next_token=None, name=None, region=None):
+        inventory_calls.append((next_token, region))
+        return {
+            "status": "healthy",
+            "instances": [{"instance_id": "i-12345678", "state": "running"}],
+            "next_token": "page-2" if next_token is None else None,
+        }
+
+    def insights(instances, region=None):
+        insight_calls.append((instances, region))
+        return {"service": "ec2", "status": "healthy", "instance_count": len(instances), "insights": []}
+
+    monkeypatch.setattr(aws_service, "get_ec2_instances", instances)
+    monkeypatch.setattr(aws_service, "get_ec2_efficiency_insights", insights)
+
+    response = client.get("/cloud/aws/ec2/efficiency-insights?region=eu-west-3")
+
+    assert response.status_code == 200
+    assert inventory_calls == [(None, "eu-west-3"), ("page-2", "eu-west-3")]
+    assert insight_calls[0][1] == "eu-west-3"
+    assert response.json()["instance_count"] == 2
+
+
+def test_aggregate_insights_reject_invalid_region_before_aws_access(monkeypatch):
+    from main import aws_service
+
+    monkeypatch.setattr(aws_service, "get_ec2_instances", lambda **kwargs: (_ for _ in ()).throw(AssertionError("AWS must not be called")))
+    response = client.get("/cloud/aws/ec2/security-insights?region=not-a-region")
+    assert response.status_code == 400
+
+
+def test_aggregate_insights_without_region_keeps_configured_default(monkeypatch):
+    from main import aws_service
+
+    monkeypatch.setattr(aws_service, "get_ec2_security_insights", lambda: {"status": "healthy", "instance_count": 0, "insights": []})
+    response = client.get("/cloud/aws/ec2/security-insights")
+    assert response.status_code == 200
+    assert response.json()["instance_count"] == 0
+
+
+def test_console_passes_selected_region_to_fleet_insights():
+    html = (Path(__file__).parents[1] / "static" / "console.html").read_text(encoding="utf-8")
+    assert "const query=region?`?region=${encodeURIComponent(region)}`:''" in html
+    assert "`/cloud/aws/ec2/${category}-insights${query}`" in html

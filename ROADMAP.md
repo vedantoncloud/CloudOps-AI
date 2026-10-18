@@ -22,7 +22,9 @@ Administrators can review cumulative AWS operation call and failure counts in th
 
 Operators can browse paginated EC2 inventory in a selected AWS region from the operations console; the selected region is retained for subsequent pages and complete CSV exports.
 
-When an operator selects an EC2 region, per-instance detail, metrics, insights, and action-plan requests use that same region. Invalid region values are rejected before provider access. Fleet-wide aggregate insight requests still use the configured default region.
+Operators can analyze fleet-wide EC2 efficiency, cost, rightsizing, and security insights in the selected region; inventory pagination and regional CloudWatch CPU lookups use that region, and invalid regions are rejected before provider access.
+
+When an operator selects an EC2 region, inventory, fleet-wide aggregate insights, per-instance detail, metrics, insights, and action-plan requests use that same region. Invalid region values are rejected before provider access.
 
 ## Completed work
 
@@ -148,7 +150,7 @@ When an operator selects an EC2 region, per-instance detail, metrics, insights, 
 - No CI workflow, deployment/container configuration, IaC, or substantive operator documentation was found; `docs/` is empty. The console is a lightweight browser client served by FastAPI, with inventory/governance, plan generation, inspection and review, approvals, and run history.
 - No supported Python runtime or automated dependency update/security workflow is documented.
 - EC2/S3 optimization insights remain qualitative and do not attribute Cost Explorer charges to tenants or individual resources; the admin-only account billing view reports daily shared-account totals.
-- EC2 inventory browsing and per-instance follow-up operations accept an explicit AWS region. Fleet-wide aggregate insights and other routes without a selected-region control use the configured default region.
+- EC2 inventory browsing, fleet-wide aggregate insights, and per-instance follow-up operations accept an explicit AWS region. Routes without a selected-region control use the configured default region.
 - The checkout contains untracked SQLite database files. They were left untouched and are not part of this roadmap change.
 
 ## Scope and count

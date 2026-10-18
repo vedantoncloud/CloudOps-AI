@@ -1151,7 +1151,7 @@ class AWSService:
                 "error": str(error),
             }
 
-    def get_ec2_efficiency_insights(self, instances=None):
+    def get_ec2_efficiency_insights(self, instances=None, region=None):
         try:
             if instances is None:
                 inventory = self.get_ec2_instances()
@@ -1179,7 +1179,7 @@ class AWSService:
                 if state != "running":
                     continue
 
-                cpu = self.get_ec2_cpu_utilization(instance_id)
+                cpu = self.get_ec2_cpu_utilization(instance_id, **({"region": region} if region else {}))
 
                 if cpu["status"] != "healthy":
                     continue
@@ -1213,9 +1213,9 @@ class AWSService:
             }
 
 
-    def get_ec2_cost_insights(self, instances=None):
+    def get_ec2_cost_insights(self, instances=None, region=None):
         try:
-            efficiency = self.get_ec2_efficiency_insights(instances=instances)
+            efficiency = self.get_ec2_efficiency_insights(instances=instances, **({"region": region} if region else {}))
 
             if efficiency["status"] != "healthy":
                 return efficiency
@@ -1261,7 +1261,7 @@ class AWSService:
                 "error": str(error),
             }
 
-    def get_ec2_rightsizing_insights(self, instances=None):
+    def get_ec2_rightsizing_insights(self, instances=None, region=None):
         try:
             if instances is None:
                 inventory = self.get_ec2_instances()
@@ -1291,7 +1291,7 @@ class AWSService:
                 if state != "running":
                     continue
 
-                cpu = self.get_ec2_cpu_utilization(instance_id)
+                cpu = self.get_ec2_cpu_utilization(instance_id, **({"region": region} if region else {}))
 
                 if cpu["status"] != "healthy":
                     continue
@@ -1347,7 +1347,7 @@ class AWSService:
                 "error": str(error),
             }
 
-    def get_ec2_security_insights(self, instances=None):
+    def get_ec2_security_insights(self, instances=None, region=None):
         try:
             if instances is None:
                 inventory = self.get_ec2_instances()
