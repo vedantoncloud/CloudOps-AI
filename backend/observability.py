@@ -93,6 +93,34 @@ class RequestMetrics:
         }
 
 
+class OperationMetrics:
+    """Bounded counters for failed provider operations, without error payloads."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._failures = {}
+        self._calls = {}
+
+    def observe(self, operation: str, failed: bool):
+        with self._lock:
+            self._calls[operation] = self._calls.get(operation, 0) + 1
+            if failed:
+                self._failures[operation] = self._failures.get(operation, 0) + 1
+
+    def failure_snapshot(self) -> dict:
+        with self._lock:
+            failures = dict(self._failures)
+            calls = dict(self._calls)
+        return {
+            "scope": "since_process_start",
+            "total_failures": sum(failures.values()),
+            "operations": [
+                {"operation": operation, "calls": calls[operation], "failures": count}
+                for operation, count in sorted(failures.items())
+            ],
+        }
+
+
 def _float_label(value: float) -> str:
     return str(value)
 
@@ -110,6 +138,7 @@ def _format_labels(method: str, route: str, status: int, **extra: str) -> str:
 
 
 request_metrics = RequestMetrics()
+aws_operation_metrics = OperationMetrics()
 
 
 class RequestObservabilityMiddleware(BaseHTTPMiddleware):

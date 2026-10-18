@@ -1,6 +1,6 @@
 # CloudOps AI Roadmap
 
-**Repository audit:** 2026-10-18, updated after adding a configurable HTTP response-size limit. This roadmap contains **9 remaining tasks**: the nine numbered incomplete outcomes below. Sub-bullets and acceptance criteria do not count separately. Recount only when a complete outcome ships or scope is explicitly changed.
+**Repository audit:** 2026-10-18, updated after adding AWS operation failure visibility to the operations console. This roadmap contains **9 remaining tasks**: the nine numbered incomplete outcomes below. Sub-bullets and acceptance criteria do not count separately. Recount only when a complete outcome ships or scope is explicitly changed.
 
 ## Current state
 
@@ -13,6 +13,8 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 Administrators can view 7, 30, or 90 complete days of shared AWS account daily unblended spend and service-level totals through Cost Explorer in the console. This endpoint is admin-only because the AWS account and billing data are shared; it does not provide tenant- or resource-level charge attribution. S3 bucket analysis responses identify whether object scans completed or stopped at their configured limit.
 
 Operators can filter their autonomous run history by outcome and search action IDs, action types, resource types, and resource IDs. Filtering is applied before pagination, and run history remains scoped to the authenticated actor.
+
+Administrators can review cumulative AWS operation call and failure counts in the Operations console, including unhealthy provider results returned with HTTP 200; fixed method labels exclude resource identifiers and provider error details.
 
 ## Completed work
 
@@ -111,7 +113,7 @@ Operators can filter their autonomous run history by outcome and search action I
 
 5. **Add automated CI quality gates (P1).** Define supported Python versions and add dependency installation, test execution, lint/type checks, and dependency/security scanning with actionable failure output. **Done when:** pull requests run the documented gates and report failures reliably.
 
-6. **Make health and operations observable (P1).** `/health` provides liveness and `/ready` reports AWS and persistent-store readiness with sanitized responses. HTTP request correlation, sanitized structured access logs, and authenticated Prometheus-compatible HTTP request and latency metrics are implemented. Remaining work: add direct AWS/database operation failure signals beyond HTTP 5xx route counts, and document telemetry use. **Done when:** operators can distinguish application health from dependency health and diagnose failures using documented telemetry.
+6. **Make health and operations observable (P1).** `/health` provides liveness and `/ready` reports AWS and persistent-store readiness with sanitized responses. HTTP request correlation, sanitized structured access logs, authenticated Prometheus-compatible HTTP request and latency metrics, and admin-visible AWS operation failure counts are implemented. Remaining work: add direct database operation failure signals and document telemetry use. **Done when:** operators can distinguish application health from dependency health and diagnose failures using documented telemetry.
 
 7. **Harden API and AWS operational limits (P1).** Request bodies are capped at a configurable 1 MiB default, with declared and streamed oversize requests rejected before route parsing; HTTP responses are capped at a configurable 4 MiB default, including streams. EC2 inventory, S3 bucket inventory, and S3 object listing have bounded pagination. The API has a configurable per-process fixed-window rate limit; distributed deployments still need a shared limiter. AWS client connection/response timeouts and standard retry/backoff are bounded. Remaining work includes broader consistent error contracts and additional coverage for unavailable dependencies. **Done when:** limits are explicit and covered for malformed, oversized, throttled, and unavailable-dependency conditions.
 
@@ -129,7 +131,7 @@ Operators can filter their autonomous run history by outcome and search action I
 - Audit actor attribution is implemented for autonomous runs, lifecycle approvals/rejections, approval/rejection/cancellation plan state, and control-loop evaluations, but not consistently for all API operations. Audit event listing/export is actor-scoped for non-admin users; the underlying shared trail and operational diagnostics still require broader tenant and attribution work.
 - Persistent audit stores are SQLite local files; there is no shared production database, migration, backup, or restore workflow.
 - Real infrastructure mutations are intentionally disabled; planning, governance, and simulation must not be represented as completed remediation.
-- `/health` remains a static liveness check; `/ready` checks AWS and configured persistence stores. Request IDs, structured HTTP access logs, and in-process HTTP counters/latency histograms at authenticated `/metrics` are available. Admins can inspect cumulative route-level 5xx counts in the console. Metrics are per process and reset on restart; direct AWS/database operation failure signals and telemetry documentation remain outstanding.
+- `/health` remains a static liveness check; `/ready` checks AWS and configured persistence stores. Request IDs, structured HTTP access logs, and in-process HTTP counters/latency histograms at authenticated `/metrics` are available. Admins can inspect cumulative route-level 5xx and AWS operation failure counts in the console. Metrics are per process and reset on restart; direct database operation failure signals and telemetry documentation remain outstanding.
 - AWS SDK calls now have bounded connection/response timeouts and standard retries capped at three attempts; per-process API rate limiting is configurable, and request and response bodies have configurable size caps. Distributed shared limits and broader error-contract coverage remain outstanding.
 - No CI workflow, deployment/container configuration, IaC, or substantive operator documentation was found; `docs/` is empty. The console is a lightweight browser client served by FastAPI, with inventory/governance, plan generation, inspection and review, approvals, and run history.
 - No supported Python runtime or automated dependency update/security workflow is documented.

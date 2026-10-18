@@ -28,6 +28,7 @@ PUBLIC_PATHS = {"/", "/health", "/ready"}
 ADMIN_ONLY_PATHS = {
     "/cloud/aws/account-costs",
     "/operations/failures",
+    "/operations/aws-failures",
     "/autonomy/audit/health",
     "/autonomy/audit/pending",
     "/autonomy/audit/reconciliation",

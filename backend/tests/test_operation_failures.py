@@ -62,3 +62,22 @@ def test_failure_endpoint_is_admin_only_and_returns_empty_summary(monkeypatch):
     response = client.get("/operations/failures", headers={"Authorization": "Bearer admin"})
     assert response.status_code == 200
     assert response.json() == {"scope": "since_process_start", "total": 0, "failures": []}
+
+
+def test_aws_operation_failure_endpoint_is_admin_only(monkeypatch):
+    import main
+
+    app = FastAPI()
+    app.add_middleware(AccessControlMiddleware, mode="token", tokens={
+        "reader": Principal("reader", "reader", "tenant-a"),
+        "admin": Principal("admin", "admin", "tenant-a"),
+    })
+    monkeypatch.setattr(main.aws_operation_metrics, "failure_snapshot", lambda: {
+        "scope": "since_process_start", "total_failures": 0, "operations": []
+    })
+    app.add_api_route("/operations/aws-failures", main.aws_operation_failures)
+    client = TestClient(app)
+    assert client.get("/operations/aws-failures", headers={"Authorization": "Bearer reader"}).status_code == 403
+    response = client.get("/operations/aws-failures", headers={"Authorization": "Bearer admin"})
+    assert response.status_code == 200
+    assert response.json() == {"scope": "since_process_start", "total_failures": 0, "operations": []}

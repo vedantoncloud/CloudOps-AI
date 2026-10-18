@@ -1,7 +1,9 @@
 import boto3
+from functools import wraps
 from datetime import datetime, timedelta, timezone
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
+from observability import aws_operation_metrics
 
 
 AWS_CLIENT_CONFIG = Config(
@@ -1642,7 +1644,6 @@ class AWSService:
                 "system_status": system_status.get("Status"),
                 "state": instance_state.get("Name"),
             }
-
         except (BotoCoreError, ClientError) as error:
             return {
                 "service": "ec2",
@@ -1650,3 +1651,27 @@ class AWSService:
                 "instance_id": instance_id,
                 "error": str(error),
             }
+
+
+def _record_operation_metrics(method):
+    """Record provider operation outcomes using only a fixed method label."""
+    @wraps(method)
+    def measured(self, *args, **kwargs):
+        try:
+            result = method(self, *args, **kwargs)
+        except Exception:
+            aws_operation_metrics.observe(method.__name__, True)
+            raise
+        failed = isinstance(result, dict) and result.get("status") in {
+            "unhealthy", "disconnected", "error"
+        }
+        aws_operation_metrics.observe(method.__name__, failed)
+        return result
+    return measured
+
+
+# All labels are method names from this class; request values and resource IDs
+# never enter the operational metrics.
+for _method_name, _method in tuple(vars(AWSService).items()):
+    if _method_name.startswith("get_") and callable(_method):
+        setattr(AWSService, _method_name, _record_operation_metrics(_method))

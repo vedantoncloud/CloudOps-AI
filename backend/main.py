@@ -5,7 +5,7 @@ import re
 import sqlite3
 
 from auth import AccessControlMiddleware, require_role
-from observability import RequestObservabilityMiddleware, request_metrics
+from observability import RequestObservabilityMiddleware, aws_operation_metrics, request_metrics
 from rate_limit import RateLimitMiddleware
 from request_limits import RequestSizeLimitMiddleware, ResponseSizeLimitMiddleware
 from services.aws_service import AWSService
@@ -105,6 +105,13 @@ def operation_failures(request: Request):
     """Summarize server-side request failures without exposing error payloads."""
     require_role(request.state.principal, "admin")
     return request_metrics.failure_snapshot()
+
+
+@app.get("/operations/aws-failures")
+def aws_operation_failures(request: Request):
+    """Summarize AWS operation failures without exposing provider errors."""
+    require_role(request.state.principal, "admin")
+    return aws_operation_metrics.failure_snapshot()
 
 
 @app.get("/ready")
