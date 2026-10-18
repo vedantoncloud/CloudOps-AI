@@ -45,7 +45,8 @@ Administrators can review cumulative AWS operation call and failure counts in th
 - Tenant-scoped EC2 action-plan creation checks ownership with a direct instance lookup, so operators can create plans for owned instances beyond the first inventory page.
 - Authenticated operators can list their durable autonomous run history through `/autonomy/runs`, with lifecycle summaries and bounded pagination.
 - Operators can filter actor-scoped autonomous run history by outcome and search run IDs, action types, and resource identifiers; totals and pagination reflect the active filters.
-- Authenticated operators can inspect an individual run's lifecycle events and recorded evidence from the console; run detail is restricted to the authenticated actor and hides foreign or missing runs uniformly.
+- Authenticated operators can inspect an individual run's lifecycle events and recorded evidence from the console; run IDs are URL-encoded, response content is rendered as text, and lookup failures are shown in the detail panel. Run detail is restricted to the authenticated actor and hides foreign or missing runs uniformly.
+- EC2 CPU, network, status, detail, metrics, and insight routes reject malformed instance IDs before ownership or AWS provider lookups.
 - Authenticated users can browse the in-memory action-plan queue through `/autonomy/plans`, filter by lifecycle status, and page through results; token-mode plan access is restricted to the tenant that created each plan.
 - Non-admin authenticated users can list and export only their own audit events; admins retain cross-actor audit access.
 - Operators can browse a tenant-scoped, newest-first pending approval queue through `/autonomy/approvals`, with bounded pagination.

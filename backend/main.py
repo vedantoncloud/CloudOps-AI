@@ -264,6 +264,12 @@ def _require_tenant_ec2_instance(request: Request, instance_id: str) -> None:
         raise HTTPException(status_code=404, detail="EC2 instance not found")
 
 
+def _validate_ec2_instance_id(instance_id: str) -> None:
+    """Reject malformed identifiers before making provider calls."""
+    if not re.fullmatch(r"i-[0-9a-fA-F]{8,17}", instance_id):
+        raise HTTPException(status_code=400, detail="Invalid EC2 instance ID")
+
+
 @app.get("/cloud/aws/ec2/instances")
 def aws_ec2_instances(request: Request, state: str = None, tag: str = None, max_results: int = None, next_token: str = None, name: str = None):
     valid_states = {
@@ -552,11 +558,7 @@ def aws_s3_bucket_optimization(
 
 @app.get("/cloud/aws/ec2/instances/{instance_id}/insights")
 def aws_ec2_insights(instance_id: str, request: Request):
-    if not re.fullmatch(r"i-[0-9a-fA-F]{8,17}", instance_id):
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid EC2 instance ID",
-        )
+    _validate_ec2_instance_id(instance_id)
 
     _require_tenant_ec2_instance(request, instance_id)
     result = aws_service.get_ec2_insights(instance_id)
@@ -573,8 +575,7 @@ def aws_ec2_insights(instance_id: str, request: Request):
 @app.get("/cloud/aws/ec2/instances/{instance_id}")
 def aws_ec2_instance_details(instance_id: str, request: Request):
     """Return one EC2 inventory record, applying the same tenant scope as lists."""
-    if not re.fullmatch(r"i-[0-9a-fA-F]{8,17}", instance_id):
-        raise HTTPException(status_code=400, detail="Invalid EC2 instance ID")
+    _validate_ec2_instance_id(instance_id)
 
     result = aws_service.get_ec2_instance(instance_id)
     if result.get("status") != "healthy":
@@ -668,6 +669,7 @@ def aws_ec2_security_insights(request: Request):
 
 @app.get("/cloud/aws/ec2/instances/{instance_id}/cpu")
 def aws_ec2_cpu(instance_id: str, request: Request):
+    _validate_ec2_instance_id(instance_id)
     _require_tenant_ec2_instance(request, instance_id)
     result = aws_service.get_ec2_cpu_utilization(instance_id)
 
@@ -682,6 +684,7 @@ def aws_ec2_cpu(instance_id: str, request: Request):
 
 @app.get("/cloud/aws/ec2/instances/{instance_id}/network")
 def aws_ec2_network_utilization(instance_id: str, request: Request):
+    _validate_ec2_instance_id(instance_id)
     _require_tenant_ec2_instance(request, instance_id)
     result = aws_service.get_ec2_network_utilization(instance_id)
 
@@ -739,6 +742,7 @@ def aws_s3_bucket_cost_insights(
 
 @app.get("/cloud/aws/ec2/instances/{instance_id}/status")
 def aws_ec2_instance_status(instance_id: str, request: Request):
+    _validate_ec2_instance_id(instance_id)
     _require_tenant_ec2_instance(request, instance_id)
     result = aws_service.get_ec2_instance_status(instance_id)
 
@@ -753,11 +757,7 @@ def aws_ec2_instance_status(instance_id: str, request: Request):
 
 @app.get("/cloud/aws/ec2/instances/{instance_id}/metrics")
 def aws_ec2_metrics(instance_id: str, request: Request, lookback_hours: int = 1):
-    if not re.fullmatch(r"i-[0-9a-fA-F]{8,17}", instance_id):
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid EC2 instance ID",
-        )
+    _validate_ec2_instance_id(instance_id)
 
     _require_tenant_ec2_instance(request, instance_id)
     if not 1 <= lookback_hours <= 24:

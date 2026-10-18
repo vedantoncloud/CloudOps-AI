@@ -61,4 +61,4 @@ def test_console_exposes_admin_audit_integrity_check():
     assert "api('/autonomy/audit/integrity')" in html
     assert "Audit chain is valid across" in html
     assert "Audit chain verification failed at event" in html
-    assert "verifyAuditIntegrity()}}));" in html
+    assert "addEventListener('click',()=>verifyAuditIntegrity())" in html

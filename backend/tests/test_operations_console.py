@@ -185,3 +185,12 @@ def test_console_exposes_bounded_s3_bucket_analysis_with_independent_results():
     assert "Promise.allSettled(checks.map(([,path])=>api(path)))" in html
     assert "outcome.reason.message" in html
     assert "Results cover at most 1,000 matching objects." in html
+
+
+def test_run_inspection_handles_success_failure_and_escapes_run_id():
+    html = TestClient(app).get("/console").text
+
+    assert "async function inspectRun(actionId)" in html
+    assert "encodeURIComponent(actionId)" in html
+    assert "content.textContent=JSON.stringify(data,null,2)" in html
+    assert "content.textContent=`Unable to load run details: ${e.message}`" in html

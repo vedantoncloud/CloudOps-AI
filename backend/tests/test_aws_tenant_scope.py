@@ -425,6 +425,34 @@ def test_individual_ec2_route_allows_owned_instance(monkeypatch):
     assert response.status_code == 200
 
 
+@pytest.mark.parametrize("suffix", ["cpu", "network", "status"])
+def test_individual_ec2_routes_reject_malformed_ids_before_provider_calls(monkeypatch, suffix):
+    client = tenant_client(monkeypatch)
+    service = main.aws_service
+    monkeypatch.setattr(
+        service,
+        "get_ec2_instance",
+        lambda *_args, **_kwargs: pytest.fail("invalid ID must not reach ownership lookup"),
+    )
+    monkeypatch.setattr(
+        service,
+        {
+            "cpu": "get_ec2_cpu_utilization",
+            "network": "get_ec2_network_utilization",
+            "status": "get_ec2_instance_status",
+        }[suffix],
+        lambda *_args, **_kwargs: pytest.fail("invalid ID must not reach AWS"),
+    )
+
+    response = client.get(
+        f"/cloud/aws/ec2/instances/not-an-instance/{suffix}",
+        headers={"Authorization": "Bearer token-a"},
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Invalid EC2 instance ID"}
+
+
 def test_s3_inventory_hides_foreign_and_untagged_buckets(monkeypatch):
     response = tenant_client(monkeypatch).get(
         "/cloud/aws/s3/buckets", headers={"Authorization": "Bearer token-a"}
