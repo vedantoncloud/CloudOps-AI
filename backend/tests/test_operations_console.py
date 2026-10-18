@@ -65,6 +65,11 @@ def test_console_uses_tenant_api_contracts_and_does_not_persist_bearer_token():
     assert 'id="approvalPageStatus"' in response.text
     assert 'id="moreRuns"' in response.text
     assert 'id="runPageStatus"' in response.text
+    assert 'id="runSearch"' in response.text
+    assert 'id="runOutcome"' in response.text
+    assert "query.set('search',search)" in response.text
+    assert "query.set('outcome',outcome)" in response.text
+    assert "$('runOutcome').addEventListener('change',()=>loadRuns())" in response.text
     assert "loadApprovals(true)" in response.text
     assert "loadRuns(true)" in response.text
     assert 'id="runDetails"' in response.text

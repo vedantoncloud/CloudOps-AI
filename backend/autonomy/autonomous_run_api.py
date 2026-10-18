@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field
 
@@ -31,6 +31,8 @@ def list_autonomous_runs(
     request: Request,
     limit: int = 50,
     offset: int = 0,
+    outcome: str | None = Query(default=None, pattern="^(completed|awaiting_approval|blocked|in_progress)$"),
+    search: str | None = Query(default=None, max_length=200),
 ) -> dict[str, Any]:
     """Return the authenticated principal's durable autonomous run history."""
     if not 1 <= limit <= 200:
@@ -52,7 +54,7 @@ def list_autonomous_runs(
     runs = []
     for action_id, events in grouped.items():
         first, latest = events[0], events[-1]
-        outcome = {
+        run_outcome = {
             "autonomous_lifecycle_completed": "completed",
             "autonomous_lifecycle_waiting": "awaiting_approval",
             "autonomous_lifecycle_blocked": "blocked",
@@ -63,7 +65,7 @@ def list_autonomous_runs(
             "resource_type": first.resource_type,
             "resource_id": first.resource_id,
             "status": latest.new_status,
-            "outcome": outcome,
+            "outcome": run_outcome,
             "started_at": first.timestamp,
             "updated_at": latest.timestamp,
             "actor_id": actor_id,
@@ -71,6 +73,17 @@ def list_autonomous_runs(
         })
 
     runs.sort(key=lambda run: (run["updated_at"], run["action_id"]), reverse=True)
+    if outcome:
+        runs = [run for run in runs if run["outcome"] == outcome]
+    if search:
+        needle = search.strip().casefold()
+        if needle:
+            runs = [
+                run for run in runs
+                if any(needle in str(run[field]).casefold() for field in (
+                    "action_id", "action_type", "resource_type", "resource_id", "outcome", "status"
+                ))
+            ]
     total = len(runs)
     return {"runs": runs[offset:offset + limit], "total": total, "limit": limit, "offset": offset}
 

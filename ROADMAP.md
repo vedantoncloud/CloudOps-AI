@@ -12,6 +12,8 @@ The audit trail and idempotency/reconciliation state persist to SQLite files and
 
 Administrators can view 7, 30, or 90 complete days of shared AWS account daily unblended spend and service-level totals through Cost Explorer in the console. This endpoint is admin-only because the AWS account and billing data are shared; it does not provide tenant- or resource-level charge attribution. S3 bucket analysis responses identify whether object scans completed or stopped at their configured limit.
 
+Operators can filter their autonomous run history by outcome and search action IDs, action types, resource types, and resource IDs. Filtering is applied before pagination, and run history remains scoped to the authenticated actor.
+
 ## Completed work
 
 - FastAPI application and AWS service status/connectivity checks.
@@ -38,6 +40,7 @@ Administrators can view 7, 30, or 90 complete days of shared AWS account daily u
 - Tenant-scoped EC2 detail, metrics, status, and insight checks look up the requested instance directly, so ownership checks work for instances beyond the first inventory page.
 - Tenant-scoped EC2 action-plan creation checks ownership with a direct instance lookup, so operators can create plans for owned instances beyond the first inventory page.
 - Authenticated operators can list their durable autonomous run history through `/autonomy/runs`, with lifecycle summaries and bounded pagination.
+- Operators can filter actor-scoped autonomous run history by outcome and search run IDs, action types, and resource identifiers; totals and pagination reflect the active filters.
 - Authenticated operators can inspect an individual run's lifecycle events and recorded evidence from the console; run detail is restricted to the authenticated actor and hides foreign or missing runs uniformly.
 - Authenticated users can browse the in-memory action-plan queue through `/autonomy/plans`, filter by lifecycle status, and page through results; token-mode plan access is restricted to the tenant that created each plan.
 - Non-admin authenticated users can list and export only their own audit events; admins retain cross-actor audit access.

@@ -190,6 +190,39 @@ def test_run_history_paginates_and_validates_bounds(monkeypatch):
     assert client.get("/autonomy/runs?offset=-1").status_code == 422
 
 
+def test_run_history_filters_outcome_and_search_before_pagination(monkeypatch):
+    trail = AuditTrail()
+    monkeypatch.setattr(api, "audit_trail", trail)
+    entries = (
+        ("completed-ec2", "autonomous_lifecycle_completed", "completed", "i-123", "resize_instance"),
+        ("blocked-s3", "autonomous_lifecycle_blocked", "blocked", "bucket-prod", "delete_object"),
+        ("waiting-ec2", "autonomous_lifecycle_waiting", "pending_approval", "i-456", "stop_instance"),
+        ("foreign-match", "autonomous_lifecycle_blocked", "blocked", "i-789", "resize_instance"),
+    )
+    for action_id, event, status, resource_id, action_type in entries:
+        trail.record(
+            action_id=action_id,
+            action_type=action_type,
+            resource_type="ec2_instance" if resource_id.startswith("i-") else "s3_bucket",
+            resource_id=resource_id,
+            old_status="pending_approval",
+            new_status=status,
+            event=event,
+            details={},
+            actor_id="another-operator" if action_id == "foreign-match" else "local-development",
+        )
+
+    client = make_client(FakeRunner("completed"))
+    response = client.get("/autonomy/runs?outcome=blocked&search=BUCKET&limit=1")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 1
+    assert [run["action_id"] for run in data["runs"]] == ["blocked-s3"]
+    assert data["runs"][0]["outcome"] == "blocked"
+    assert client.get("/autonomy/runs?outcome=unknown").status_code == 422
+    assert client.get("/autonomy/runs?search=" + "x" * 201).status_code == 422
+
+
 def test_deny_stops_before_lifecycle():
     fake = FakeRunner("blocked")
     client = make_client(fake)
