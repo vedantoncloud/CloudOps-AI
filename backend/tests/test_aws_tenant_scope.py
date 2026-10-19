@@ -464,6 +464,80 @@ def test_s3_inventory_hides_foreign_and_untagged_buckets(monkeypatch):
     assert response.json()["buckets"] == [{"name": "owned"}]
 
 
+def test_s3_inventory_fills_tenant_page_across_mixed_aws_pages(monkeypatch):
+    client = tenant_client(monkeypatch)
+    service = main.aws_service
+    calls = []
+    pages = {
+        None: {"status": "healthy", "buckets": [{"name": "foreign"}],
+               "is_truncated": True, "next_continuation_token": "page-2"},
+        "page-2": {"status": "healthy", "buckets": [{"name": "owned"}],
+                   "is_truncated": True, "next_continuation_token": "page-3"},
+        "page-3": {"status": "healthy", "buckets": [{"name": "owned-2"}],
+                   "is_truncated": False, "next_continuation_token": None},
+    }
+
+    def list_buckets(max_buckets, continuation_token):
+        calls.append((max_buckets, continuation_token))
+        return pages[continuation_token]
+
+    monkeypatch.setattr(service, "get_s3_buckets", list_buckets)
+    monkeypatch.setattr(service, "get_s3_bucket_tags", lambda bucket: {
+        "status": "healthy", "tags": {"CloudOpsTenantId": (
+            "tenant-b" if bucket == "foreign" else "tenant-a"
+        )}
+    })
+    response = client.get(
+        "/cloud/aws/s3/buckets?max_buckets=2",
+        headers={"Authorization": "Bearer token-a"},
+    )
+
+    assert response.status_code == 200
+    assert [bucket["name"] for bucket in response.json()["buckets"]] == ["owned", "owned-2"]
+    assert response.json()["is_truncated"] is False
+    assert calls == [(2, None), (2, "page-2"), (1, "page-3")]
+
+
+def test_s3_inventory_fails_closed_if_a_later_page_is_unavailable(monkeypatch):
+    client = tenant_client(monkeypatch)
+    service = main.aws_service
+    calls = []
+
+    def list_buckets(max_buckets, continuation_token):
+        calls.append(continuation_token)
+        if continuation_token is None:
+            return {"status": "healthy", "buckets": [{"name": "foreign"}],
+                    "is_truncated": True, "next_continuation_token": "page-2"}
+        return {"status": "unhealthy", "error": "private AWS diagnostic"}
+
+    monkeypatch.setattr(service, "get_s3_buckets", list_buckets)
+    response = client.get(
+        "/cloud/aws/s3/buckets?max_buckets=2",
+        headers={"Authorization": "Bearer token-a"},
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "S3 inventory is unavailable"}
+    assert calls == [None, "page-2"]
+
+
+def test_s3_inventory_rejects_repeated_provider_cursor(monkeypatch):
+    client = tenant_client(monkeypatch)
+    service = main.aws_service
+    monkeypatch.setattr(service, "get_s3_buckets", lambda *_args: {
+        "status": "healthy", "buckets": [{"name": "foreign"}],
+        "is_truncated": True, "next_continuation_token": "same-page",
+    })
+
+    response = client.get(
+        "/cloud/aws/s3/buckets?max_buckets=2",
+        headers={"Authorization": "Bearer token-a"},
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "S3 inventory pagination is unavailable"}
+
+
 def test_s3_inventory_reports_ownership_verification_outage(monkeypatch):
     client = tenant_client(monkeypatch)
     service = main.aws_service

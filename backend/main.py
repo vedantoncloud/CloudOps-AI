@@ -333,9 +333,24 @@ def aws_s3_buckets(
         return result
     result = dict(result)
     visible_buckets = []
-    for bucket in result.get("buckets", []):
-        if _tenant_owns_s3_bucket(request, bucket.get("name")):
-            visible_buckets.append(bucket)
+    cursor = continuation_token
+    seen_cursors = {cursor} if cursor else set()
+    # Fill a tenant-visible page across a bounded number of AWS pages. The
+    # continuation cursor always points to the next unexamined AWS page.
+    for _ in range(10):
+        if result.get("status") != "healthy":
+            raise HTTPException(status_code=503, detail="S3 inventory is unavailable")
+        visible_buckets.extend(
+            bucket for bucket in result.get("buckets", [])
+            if _tenant_owns_s3_bucket(request, bucket.get("name"))
+        )
+        if len(visible_buckets) >= max_buckets or not result.get("is_truncated"):
+            break
+        cursor = result.get("next_continuation_token")
+        if not cursor or cursor in seen_cursors:
+            raise HTTPException(status_code=503, detail="S3 inventory pagination is unavailable")
+        seen_cursors.add(cursor)
+        result = aws_service.get_s3_buckets(max_buckets - len(visible_buckets), cursor)
     result["buckets"] = visible_buckets
     return result
 

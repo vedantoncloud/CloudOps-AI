@@ -1,6 +1,6 @@
 # CloudOps AI Roadmap
 
-**Repository audit:** 2026-10-19, updated after adding direct provider-neutral EC2 resource lookups. This roadmap contains **9 remaining tasks**: the nine numbered incomplete outcomes below. Sub-bullets and acceptance criteria do not count separately. Recount only when a complete outcome ships or scope is explicitly changed.
+**Repository audit:** 2026-10-19, updated after tenant-scoped S3 inventory began filling visible pages across AWS continuation pages. This roadmap contains **9 remaining tasks**: the nine numbered incomplete outcomes below. Sub-bullets and acceptance criteria do not count separately. Recount only when a complete outcome ships or scope is explicitly changed.
 
 The full backend test suite passed after standardizing direct AWS resource API failures.
 
@@ -79,6 +79,7 @@ When an operator selects an EC2 region, inventory, fleet-wide aggregate insights
 - Operators can inspect timestamped EC2 CPU and network metric samples over a selectable 1–24 hour window; the API bounds lookback duration and CloudWatch sampling periods.
 - Operators can export every S3 object matching a bucket prefix as spreadsheet-safe CSV; export follows bounded continuation pages and stops without a partial download on provider failures or invalid cursors.
 - Authenticated users can page through S3 bucket inventory with bounded `MaxBuckets` and AWS continuation tokens; the console can continue bucket pages, and tenant ownership filtering applies to each page.
+- Tenant-scoped S3 bucket inventory fills the requested visible page across up to ten AWS pages, preserves the cursor for the next unexamined page, and fails closed on ownership or provider pagination failures.
 - S3 bucket inventory defaults to a bounded 1,000-bucket AWS page and always returns continuation metadata, including when clients omit pagination parameters.
 - Authenticated users can use `/console` to browse EC2/S3 inventory, inspect resource governance, review and decide pending approvals, and view their autonomous run history; bearer credentials stay in page memory.
 - Provider-neutral EC2 resource detail and governance lookups use direct instance-ID queries, so instances beyond the first inventory page remain discoverable; malformed IDs preserve generic observations without an AWS call.
