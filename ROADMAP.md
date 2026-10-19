@@ -93,6 +93,7 @@ When an operator selects an EC2 region, inventory, fleet-wide aggregate insights
 - The operations console can create action plans from EC2/S3 resource insights, browse and filter the plan queue, evaluate plans, cancel eligible plans, and run approved plans in dry-run mode.
 - The operations console can browse S3 bucket objects by prefix, choose a bounded page size, and continue through truncated listings.
 - Operators can navigate S3 bucket folder prefixes in the console; delimiter-based listings show common prefixes as folders, support moving up one level, and retain bounded continuation pagination.
+- Operators can inspect bounded S3 object version history, including delete markers, through a tenant-scoped API; AWS key and version markers support continuation, and provider failures return a sanitized unavailable response.
 - The operations console appends subsequent S3 object pages to the visible listing, reports the cumulative loaded count, and preserves earlier results if a later page fails.
 - Operators can inspect S3 object metadata from the console, including size, content type, ETag, storage class, encryption, modification time, and user metadata; the lookup uses `HeadObject` and enforces the bucket tenant boundary.
 - S3 object statistics, largest-object results, and derived bucket health and insight responses report whether the scan covered the complete matching set or stopped at its object limit, along with the configured limit.

@@ -527,6 +527,46 @@ class AWSService:
         except (BotoCoreError, ClientError) as error:
             return {"service": "s3", "status": "unhealthy", "bucket": bucket_name, "error": str(error)}
 
+    def get_s3_object_versions(
+        self, bucket_name, prefix=None, key_marker=None, version_id_marker=None, max_keys=100
+    ):
+        """List one bounded page of object versions and delete markers."""
+        try:
+            params = {"Bucket": bucket_name, "MaxKeys": max_keys}
+            if prefix is not None:
+                params["Prefix"] = prefix
+            if key_marker is not None:
+                params["KeyMarker"] = key_marker
+            if version_id_marker is not None:
+                params["VersionIdMarker"] = version_id_marker
+            response = _aws_client("s3").list_object_versions(**params)
+
+            def serialize(item, is_delete_marker=False):
+                return {
+                    "key": item.get("Key"),
+                    "version_id": item.get("VersionId"),
+                    "is_latest": bool(item.get("IsLatest")),
+                    "last_modified": item["LastModified"].isoformat()
+                    if item.get("LastModified") else None,
+                    "size": item.get("Size"),
+                    "etag": item.get("ETag"),
+                    "storage_class": item.get("StorageClass"),
+                    "delete_marker": is_delete_marker,
+                }
+
+            return {
+                "service": "s3",
+                "status": "healthy",
+                "bucket": bucket_name,
+                "versions": [serialize(item) for item in response.get("Versions", [])]
+                + [serialize(item, True) for item in response.get("DeleteMarkers", [])],
+                "is_truncated": bool(response.get("IsTruncated")),
+                "next_key_marker": response.get("NextKeyMarker"),
+                "next_version_id_marker": response.get("NextVersionIdMarker"),
+            }
+        except (BotoCoreError, ClientError) as error:
+            return {"service": "s3", "status": "unhealthy", "bucket": bucket_name, "error": str(error)}
+
     def create_s3_object_download_url(self, bucket_name, object_key):
         """Create a short-lived URL that downloads one S3 object as an attachment."""
         expires_in = 300

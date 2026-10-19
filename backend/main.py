@@ -428,6 +428,28 @@ def aws_s3_object_metadata(bucket_name: str, request: Request, key: str):
     return result
 
 
+@app.get("/cloud/aws/s3/buckets/{bucket_name}/object-versions")
+def aws_s3_object_versions(
+    bucket_name: str,
+    request: Request,
+    prefix: str = None,
+    key_marker: str = None,
+    version_id_marker: str = None,
+    max_keys: int = 100,
+):
+    """Browse one bounded page of S3 object versions within the tenant bucket."""
+    _require_tenant_s3_bucket(request, bucket_name)
+    if max_keys <= 0 or max_keys > 1000:
+        raise HTTPException(status_code=400, detail="max_keys must be between 1 and 1000")
+    result = aws_service.get_s3_object_versions(
+        bucket_name, prefix=prefix, key_marker=key_marker,
+        version_id_marker=version_id_marker, max_keys=max_keys,
+    )
+    if result["status"] == "unhealthy":
+        _raise_aws_resource_unavailable()
+    return result
+
+
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/objects/download")
 def aws_s3_object_download_url(bucket_name: str, request: Request, key: str):
     """Issue a five-minute download URL after checking bucket tenant ownership."""
