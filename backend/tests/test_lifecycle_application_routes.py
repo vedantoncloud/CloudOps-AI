@@ -41,7 +41,7 @@ def action_payload(action_id="app-lifecycle-1"):
 
 
 def test_lifecycle_routes_are_mounted_on_application():
-    paths = {route.path for route in application.routes}
+    paths = application.openapi()["paths"]
     assert "/autonomy/lifecycle/run" in paths
     assert "/autonomy/lifecycle/approve" in paths
     assert "/autonomy/lifecycle/reject" in paths
