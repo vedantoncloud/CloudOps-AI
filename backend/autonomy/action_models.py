@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 from uuid import uuid4
@@ -53,6 +54,7 @@ class ActionPlan:
     action_id: str = field(
         default_factory=lambda: f"act-{uuid4().hex}"
     )
+    created_at: datetime | None = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def __post_init__(self):
         if not self.action_id or not self.action_id.strip():

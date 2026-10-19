@@ -1,4 +1,5 @@
 from dataclasses import asdict
+from datetime import datetime
 from enum import Enum
 from threading import Lock
 
@@ -39,6 +40,8 @@ for _stored_plan, _stored_tenant in action_plan_store.load_all():
 
 
 def _serialize(value):
+    if isinstance(value, datetime):
+        return value.isoformat()
     if isinstance(value, Enum):
         return value.value
 
@@ -260,6 +263,7 @@ def list_pending_approvals(
     risk: RiskLevel | None = None,
     resource_type: str | None = None,
     search: str | None = None,
+    sort: str = "oldest",
 ):
     """List the pending approval queue visible to this tenant."""
     if not 1 <= limit <= 200:
@@ -268,6 +272,8 @@ def list_pending_approvals(
         raise HTTPException(status_code=422, detail="offset must be non-negative")
     if search is not None and len(search) > 200:
         raise HTTPException(status_code=422, detail="search must be at most 200 characters")
+    if sort not in {"oldest", "newest"}:
+        raise HTTPException(status_code=422, detail="sort must be oldest or newest")
     normalized_search = search.strip().casefold() if search else ""
     normalized_resource_type = resource_type.strip() if resource_type else None
     if normalized_resource_type is not None and not normalized_resource_type:
@@ -285,7 +291,10 @@ def list_pending_approvals(
                 action_id, plan.action_type, plan.target.resource_id, plan.reason,
             )).casefold())
         ]
-    approvals.reverse()
+    dated = [plan for plan in approvals if plan.created_at is not None]
+    undated = [plan for plan in approvals if plan.created_at is None]
+    dated.sort(key=lambda plan: plan.created_at, reverse=(sort == "newest"))
+    approvals = dated + undated
     total = len(approvals)
     return {
         "approvals": [_serialize(plan) for plan in approvals[offset:offset + limit]],

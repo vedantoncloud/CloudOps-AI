@@ -2,6 +2,7 @@
 
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 import sqlite3
 from typing import Iterable
@@ -51,11 +52,15 @@ class ActionPlanStore:
             "decision_by": plan.decision_by,
             "decision_reason": plan.decision_reason,
             "action_id": plan.action_id,
+            "created_at": plan.created_at.isoformat(),
         }, separators=(",", ":"), ensure_ascii=False)
 
     @staticmethod
     def _decode(payload: str) -> ActionPlan:
         value = json.loads(payload)
+        created_at = datetime.fromisoformat(value["created_at"]) if value.get("created_at") else None
+        if created_at is not None and created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
         return ActionPlan(
             action_type=value["action_type"],
             target=ActionTarget(**value["target"]),
@@ -67,6 +72,7 @@ class ActionPlanStore:
             decision_by=value["decision_by"],
             decision_reason=value["decision_reason"],
             action_id=value["action_id"],
+            created_at=created_at,
         )
 
     def save_many(self, plans: Iterable[ActionPlan], tenant_id: str | None) -> None:

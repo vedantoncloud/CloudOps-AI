@@ -18,6 +18,8 @@ Operators can filter their autonomous run history by outcome and search action I
 
 Operators can filter the tenant-scoped pending approval queue by risk and resource type, and search action IDs, action types, resource IDs, and reasons. Filters are applied before pagination so totals and queue pages match the active criteria.
 
+Operators can prioritize pending approvals by submission age or newest-first order. Plans carry durable UTC creation timestamps, the oldest-first default surfaces the longest-waiting requests, and plans created before timestamp tracking remain clearly marked as having no recorded submission time.
+
 Operators can search tenant-visible GitOps change sets by change ID, source action, resource, field, or reason, filter by lifecycle status, and page through newest changes first. Results are tenant-scoped before filtering and pagination, with matching totals for the console.
 
 Administrators can review cumulative AWS operation call and failure counts in the Operations console, including unhealthy provider results returned with HTTP 200; fixed method labels exclude resource identifiers and provider error details.

@@ -40,8 +40,12 @@ def test_approval_queue_filters_pending_and_paginates(monkeypatch):
     second_page = api.list_pending_approvals(_request("tenant-a"), limit=1, offset=1)
 
     assert first_page["total"] == 2
-    assert first_page["approvals"][0]["action_id"] == "pending-new"
-    assert second_page["approvals"][0]["action_id"] == "pending-old"
+    assert first_page["approvals"][0]["action_id"] == "pending-old"
+    assert second_page["approvals"][0]["action_id"] == "pending-new"
+    assert first_page["approvals"][0]["created_at"]
+
+    newest_first = api.list_pending_approvals(_request("tenant-a"), sort="newest")
+    assert newest_first["approvals"][0]["action_id"] == "pending-new"
 
 
 def test_approval_queue_is_scoped_to_authenticated_tenant(monkeypatch):
@@ -99,6 +103,13 @@ def test_approval_queue_rejects_oversized_search():
     assert error.value.status_code == 422
 
 
+def test_approval_queue_rejects_unknown_sort_order():
+    with pytest.raises(HTTPException, match="sort must be oldest or newest") as error:
+        api.list_pending_approvals(_request(), sort="priority")
+
+    assert error.value.status_code == 422
+
+
 def test_approval_queue_http_rejects_invalid_risk_filter():
     app = FastAPI()
     app.include_router(api.router)
@@ -118,9 +129,12 @@ def test_approval_console_exposes_and_submits_filters():
     assert 'id="approvalSearch"' in html
     assert 'id="approvalRisk"' in html
     assert 'id="approvalResourceType"' in html
+    assert 'id="approvalSort"' in html
     assert "query.set('search',$('approvalSearch').value.trim())" in html
     assert "query.set('risk',$('approvalRisk').value)" in html
     assert "query.set('resource_type',$('approvalResourceType').value)" in html
+    assert "query.set('sort',$('approvalSort').value)" in html
+    assert "p.created_at?new Date(p.created_at).toLocaleString()" in html
 
 
 @pytest.mark.parametrize("kwargs", [{"limit": 0}, {"limit": 201}, {"offset": -1}])

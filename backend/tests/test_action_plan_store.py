@@ -1,4 +1,5 @@
 import sqlite3
+import json
 
 import pytest
 
@@ -72,3 +73,19 @@ def test_corrupt_plan_payload_fails_closed(tmp_path):
 
     with pytest.raises(ValueError):
         store.get("act-test")
+
+
+def test_legacy_plan_payload_without_created_at_keeps_age_unknown(tmp_path):
+    store = ActionPlanStore(tmp_path / "plans.sqlite3")
+    payload = json.loads(store._encode(_plan()))
+    payload.pop("created_at")
+    with sqlite3.connect(store.database_path) as connection:
+        connection.execute(
+            "INSERT INTO action_plans(action_id, tenant_id, payload, created_order) VALUES (?, ?, ?, ?)",
+            ("act-legacy", "tenant-a", json.dumps(payload), 1),
+        )
+
+    restored, tenant = store.get("act-legacy")
+
+    assert tenant == "tenant-a"
+    assert restored.created_at is None
