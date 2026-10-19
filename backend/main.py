@@ -287,6 +287,11 @@ def _validate_ec2_region(region: str | None) -> None:
         raise HTTPException(status_code=400, detail="Invalid AWS region")
 
 
+def _raise_aws_resource_unavailable() -> None:
+    """Raise a stable dependency error without leaking provider diagnostics."""
+    raise HTTPException(status_code=503, detail="AWS resource data is unavailable")
+
+
 @app.get("/cloud/aws/ec2/instances")
 def aws_ec2_instances(request: Request, state: str = None, tag: str = None, max_results: int = None, next_token: str = None, name: str = None, region: str = None):
     valid_states = {
@@ -361,10 +366,7 @@ def aws_s3_bucket_details(bucket_name: str, request: Request):
     result = aws_service.get_s3_bucket_details(bucket_name)
 
     if result["status"] == "unhealthy":
-        raise HTTPException(
-            status_code=403,
-            detail=result["error"],
-        )
+        _raise_aws_resource_unavailable()
 
     return result
 
@@ -394,10 +396,7 @@ def aws_s3_objects(
     )
 
     if result["status"] == "unhealthy":
-        raise HTTPException(
-            status_code=403,
-            detail=result["error"],
-        )
+        _raise_aws_resource_unavailable()
 
     return result
 
@@ -410,7 +409,7 @@ def aws_s3_object_metadata(bucket_name: str, request: Request, key: str):
         raise HTTPException(status_code=400, detail="key must not be empty")
     result = aws_service.get_s3_object_metadata(bucket_name, key)
     if result["status"] == "unhealthy":
-        raise HTTPException(status_code=403, detail=result["error"])
+        _raise_aws_resource_unavailable()
     return result
 
 
@@ -422,7 +421,7 @@ def aws_s3_object_download_url(bucket_name: str, request: Request, key: str):
         raise HTTPException(status_code=400, detail="key must not be empty")
     result = aws_service.create_s3_object_download_url(bucket_name, key)
     if result["status"] == "unhealthy":
-        raise HTTPException(status_code=403, detail=result["error"])
+        _raise_aws_resource_unavailable()
     return result
 
 
@@ -447,10 +446,7 @@ def aws_s3_object_statistics(
     )
 
     if result["status"] == "unhealthy":
-        raise HTTPException(
-            status_code=403,
-            detail=result["error"],
-        )
+        _raise_aws_resource_unavailable()
 
     return result
 
@@ -484,10 +480,7 @@ def aws_s3_largest_objects(
     )
 
     if result["status"] == "unhealthy":
-        raise HTTPException(
-            status_code=403,
-            detail=result["error"],
-        )
+        _raise_aws_resource_unavailable()
 
     return result
 
@@ -513,10 +506,7 @@ def aws_s3_bucket_health(
     )
 
     if result["status"] == "unhealthy":
-        raise HTTPException(
-            status_code=403,
-            detail=result["error"],
-        )
+        _raise_aws_resource_unavailable()
 
     return result
 
@@ -542,10 +532,7 @@ def aws_s3_bucket_insights(
     )
 
     if result["status"] == "unhealthy":
-        raise HTTPException(
-            status_code=403,
-            detail=result["error"],
-        )
+        _raise_aws_resource_unavailable()
 
     return result
 
@@ -571,10 +558,7 @@ def aws_s3_bucket_optimization(
     )
 
     if result["status"] == "unhealthy":
-        raise HTTPException(
-            status_code=403,
-            detail=result["error"],
-        )
+        _raise_aws_resource_unavailable()
 
     return result
 
@@ -587,10 +571,7 @@ def aws_ec2_insights(instance_id: str, request: Request, region: str | None = No
     result = aws_service.get_ec2_insights(instance_id, **({"region": region} if region else {}))
 
     if result["status"] == "unhealthy":
-        raise HTTPException(
-            status_code=403,
-            detail=result["error"],
-        )
+        _raise_aws_resource_unavailable()
 
     return result
 
@@ -627,10 +608,7 @@ def aws_ec2_efficiency_insights(request: Request, region: str | None = None):
         result = aws_service.get_ec2_efficiency_insights(instances=inventory.get("instances", []), **({"region": region} if region else {}))
 
     if result["status"] == "unhealthy":
-        raise HTTPException(
-            status_code=403,
-            detail=result["error"],
-        )
+        _raise_aws_resource_unavailable()
 
     return result
 
@@ -647,10 +625,7 @@ def aws_ec2_cost_insights(request: Request, region: str | None = None):
         result = aws_service.get_ec2_cost_insights(instances=inventory.get("instances", []), **({"region": region} if region else {}))
 
     if result["status"] == "unhealthy":
-        raise HTTPException(
-            status_code=403,
-            detail=result["error"],
-        )
+        _raise_aws_resource_unavailable()
 
     return result
 
@@ -667,10 +642,7 @@ def aws_ec2_rightsizing_insights(request: Request, region: str | None = None):
         result = aws_service.get_ec2_rightsizing_insights(instances=inventory.get("instances", []), **({"region": region} if region else {}))
 
     if result["status"] == "unhealthy":
-        raise HTTPException(
-            status_code=403,
-            detail=result["error"],
-        )
+        _raise_aws_resource_unavailable()
 
     return result
 
@@ -687,10 +659,7 @@ def aws_ec2_security_insights(request: Request, region: str | None = None):
         result = aws_service.get_ec2_security_insights(instances=inventory.get("instances", []), **({"region": region} if region else {}))
 
     if result["status"] == "unhealthy":
-        raise HTTPException(
-            status_code=403,
-            detail=result["error"],
-        )
+        _raise_aws_resource_unavailable()
 
     return result
 
@@ -703,10 +672,7 @@ def aws_ec2_cpu(instance_id: str, request: Request, region: str | None = None):
     result = aws_service.get_ec2_cpu_utilization(instance_id, **({"region": region} if region else {}))
 
     if result["status"] == "unhealthy":
-        raise HTTPException(
-            status_code=403,
-            detail=result["error"],
-        )
+        _raise_aws_resource_unavailable()
 
     return result
 
@@ -719,10 +685,7 @@ def aws_ec2_network_utilization(instance_id: str, request: Request, region: str 
     result = aws_service.get_ec2_network_utilization(instance_id, **({"region": region} if region else {}))
 
     if result["status"] == "unhealthy":
-        raise HTTPException(
-            status_code=403,
-            detail=result["error"],
-        )
+        _raise_aws_resource_unavailable()
 
     return result
 
@@ -733,10 +696,7 @@ def aws_s3_bucket_security_insights(bucket_name: str, request: Request):
     result = aws_service.get_s3_security_insights(bucket_name)
 
     if result["status"] == "unhealthy":
-        raise HTTPException(
-            status_code=403,
-            detail=result["error"],
-        )
+        _raise_aws_resource_unavailable()
 
     return result
 
@@ -762,10 +722,7 @@ def aws_s3_bucket_cost_insights(
     )
 
     if result["status"] == "unhealthy":
-        raise HTTPException(
-            status_code=403,
-            detail=result["error"],
-        )
+        _raise_aws_resource_unavailable()
 
     return result
 
@@ -778,10 +735,7 @@ def aws_ec2_instance_status(instance_id: str, request: Request, region: str | No
     result = aws_service.get_ec2_instance_status(instance_id, **({"region": region} if region else {}))
 
     if result["status"] == "unhealthy":
-        raise HTTPException(
-            status_code=403,
-            detail=result["error"],
-        )
+        _raise_aws_resource_unavailable()
 
     return result
 
@@ -796,10 +750,7 @@ def aws_ec2_metrics(instance_id: str, request: Request, lookback_hours: int = 1,
     result = aws_service.get_ec2_metrics(instance_id, lookback_hours=lookback_hours, **({"region": region} if region else {}))
 
     if result["status"] == "unhealthy":
-        raise HTTPException(
-            status_code=403,
-            detail=result["error"],
-        )
+        _raise_aws_resource_unavailable()
 
     return result
 

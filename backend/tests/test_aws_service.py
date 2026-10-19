@@ -684,8 +684,8 @@ def test_s3_objects_api_access_denied():
             "/cloud/aws/s3/buckets/private-bucket/objects"
         )
 
-    assert response.status_code == 403
-    assert "AccessDenied" in response.json()["detail"]
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS resource data is unavailable"}
 
 
 def test_get_s3_objects_with_prefix():
@@ -1121,8 +1121,8 @@ def test_network_objects_api_access_denied():
             "/cloud/aws/ec2/instances/i-1234567890/network"
         )
 
-    assert response.status_code == 403
-    assert "AccessDenied" in response.json()["detail"]
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS resource data is unavailable"}
 
 
 def test_get_ec2_instance_status():
@@ -1412,8 +1412,8 @@ def test_ec2_metrics_api_access_denied():
             "/cloud/aws/ec2/instances/i-1234567890/metrics"
         )
 
-    assert response.status_code == 403
-    assert "AccessDenied" in response.json()["detail"]
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS resource data is unavailable"}
 
 
 def test_ec2_metrics_api_rejects_invalid_instance_id():
@@ -1864,8 +1864,8 @@ def test_s3_largest_objects_api_access_denied():
             "/cloud/aws/s3/buckets/private-bucket/largest-objects"
         )
 
-    assert response.status_code == 403
-    assert "AccessDenied" in response.json()["detail"]
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS resource data is unavailable"}
 
 def test_s3_bucket_health_api_success():
     fake_result = {
@@ -1931,8 +1931,8 @@ def test_s3_bucket_health_api_access_denied():
             "/cloud/aws/s3/buckets/private-bucket/health"
         )
 
-    assert response.status_code == 403
-    assert "AccessDenied" in response.json()["detail"]
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS resource data is unavailable"}
 
 def test_s3_bucket_insights_api_success():
     fake_result = {
@@ -2007,8 +2007,8 @@ def test_s3_bucket_insights_api_access_denied():
             "/cloud/aws/s3/buckets/private-bucket/insights"
         )
 
-    assert response.status_code == 403
-    assert "AccessDenied" in response.json()["detail"]
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS resource data is unavailable"}
 
 
 def test_s3_bucket_insights_api_rejects_invalid_max_keys():
@@ -2226,8 +2226,8 @@ def test_s3_bucket_optimization_api_access_denied():
             "/cloud/aws/s3/buckets/private-bucket/optimization"
         )
 
-    assert response.status_code == 403
-    assert "AccessDenied" in response.json()["detail"]
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS resource data is unavailable"}
 
 
 def test_s3_bucket_optimization_api_rejects_invalid_max_keys():
@@ -2434,8 +2434,8 @@ def test_ec2_insights_api_access_denied():
             "/cloud/aws/ec2/instances/i-1234567890/insights"
         )
 
-    assert response.status_code == 403
-    assert "AccessDenied" in response.json()["detail"]
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS resource data is unavailable"}
 
 
 def test_ec2_insights_api_rejects_invalid_instance_id():
@@ -2573,8 +2573,8 @@ def test_ec2_efficiency_insights_api_access_denied():
         client = TestClient(app)
         response = client.get("/cloud/aws/ec2/efficiency-insights")
 
-    assert response.status_code == 403
-    assert "AccessDenied" in response.json()["detail"]
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS resource data is unavailable"}
 
 
 def test_get_ec2_cost_insights():
@@ -2688,8 +2688,8 @@ def test_ec2_cost_insights_api_access_denied():
         client = TestClient(app)
         response = client.get("/cloud/aws/ec2/cost-insights")
 
-    assert response.status_code == 403
-    assert "AccessDenied" in response.json()["detail"]
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS resource data is unavailable"}
 
 
 
@@ -2863,8 +2863,8 @@ def test_ec2_rightsizing_insights_api_access_denied():
         client = TestClient(app)
         response = client.get("/cloud/aws/ec2/rightsizing-insights")
 
-    assert response.status_code == 403
-    assert "AccessDenied" in response.json()["detail"]
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS resource data is unavailable"}
 
 
 
@@ -3003,8 +3003,8 @@ def test_ec2_security_insights_api_access_denied():
         client = TestClient(app)
         response = client.get("/cloud/aws/ec2/security-insights")
 
-    assert response.status_code == 403
-    assert "AccessDenied" in response.json()["detail"]
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS resource data is unavailable"}
 
 
 def test_get_s3_security_insights_secure_bucket():
@@ -3197,8 +3197,8 @@ def test_s3_security_insights_api_access_denied():
         client = TestClient(app)
         response = client.get("/cloud/aws/s3/buckets/test-bucket/security-insights")
 
-    assert response.status_code == 403
-    assert "AccessDenied" in response.json()["detail"]
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS resource data is unavailable"}
 
 
 # S3 cost awareness insights
@@ -3359,8 +3359,8 @@ def test_s3_cost_insights_api_access_denied():
         client = TestClient(app)
         response = client.get("/cloud/aws/s3/buckets/test-bucket/cost-insights")
 
-    assert response.status_code == 403
-    assert "AccessDenied" in response.json()["detail"]
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS resource data is unavailable"}
 
 
 def test_get_ec2_instances_supports_bounded_resumable_pages():
