@@ -82,6 +82,7 @@ When an operator selects an EC2 region, inventory, fleet-wide aggregate insights
 - Operators can review tenant-visible GitOps change sets in the console, inspect proposal manifests, approve or reject pending proposals, apply approved changes in dry-run mode, and verify applied proposals; real infrastructure mutation remains disabled.
 - Operators can search and status-filter tenant-visible GitOps change sets through bounded newest-first API and console pagination; matching totals and tenant filtering are applied before page slicing.
 - Token-scoped EC2/S3 plan generation verifies the source resource's tenant ownership first; foreign, untagged, missing, or unverifiable resources are hidden before insight analysis.
+- Tenant-scoped S3 reads, inventory, and plan generation distinguish foreign, untagged, or missing buckets from failed ownership-tag lookups; AWS verification failures return a sanitized 503 rather than an empty or misleading 404 result.
 - The operations console can create action plans from EC2/S3 resource insights, browse and filter the plan queue, evaluate plans, cancel eligible plans, and run approved plans in dry-run mode.
 - The operations console can browse S3 bucket objects by prefix, choose a bounded page size, and continue through truncated listings.
 - Operators can navigate S3 bucket folder prefixes in the console; delimiter-based listings show common prefixes as folders, support moving up one level, and retain bounded continuation pagination.

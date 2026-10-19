@@ -424,7 +424,14 @@ class AWSService:
                     if item.get("Key") is not None
                 },
             }
-        except (BotoCoreError, ClientError) as error:
+        except ClientError as error:
+            code = error.response.get("Error", {}).get("Code")
+            if code == "NoSuchTagSet":
+                return {"status": "healthy", "tags": {}}
+            if code == "NoSuchBucket":
+                return {"status": "missing", "tags": {}}
+            return {"status": "unhealthy", "error": str(error)}
+        except BotoCoreError as error:
             return {"status": "unhealthy", "error": str(error)}
 
     def get_s3_objects(self, bucket_name, prefix=None, max_keys=None, continuation_token=None, delimiter=None):

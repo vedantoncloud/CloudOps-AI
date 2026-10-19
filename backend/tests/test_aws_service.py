@@ -3,6 +3,7 @@ from datetime import datetime
 
 from fastapi.testclient import TestClient
 from botocore.exceptions import ClientError
+import pytest
 
 from services.aws_service import AWSService
 from main import app
@@ -360,6 +361,29 @@ def test_get_s3_buckets_when_access_denied():
     assert result["service"] == "s3"
     assert result["status"] == "unhealthy"
     assert "AccessDenied" in result["error"]
+
+
+@pytest.mark.parametrize(
+    ("error_code", "expected_status"),
+    [("NoSuchTagSet", "healthy"), ("NoSuchBucket", "missing"), ("AccessDenied", "unhealthy")],
+)
+def test_s3_bucket_tag_lookup_classifies_ownership_results(error_code, expected_status):
+    with patch("services.aws_service.boto3.client") as mock_client:
+        s3 = mock_client.return_value
+        if error_code == "NoSuchTagSet":
+            s3.get_bucket_tagging.side_effect = ClientError(
+                {"Error": {"Code": error_code, "Message": "no tags"}}, "GetBucketTagging"
+            )
+        else:
+            s3.get_bucket_tagging.side_effect = ClientError(
+                {"Error": {"Code": error_code, "Message": "lookup failed"}}, "GetBucketTagging"
+            )
+
+        result = AWSService().get_s3_bucket_tags("example-bucket")
+
+    assert result["status"] == expected_status
+    if expected_status != "unhealthy":
+        assert result["tags"] == {}
 
 
 def test_s3_bucket_page_size_is_bounded():

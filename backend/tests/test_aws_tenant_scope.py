@@ -66,8 +66,10 @@ class FakeAWSService:
 
     def get_s3_bucket_tags(self, bucket_name):
         tenants = {"owned": "tenant-a", "foreign": "tenant-b"}
+        if bucket_name == "untagged":
+            return {"status": "healthy", "tags": {}}
         if bucket_name not in tenants:
-            return {"status": "unhealthy", "error": "tags unavailable"}
+            return {"status": "missing", "tags": {}}
         return {"status": "healthy", "tags": {"CloudOpsTenantId": tenants[bucket_name]}}
 
     def get_s3_bucket_details(self, bucket_name):
@@ -462,6 +464,20 @@ def test_s3_inventory_hides_foreign_and_untagged_buckets(monkeypatch):
     assert response.json()["buckets"] == [{"name": "owned"}]
 
 
+def test_s3_inventory_reports_ownership_verification_outage(monkeypatch):
+    client = tenant_client(monkeypatch)
+    service = main.aws_service
+    monkeypatch.setattr(
+        service, "get_s3_bucket_tags",
+        lambda _bucket: {"status": "unhealthy", "error": "private AWS diagnostic"},
+    )
+
+    response = client.get("/cloud/aws/s3/buckets", headers={"Authorization": "Bearer token-a"})
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "S3 ownership verification is unavailable"}
+
+
 @pytest.mark.parametrize("bucket", ["foreign", "untagged", "missing"])
 @pytest.mark.parametrize("suffix", ["", "/objects", "/security-insights"])
 def test_s3_routes_hide_foreign_untagged_and_missing_buckets(monkeypatch, bucket, suffix):
@@ -481,6 +497,20 @@ def test_s3_route_allows_owned_bucket(monkeypatch):
     )
 
     assert response.status_code == 200
+
+
+def test_s3_detail_reports_ownership_verification_outage_without_leaking_provider_error(monkeypatch):
+    client = tenant_client(monkeypatch)
+    service = main.aws_service
+    monkeypatch.setattr(
+        service, "get_s3_bucket_tags",
+        lambda _bucket: {"status": "unhealthy", "error": "access denied for 123456789012"},
+    )
+
+    response = client.get("/cloud/aws/s3/buckets/owned", headers={"Authorization": "Bearer token-a"})
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "S3 ownership verification is unavailable"}
 
 
 def test_s3_object_metadata_is_tenant_scoped_and_preserves_nested_key(monkeypatch):
@@ -538,6 +568,24 @@ def test_ec2_plan_generation_hides_foreign_instances(monkeypatch):
     assert response.status_code == 404
     assert response.json() == {"detail": "EC2 instance not found"}
     assert called == []
+
+
+def test_s3_plan_generation_reports_ownership_verification_outage(monkeypatch):
+    client = tenant_client(monkeypatch)
+    service = FakeAWSService()
+    monkeypatch.setattr("autonomy.api.aws_service", service)
+    monkeypatch.setattr(
+        service, "get_s3_bucket_tags",
+        lambda _bucket: {"status": "unhealthy", "error": "private AWS diagnostic"},
+    )
+
+    response = client.post(
+        "/autonomy/s3/buckets/owned/plans",
+        headers={"Authorization": "Bearer operator-a"},
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "S3 ownership verification is unavailable"}
 
 
 def test_ec2_plan_generation_finds_owned_instance_beyond_inventory_page(monkeypatch):

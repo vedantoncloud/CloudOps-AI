@@ -327,10 +327,11 @@ def aws_s3_buckets(
     if result.get("status") != "healthy" or not getattr(request.state, "tenant_scoped", False):
         return result
     result = dict(result)
-    result["buckets"] = [
-        bucket for bucket in result.get("buckets", [])
-        if _tenant_owns_s3_bucket(request, bucket.get("name"))
-    ]
+    visible_buckets = []
+    for bucket in result.get("buckets", []):
+        if _tenant_owns_s3_bucket(request, bucket.get("name")):
+            visible_buckets.append(bucket)
+    result["buckets"] = visible_buckets
     return result
 
 
@@ -340,10 +341,13 @@ def _tenant_owns_s3_bucket(request: Request, bucket_name: str | None) -> bool:
     if not bucket_name:
         return False
     result = aws_service.get_s3_bucket_tags(bucket_name)
-    return (
-        result.get("status") == "healthy"
-        and _resource_tenant({"tags": result.get("tags", {})}) == request.state.tenant_id
-    )
+    if result.get("status") == "unhealthy":
+        # A failed ownership check is not evidence that the bucket is foreign.
+        # Fail the request so operators can distinguish outages from an empty scope.
+        raise HTTPException(status_code=503, detail="S3 ownership verification is unavailable")
+    return result.get("status") == "healthy" and _resource_tenant(
+        {"tags": result.get("tags", {})}
+    ) == request.state.tenant_id
 
 
 def _require_tenant_s3_bucket(request: Request, bucket_name: str) -> None:

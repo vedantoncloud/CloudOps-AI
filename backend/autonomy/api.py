@@ -153,6 +153,8 @@ def _require_tenant_s3_bucket(request: Request, bucket_name: str) -> None:
     if not getattr(request.state, "tenant_scoped", False):
         return
     ownership = aws_service.get_s3_bucket_tags(bucket_name)
+    if ownership.get("status") == "unhealthy":
+        raise HTTPException(status_code=503, detail="S3 ownership verification is unavailable")
     if (ownership.get("status") != "healthy"
             or _resource_tenant({"tags": ownership.get("tags", {})}) != request.state.tenant_id):
         raise HTTPException(status_code=404, detail="S3 bucket not found")
