@@ -27,7 +27,7 @@ Operators can search tenant-visible GitOps change sets by change ID, source acti
 
 Administrators can review cumulative AWS operation call and failure counts in the Operations console, including unhealthy provider results returned with HTTP 200; fixed method labels exclude resource identifiers and provider error details.
 
-Operators can browse paginated EC2 inventory in a selected AWS region from the operations console; the selected region is retained for subsequent pages and complete CSV exports.
+Operators can browse paginated EC2 inventory in a selected AWS region from the operations console; enabled AWS regions are discoverable as input suggestions, and the selected region is retained for subsequent pages and complete CSV exports.
 
 Operators can analyze fleet-wide EC2 efficiency, cost, rightsizing, and security insights in the selected region; inventory pagination and regional CloudWatch CPU lookups use that region, and invalid regions are rejected before provider access.
 
@@ -103,6 +103,7 @@ When an operator selects an EC2 region, inventory, fleet-wide aggregate insights
 - Operators can search the EC2 or S3 inventory rows already loaded across pages without reloading page one or losing the continuation cursor.
 - Authenticated users can page through EC2 inventory with bounded AWS `MaxResults` and opaque `NextToken` cursors; each page applies tenant ownership filtering before returning instances.
 - Operators can inspect EC2 instance details, metrics, and insights, and generate action plans in the selected inventory region; invalid region values are rejected before AWS calls.
+- Operators can discover enabled AWS regions in the EC2 inventory console; discovery returns sorted, unique region names, reports provider failures without exposing AWS diagnostics, and preserves manual region entry as a fallback.
 - Operators can filter EC2 inventory by AWS tag key and value in the operations console; the filter is applied server-side and retained when loading subsequent pages.
 - Operators can filter EC2 inventory by the exact AWS Name tag in the operations console; AWS applies the filter and subsequent pages retain it.
 - Operators can inspect a plan from the console queue and retrieve its current tenant-scoped state, including the full plan details.

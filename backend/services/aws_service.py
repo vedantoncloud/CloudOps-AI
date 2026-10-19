@@ -19,6 +19,22 @@ def _aws_client(service_name, **kwargs):
 
 
 class AWSService:
+    def get_ec2_regions(self):
+        """List regions enabled for the configured AWS account."""
+        try:
+            ec2 = _aws_client("ec2")
+            response = ec2.describe_regions(AllRegions=False)
+            regions = sorted({
+                item["RegionName"]
+                for item in response.get("Regions", [])
+                if isinstance(item, dict)
+                and isinstance(item.get("RegionName"), str)
+                and item["RegionName"].strip()
+            })
+            return {"service": "ec2", "status": "healthy", "regions": regions}
+        except (BotoCoreError, ClientError):
+            return {"service": "ec2", "status": "unhealthy"}
+
     def get_account_costs(self, days=30):
         """Return a bounded window of complete days of account-level AWS spend."""
         end = datetime.now(timezone.utc).date()

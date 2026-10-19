@@ -225,6 +225,14 @@ def aws_ec2_summary(request: Request):
     }
 
 
+@app.get("/cloud/aws/ec2/regions")
+def aws_ec2_regions():
+    result = aws_service.get_ec2_regions()
+    if result.get("status") != "healthy":
+        _raise_aws_resource_unavailable()
+    return result
+
+
 def _all_tenant_ec2_instances(request: Request, region: str | None = None):
     """Load every EC2 page in a region and apply tenant ownership before aggregation."""
     instances = []
