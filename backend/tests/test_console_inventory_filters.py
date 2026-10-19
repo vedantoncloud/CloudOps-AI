@@ -20,6 +20,8 @@ def test_console_exposes_inventory_search_and_ec2_state_filter():
     assert 'id="instanceTag"' in html
     assert 'id="instanceName"' in html
     assert 'id="instanceType"' in html
+    assert 'id="instanceVpc"' in html
+    assert 'id="instanceSubnet"' in html
     assert 'aria-label="Filter EC2 instances by type"' in html
     assert 'aria-label="Filter EC2 instances by Name tag"' in html
     assert 'aria-label="Filter EC2 instances by tag"' in html
@@ -27,6 +29,8 @@ def test_console_exposes_inventory_search_and_ec2_state_filter():
     assert "params.set('tag',$('instanceTag').value.trim())" in html
     assert "params.set('name',$('instanceName').value.trim())" in html
     assert "params.set('instance_type',$('instanceType').value.trim())" in html
+    assert "params.set('vpc_id',$('instanceVpc').value.trim())" in html
+    assert "params.set('subnet_id',$('instanceSubnet').value.trim())" in html
     assert "$('instanceType').addEventListener('change',loadInventory)" in html
     assert "$('instanceName').addEventListener('change',loadInventory)" in html
     assert "$('instanceTag').addEventListener('change',loadInventory)" in html
@@ -134,7 +138,7 @@ def test_full_inventory_export_paginates_filters_and_fails_closed():
     script = r"""
 const assert = require('node:assert/strict');
 const source = JSON.parse(process.argv[1]);
-const elements = {exportAllInventory:{disabled:false},kind:{value:'ec2'},inventorySearch:{value:'second'},instanceState:{value:'running'},instanceTag:{value:'Owner:ops'},instanceName:{value:'web'},instanceType:{value:'m7i.large'},instanceRegion:{value:''}};
+const elements = {exportAllInventory:{disabled:false},kind:{value:'ec2'},inventorySearch:{value:'second'},instanceState:{value:'running'},instanceTag:{value:'Owner:ops'},instanceName:{value:'web'},instanceType:{value:'m7i.large'},instanceVpc:{value:'vpc-12345678'},instanceSubnet:{value:'subnet-12345678'},instanceRegion:{value:''}};
 let downloads=[],messages=[],blobs=[],calls=[];
 const document={body:{append(link){downloads.push(link)}},createElement(){return {click(){},remove(){}}}};
 const URL={createObjectURL(blob){blobs.push(blob);return 'blob:test'},revokeObjectURL(){}};
@@ -143,7 +147,7 @@ const make=new Function('$','api','message','csvCell','URL','Blob','document',so
 async function scenario(apiImpl,count,errorText){downloads=[];messages=[];blobs=[];calls=[];elements.exportAllInventory.disabled=false;const api=async path=>{calls.push(path);return apiImpl(path,calls.length)};await make(id=>elements[id],api,(text,error)=>messages.push([text,error]),csvCell,URL,Blob,document)();assert.equal(downloads.length,count);assert.equal(elements.exportAllInventory.disabled,false);if(errorText)assert(messages.some(([text,error])=>error&&text.includes(errorText)));return {calls,downloads,blobs};}
 (async()=>{
  let out=await scenario((path,n)=>n===1?{instances:[{instance_id:'i-first',state:'stopped'}],is_truncated:true,next_token:'cursor'}:{instances:[{instance_id:'i-second',state:'running',name:'web'}],is_truncated:false},1);
- assert.equal(out.calls.length,2);assert(out.calls[0].includes('state=running'));assert(out.calls[0].includes('instance_type=m7i.large'));assert(out.calls[1].includes('next_token=cursor'));assert(out.calls[1].includes('instance_type=m7i.large'));const csv=await out.blobs[0].text();assert(csv.includes('i-second'));assert(!csv.includes('i-first'));
+ assert.equal(out.calls.length,2);assert(out.calls[0].includes('state=running'));assert(out.calls[0].includes('instance_type=m7i.large'));assert(out.calls[0].includes('vpc_id=vpc-12345678'));assert(out.calls[0].includes('subnet_id=subnet-12345678'));assert(out.calls[1].includes('next_token=cursor'));assert(out.calls[1].includes('instance_type=m7i.large'));assert(out.calls[1].includes('vpc_id=vpc-12345678'));assert(out.calls[1].includes('subnet_id=subnet-12345678'));const csv=await out.blobs[0].text();assert(csv.includes('i-second'));assert(!csv.includes('i-first'));
  out=await scenario((path,n)=>n===1?{instances:[],is_truncated:true,next_token:'cursor'}:Promise.reject(new Error('AWS unavailable')),0,'AWS unavailable');assert.equal(out.calls.length,2);
  out=await scenario(()=>({instances:[],is_truncated:true,next_token:'same'}),0,'repeated a cursor');assert.equal(out.calls.length,2);
  out=await scenario(()=>({instances:[{instance_id:'i-x'}],is_truncated:true}),0,'no continuation cursor');assert.equal(out.calls.length,1);

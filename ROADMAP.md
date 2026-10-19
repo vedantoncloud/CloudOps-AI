@@ -177,6 +177,7 @@ Operators can inspect EC2 instance and system reachability checks plus scheduled
 - EC2/S3 optimization insights remain qualitative and do not attribute Cost Explorer charges to tenants or individual resources; the admin-only account billing view reports daily shared-account totals.
 - EC2 inventory browsing, fleet-wide aggregate insights, and per-instance follow-up operations accept an explicit AWS region. Routes without a selected-region control use the configured default region.
 - Operators can filter EC2 inventory by exact instance type at the AWS API before pagination; the console preserves the filter across pages and full CSV exports.
+- Operators can filter EC2 inventory by VPC and subnet IDs at the AWS API before pagination; tenant scoping remains in effect, and the console preserves both filters across pages and full CSV exports while showing placement IDs.
 - The checkout contains untracked SQLite database files. They were left untouched and are not part of this roadmap change.
 
 ## Scope and count

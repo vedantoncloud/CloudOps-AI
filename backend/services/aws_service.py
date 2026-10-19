@@ -216,7 +216,7 @@ class AWSService:
                 "error": str(error),
             }
 
-    def get_ec2_instances(self, state=None, tag=None, max_results=None, next_token=None, name=None, region=None, instance_type=None):
+    def get_ec2_instances(self, state=None, tag=None, max_results=None, next_token=None, name=None, region=None, instance_type=None, vpc_id=None, subnet_id=None):
         try:
             ec2 = _aws_client("ec2", **({"region_name": region} if region else {}))
 
@@ -262,6 +262,12 @@ class AWSService:
                     "Values": [instance_type],
                 })
 
+            if vpc_id:
+                filters.append({"Name": "vpc-id", "Values": [vpc_id]})
+
+            if subnet_id:
+                filters.append({"Name": "subnet-id", "Values": [subnet_id]})
+
             params = {}
             if filters:
                 params["Filters"] = filters
@@ -296,6 +302,8 @@ class AWSService:
                         "availability_zone": instance.get("Placement", {}).get(
                             "AvailabilityZone"
                         ),
+                        "vpc_id": instance.get("VpcId"),
+                        "subnet_id": instance.get("SubnetId"),
                         "private_ip": instance.get("PrivateIpAddress"),
                         "public_ip": instance.get("PublicIpAddress"),
                         "security_groups": [

@@ -113,3 +113,61 @@ def test_ec2_regional_inventory_preserves_aws_failure_response():
     assert result["status"] == "unhealthy"
     assert "provider unavailable" in result["error"]
     assert mock_client.call_args.kwargs["region_name"] == "eu-west-3"
+
+
+def test_ec2_inventory_filters_vpc_and_subnet_before_pagination_and_returns_placement():
+    with patch("services.aws_service.boto3.client") as mock_client:
+        ec2 = mock_client.return_value
+        ec2.describe_instances.return_value = {
+            "Reservations": [{"Instances": [{
+                "InstanceId": "i-12345678",
+                "VpcId": "vpc-12345678",
+                "SubnetId": "subnet-12345678",
+            }]}],
+            "NextToken": "next",
+        }
+
+        response = AWSService().get_ec2_instances(
+            vpc_id="vpc-12345678", subnet_id="subnet-12345678",
+            max_results=100, next_token="cursor",
+        )
+
+    assert ec2.describe_instances.call_args.kwargs == {
+        "Filters": [
+            {"Name": "vpc-id", "Values": ["vpc-12345678"]},
+            {"Name": "subnet-id", "Values": ["subnet-12345678"]},
+        ],
+        "MaxResults": 100,
+        "NextToken": "cursor",
+    }
+    assert response["instances"][0]["vpc_id"] == "vpc-12345678"
+    assert response["instances"][0]["subnet_id"] == "subnet-12345678"
+    assert response["next_token"] == "next"
+
+
+def test_ec2_inventory_endpoint_forwards_network_filters_and_validates_ids():
+    with patch("main.aws_service.get_ec2_instances", return_value={"status": "healthy", "instances": []}) as get_instances:
+        response = TestClient(app).get(
+            "/cloud/aws/ec2/instances?vpc_id=vpc-12345678&subnet_id=subnet-12345678"
+        )
+
+    assert response.status_code == 200
+    get_instances.assert_called_once_with(
+        None, None, vpc_id="vpc-12345678", subnet_id="subnet-12345678"
+    )
+    client = TestClient(app)
+    assert client.get("/cloud/aws/ec2/instances?vpc_id=vpc-invalid").status_code == 400
+    assert client.get("/cloud/aws/ec2/instances?subnet_id=subnet-invalid").status_code == 400
+
+
+def test_ec2_network_filtered_inventory_sanitizes_provider_failure():
+    with patch("main.aws_service.get_ec2_instances", return_value={
+        "status": "unhealthy", "error": "private AWS diagnostic",
+    }):
+        response = TestClient(app).get(
+            "/cloud/aws/ec2/instances?vpc_id=vpc-12345678"
+        )
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS resource data is unavailable"}
+    assert "private AWS diagnostic" not in response.text

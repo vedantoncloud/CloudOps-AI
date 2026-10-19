@@ -14,7 +14,7 @@ class FakeAWSService:
             return lambda *args, **kwargs: {"status": "healthy", "service": "ec2"}
         raise AttributeError(name)
 
-    def get_ec2_instances(self, state=None, tag=None, max_results=None, next_token=None, name=None):
+    def get_ec2_instances(self, state=None, tag=None, max_results=None, next_token=None, name=None, **filters):
         if next_token:
             return {"service": "ec2", "status": "healthy", "instances": [], "next_token": None}
         return {
@@ -118,6 +118,19 @@ def test_aws_status_hides_shared_account_identity_and_raw_errors_from_tenant(mon
         "services": {"ec2": {"status": "healthy"}},
         "message": "AWS services are healthy",
     }
+
+
+def test_ec2_network_filter_preserves_tenant_scoping(monkeypatch):
+    client = tenant_client(monkeypatch)
+    response = client.get(
+        "/cloud/aws/ec2/instances?vpc_id=vpc-12345678&subnet_id=subnet-12345678",
+        headers={"Authorization": "Bearer token-a"},
+    )
+
+    assert response.status_code == 200
+    assert [item["instance_id"] for item in response.json()["instances"]] == [
+        "i-aaaaaaaa"
+    ]
 
 
 def test_aws_status_retains_full_diagnostics_for_admin(monkeypatch):
