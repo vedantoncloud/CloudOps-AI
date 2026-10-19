@@ -567,7 +567,7 @@ class AWSService:
         except (BotoCoreError, ClientError) as error:
             return {"service": "s3", "status": "unhealthy", "bucket": bucket_name, "error": str(error)}
 
-    def create_s3_object_download_url(self, bucket_name, object_key):
+    def create_s3_object_download_url(self, bucket_name, object_key, version_id=None):
         """Create a short-lived URL that downloads one S3 object as an attachment."""
         expires_in = 300
         try:
@@ -577,6 +577,7 @@ class AWSService:
                     "Bucket": bucket_name,
                     "Key": object_key,
                     "ResponseContentDisposition": "attachment",
+                    **({"VersionId": version_id} if version_id is not None else {}),
                 },
                 ExpiresIn=expires_in,
             )

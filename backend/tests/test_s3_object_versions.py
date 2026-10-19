@@ -59,6 +59,25 @@ def test_s3_object_versions_reports_provider_failure_without_partial_page():
     assert "versions" not in result
 
 
+def test_s3_version_download_signs_exact_version_as_attachment():
+    with patch("services.aws_service._aws_client") as client:
+        client.return_value.generate_presigned_url.return_value = "https://signed.example/version"
+        result = AWSService().create_s3_object_download_url(
+            "owned", "reports/a.csv", "version / one"
+        )
+
+    client.return_value.generate_presigned_url.assert_called_once_with(
+        "get_object",
+        Params={
+            "Bucket": "owned", "Key": "reports/a.csv", "VersionId": "version / one",
+            "ResponseContentDisposition": "attachment",
+        },
+        ExpiresIn=300,
+    )
+    assert result["status"] == "healthy"
+    assert result["url"] == "https://signed.example/version"
+
+
 class VersionAWS:
     unavailable = False
 
@@ -72,6 +91,11 @@ class VersionAWS:
             return {"service": "s3", "status": "unhealthy", "error": "account diagnostic"}
         return {"service": "s3", "status": "healthy", "bucket": bucket_name,
                 "versions": [], "is_truncated": False}
+
+    def create_s3_object_download_url(self, bucket_name, key, version_id=None):
+        if self.unavailable:
+            return {"status": "unhealthy", "error": "account diagnostic"}
+        return {"status": "healthy", "url": "https://signed.example", "version_id": version_id}
 
 
 def version_client(monkeypatch):
@@ -101,3 +125,49 @@ def test_s3_versions_endpoint_sanitizes_provider_failure(monkeypatch):
     )
     assert response.status_code == 503
     assert response.json() == {"detail": "AWS resource data is unavailable"}
+
+
+def test_s3_version_download_is_tenant_scoped_and_preserves_version_id(monkeypatch):
+    client = version_client(monkeypatch)
+    response = client.get(
+        "/cloud/aws/s3/buckets/owned/objects/download?key=reports%2Fa.csv&version_id=v%2F2",
+        headers={"Authorization": "Bearer a"},
+    )
+    assert response.status_code == 200
+    assert response.json()["version_id"] == "v/2"
+
+    foreign = client.get(
+        "/cloud/aws/s3/buckets/foreign/objects/download?key=reports%2Fa.csv&version_id=v2",
+        headers={"Authorization": "Bearer a"},
+    )
+    assert foreign.status_code == 404
+
+
+def test_s3_version_download_sanitizes_provider_failure(monkeypatch):
+    client = version_client(monkeypatch)
+    main.aws_service.unavailable = True
+    response = client.get(
+        "/cloud/aws/s3/buckets/owned/objects/download?key=reports%2Fa.csv&version_id=v2",
+        headers={"Authorization": "Bearer a"},
+    )
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS resource data is unavailable"}
+
+
+def test_s3_version_download_rejects_empty_version_id_before_provider_call(monkeypatch):
+    client = version_client(monkeypatch)
+    response = client.get(
+        "/cloud/aws/s3/buckets/owned/objects/download?key=reports%2Fa.csv&version_id=",
+        headers={"Authorization": "Bearer a"},
+    )
+    assert response.status_code == 400
+    assert response.json() == {"detail": "version_id must not be empty"}
+
+
+def test_console_exposes_version_browsing_pagination_and_download():
+    html = main.CONSOLE_PAGE.read_text(encoding="utf-8")
+    assert 'id="objectVersions"' in html
+    assert 'id="moreVersions"' in html
+    assert "object-versions?${query}" in html
+    assert "query.set('version_id',versionId)" in html
+    assert "Download version" in html
