@@ -114,6 +114,24 @@ def _action_response(action):
     }
 
 
+def _record_plan_transition(action: ActionPlan, request: Request, old_status: ActionStatus) -> None:
+    """Persist an attributed audit event for a lifecycle decision."""
+    principal = getattr(request.state, "principal", None)
+    tenant_id = request.state.tenant_id if getattr(request.state, "tenant_scoped", False) else None
+    event = f"plan_{action.status.value}"
+    audit_trail.record(
+        action_id=action.action_id,
+        action_type=action.action_type,
+        resource_type=action.target.resource_type,
+        resource_id=action.target.resource_id,
+        old_status=old_status.value,
+        new_status=action.status.value,
+        event=event,
+        actor_id=getattr(principal, "subject", None),
+        details={"tenant_id": tenant_id} if tenant_id is not None else {},
+    )
+
+
 def _require_tenant_ec2_instance(request: Request, instance_id: str, region: str | None = None) -> None:
     """Keep plan generation inside the same ownership boundary as EC2 reads."""
     if not getattr(request.state, "tenant_scoped", False):
@@ -300,6 +318,8 @@ def approve_plan(action_id: str, request: Request):
     if action is None:
         raise HTTPException(status_code=404, detail="Action plan not found")
 
+    old_status = action.status
+    old_decision_by, old_decision_reason = action.decision_by, action.decision_reason
     try:
         principal = getattr(request.state, "principal", None)
         approved = approval_manager.approve(
@@ -308,7 +328,12 @@ def approve_plan(action_id: str, request: Request):
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
-    _persist_plan(approved)
+    try:
+        _record_plan_transition(approved, request, old_status)
+        _persist_plan(approved)
+    except Exception:
+        action.status, action.decision_by, action.decision_reason = old_status, old_decision_by, old_decision_reason
+        raise
     return _action_response(approved)
 
 
@@ -327,13 +352,20 @@ def reject_plan(action_id: str, payload: RejectionRequest, request: Request):
     if action is None:
         raise HTTPException(status_code=404, detail="Action plan not found")
 
+    old_status = action.status
+    old_decision_by, old_decision_reason = action.decision_by, action.decision_reason
     principal = getattr(request.state, "principal", None)
     reviewer = getattr(principal, "subject", None)
     try:
         rejected = approval_manager.reject(action, reviewer, payload.reason)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    _persist_plan(rejected)
+    try:
+        _record_plan_transition(rejected, request, old_status)
+        _persist_plan(rejected)
+    except Exception:
+        action.status, action.decision_by, action.decision_reason = old_status, old_decision_by, old_decision_reason
+        raise
     return _action_response(rejected)
 
 
@@ -344,6 +376,8 @@ def cancel_plan(action_id: str, request: Request):
     if action is None:
         raise HTTPException(status_code=404, detail="Action plan not found")
 
+    old_status = action.status
+    old_decision_by, old_decision_reason = action.decision_by, action.decision_reason
     try:
         principal = getattr(request.state, "principal", None)
         cancelled = approval_manager.cancel(
@@ -352,7 +386,12 @@ def cancel_plan(action_id: str, request: Request):
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
-    _persist_plan(cancelled)
+    try:
+        _record_plan_transition(cancelled, request, old_status)
+        _persist_plan(cancelled)
+    except Exception:
+        action.status, action.decision_by, action.decision_reason = old_status, old_decision_by, old_decision_reason
+        raise
     return _action_response(cancelled)
 
 

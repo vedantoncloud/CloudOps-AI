@@ -117,6 +117,7 @@ When an operator selects an EC2 region, inventory, fleet-wide aggregate insights
 - Authenticated tenant users can inspect control-plane action traces only when the audit history is attributed to their own subject; foreign and unattributed traces are hidden, while administrators retain shared trace access.
 - Action plans generated from EC2 or S3 insights create durable `plan_created` audit events with the authenticated actor and tenant; plan records are not exposed if the audit write fails.
 - GitOps change registration, approval, rejection, dry-run apply, and verification audit events attribute the authenticated principal; caller-supplied reviewer names cannot override identity in token mode.
+- Action-plan approval, rejection, and cancellation write durable audit events with the authenticated actor and tenant; failed audit writes roll the in-memory decision back, and invalid lifecycle transitions do not emit success events.
 
 ## Prioritized remaining work
 
