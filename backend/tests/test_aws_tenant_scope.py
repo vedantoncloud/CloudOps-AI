@@ -1,4 +1,6 @@
+from types import SimpleNamespace
 from fastapi import FastAPI
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 import pytest
 
@@ -209,6 +211,40 @@ def test_ec2_summary_counts_tenant_instances_across_all_pages(monkeypatch):
     assert calls == [None, "page-2"]
 
 
+@pytest.mark.parametrize("path,method", [
+    ("/cloud/aws/ec2/instances", "get_ec2_instances"),
+    ("/cloud/aws/ec2/summary", "get_ec2_instances"),
+    ("/cloud/aws/s3/buckets", "get_s3_buckets"),
+])
+def test_core_inventory_endpoints_return_sanitized_503_when_aws_is_unavailable(monkeypatch, path, method):
+    app_client = tenant_client(monkeypatch)
+    service = main.aws_service
+
+    def unavailable(*args, **kwargs):
+        return {"status": "unhealthy", "error": "private AWS account diagnostic"}
+    setattr(service, method, unavailable)
+
+    response = app_client.get(path, headers={"Authorization": "Bearer token-a"})
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS resource data is unavailable"}
+    assert "private AWS" not in response.text
+
+
+def test_unscoped_ec2_summary_returns_sanitized_503_when_aws_is_unavailable(monkeypatch):
+    app_client = tenant_client(monkeypatch)
+    service = main.aws_service
+    service.get_ec2_summary = lambda: {
+        "status": "unhealthy", "error": "private AWS account diagnostic"
+    }
+
+    with pytest.raises(HTTPException) as error:
+        main.aws_ec2_summary(SimpleNamespace(state=SimpleNamespace(tenant_scoped=False)))
+
+    assert error.value.status_code == 503
+    assert error.value.detail == "AWS resource data is unavailable"
+
+
 def test_ec2_instance_details_returns_only_owned_inventory_record(monkeypatch):
     response = tenant_client(monkeypatch).get(
         "/cloud/aws/ec2/instances/i-aaaaaaaa",
@@ -397,8 +433,8 @@ def test_aggregate_ec2_insights_do_not_run_on_partial_inventory(monkeypatch, pat
 
     response = client.get(path, headers={"Authorization": "Bearer token-a"})
 
-    assert response.status_code == 200
-    assert response.json()["status"] == "unhealthy"
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS resource data is unavailable"}
 
 
 @pytest.mark.parametrize("path", [

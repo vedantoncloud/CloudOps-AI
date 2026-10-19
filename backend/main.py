@@ -218,10 +218,11 @@ def aws_account_costs(request: Request, days: int = 30):
 @app.get("/cloud/aws/ec2/summary")
 def aws_ec2_summary(request: Request):
     if not getattr(request.state, "tenant_scoped", False):
-        return aws_service.get_ec2_summary()
+        result = aws_service.get_ec2_summary()
+        if result.get("status") != "healthy":
+            _raise_aws_resource_unavailable()
+        return result
     inventory = _all_tenant_ec2_instances(request)
-    if inventory.get("status") != "healthy":
-        return inventory
     instances = inventory["instances"]
     return {
         "service": "ec2",
@@ -248,13 +249,13 @@ def _all_tenant_ec2_instances(request: Request, region: str | None = None):
     while True:
         inventory = _tenant_ec2_instances(request, None, None, 1000, next_token, region=region)
         if inventory.get("status") != "healthy":
-            return {**inventory, "instances": instances + inventory.get("instances", [])}
+            _raise_aws_resource_unavailable()
         instances.extend(inventory.get("instances", []))
         next_token = inventory.get("next_token")
         if not next_token:
             break
         if next_token in seen_tokens:
-            return {"service": "ec2", "status": "unhealthy", "instances": []}
+            _raise_aws_resource_unavailable()
         seen_tokens.add(next_token)
     return {"service": "ec2", "status": "healthy", "instances": instances}
 
@@ -344,7 +345,13 @@ def aws_ec2_instances(request: Request, state: str = None, tag: str = None, max_
 
     _validate_ec2_region(region)
 
-    return _tenant_ec2_instances(request, state, tag, max_results, next_token, name.strip() if name else None, region, instance_type)
+    result = _tenant_ec2_instances(
+        request, state, tag, max_results, next_token,
+        name.strip() if name else None, region, instance_type,
+    )
+    if result.get("status") != "healthy":
+        _raise_aws_resource_unavailable()
+    return result
 
 
 @app.get("/cloud/aws/s3/buckets")
@@ -356,7 +363,9 @@ def aws_s3_buckets(
     if max_buckets is not None and not 1 <= max_buckets <= 10000:
         raise HTTPException(status_code=400, detail="max_buckets must be between 1 and 10000")
     result = aws_service.get_s3_buckets(max_buckets, continuation_token)
-    if result.get("status") != "healthy" or not getattr(request.state, "tenant_scoped", False):
+    if result.get("status") != "healthy":
+        _raise_aws_resource_unavailable()
+    if not getattr(request.state, "tenant_scoped", False):
         return result
     result = dict(result)
     visible_buckets = []
