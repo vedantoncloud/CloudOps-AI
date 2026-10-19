@@ -35,6 +35,8 @@ When an operator selects an EC2 region, inventory, fleet-wide aggregate insights
 
 Operators can inspect EC2 instance and system reachability checks plus scheduled AWS maintenance events from the regional instance details panel; missing status data and provider failures are shown explicitly.
 
+Operators can export every S3 object version and delete marker for the currently selected object prefix as a spreadsheet-safe CSV. The export follows S3 key/version pagination markers and stops without a partial download if listing fails or pagination becomes invalid.
+
 ## Completed work
 
 - FastAPI application and AWS service status/connectivity checks.
@@ -139,6 +141,7 @@ Operators can inspect EC2 instance and system reachability checks plus scheduled
 - Unified autonomous control-plane run audit events include the authenticated principal, and caller-supplied reviewer names cannot spoof approval or rejection attribution.
 - Action-plan approval, rejection, and cancellation write durable audit events with the authenticated actor and tenant; failed audit writes roll the in-memory decision back, and invalid lifecycle transitions do not emit success events.
 - Core EC2 inventory, fleet summary, and S3 bucket inventory endpoints return sanitized `503` responses when AWS data is unavailable; tenant fleet summaries and aggregate insights do not report partial inventory as successful after a later-page failure or pagination loop.
+- Operators can export the complete S3 object version history for the selected prefix, including delete markers and version metadata; cursor cycles, missing cursors, and provider failures stop the export without producing a partial CSV.
 
 ## Prioritized remaining work
 
