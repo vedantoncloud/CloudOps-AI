@@ -1,6 +1,14 @@
-﻿from fastapi.testclient import TestClient
+﻿import pytest
+from fastapi.testclient import TestClient
 
 from main import app
+
+
+@pytest.fixture(autouse=True)
+def fresh_app_middleware_stack():
+    # The assembled app limiter is process-local. Rebuild middleware per test
+    # so unrelated test modules cannot consume this test client's limit window.
+    app.middleware_stack = None
 
 
 def test_governance_api_repeated_allow_response_is_identical():

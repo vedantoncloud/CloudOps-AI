@@ -82,6 +82,7 @@ class AutonomousControlPlane:
         idempotency_key: str | None = None,
         idempotency_seen: bool = False,
         dry_run: bool = True,
+        actor_id: str | None = None,
     ) -> AutonomousControlPlaneResult:
         governed = self.governed_pipeline.evaluate(
             provider=provider,
@@ -123,6 +124,7 @@ class AutonomousControlPlane:
             idempotency_key=idempotency_key,
             idempotency_seen=idempotency_seen,
             dry_run=dry_run,
+            actor_id=actor_id,
         )
 
         evidence.update(

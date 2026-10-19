@@ -50,6 +50,7 @@ def test_allow_flows_into_existing_lifecycle():
         resource_type="ec2",
         resource_id="i-1",
         dry_run=True,
+        actor_id="operator-17",
     )
 
     assert result.lifecycle is not None
@@ -57,6 +58,7 @@ def test_allow_flows_into_existing_lifecycle():
     assert result.executed is True
     assert len(lifecycle.calls) == 1
     assert lifecycle.calls[0][1]["decision"] is governed.decision
+    assert lifecycle.calls[0][1]["actor_id"] == "operator-17"
 
 
 def test_governance_block_stops_before_lifecycle():

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 
 from autonomy.action_models import ActionPlan, ActionStatus, ActionTarget, RiskLevel
@@ -127,21 +127,31 @@ def _provider(name: str) -> CloudProvider:
 
 
 @router.post("/run")
-def run_control_plane(payload: ControlPlaneRunRequest) -> dict[str, Any]:
+def run_control_plane(payload: ControlPlaneRunRequest, request: Request) -> dict[str, Any]:
     try:
         action = _action(payload)
+        principal = getattr(request.state, "principal", None)
+        actor_id = getattr(principal, "subject", None)
+
+        # The request may select whether to submit an approval decision, but
+        # its claimed reviewer name is never an identity source.
+        approved_by = actor_id if payload.approved_by is not None else None
+        rejected_by = actor_id if payload.rejected_by is not None else None
+        if rejected_by is not None and not (payload.rejection_reason or "").strip():
+            raise ValueError("rejection_reason is required when rejecting.")
 
         result = control_plane.run(
             provider=_provider(payload.provider),
             action=action,
             resource_type=payload.resource_type,
             resource_id=payload.resource_id,
-            approved_by=payload.approved_by,
-            rejected_by=payload.rejected_by,
+            approved_by=approved_by,
+            rejected_by=rejected_by,
             rejection_reason=payload.rejection_reason,
             idempotency_key=payload.idempotency_key,
             idempotency_seen=payload.idempotency_seen,
             dry_run=payload.dry_run,
+            actor_id=actor_id,
         )
 
         return {

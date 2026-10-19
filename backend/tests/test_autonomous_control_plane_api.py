@@ -1,8 +1,12 @@
+from types import SimpleNamespace
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 import pytest
 
+import autonomy.autonomous_control_plane_api as control_plane_api
+from auth import AccessControlMiddleware, Principal
 from autonomy.autonomous_control_plane_api import (
     ControlPlaneRunRequest,
     _action,
@@ -136,3 +140,71 @@ def test_blank_reason_uses_safe_default():
         reason="   ",
     )
     assert request.reason == "Autonomous control-plane request"
+
+
+def test_run_attributes_actor_and_ignores_caller_supplied_reviewer(monkeypatch):
+    app = FastAPI()
+    app.include_router(router)
+    app.add_middleware(
+        AccessControlMiddleware,
+        mode="token",
+        tokens={"operator-token": Principal("operator-17", "operator", "tenant-a")},
+    )
+    observed = {}
+
+    def run(**kwargs):
+        observed.update(kwargs)
+        return SimpleNamespace(
+            outcome="awaiting_approval",
+            executed=False,
+            governed=SimpleNamespace(evidence={"decision": "allow"}),
+            lifecycle=None,
+            evidence={"actor": kwargs["actor_id"]},
+        )
+
+    monkeypatch.setattr(control_plane_api.control_plane, "run", run)
+    response = TestClient(app).post(
+        "/autonomy/control-plane/run",
+        headers={"Authorization": "Bearer operator-token"},
+        json={
+            "resource_type": "ec2",
+            "resource_id": "i-12345678",
+            "action_type": "restart_instance",
+            "approved_by": "forged-admin",
+        },
+    )
+
+    assert response.status_code == 200
+    assert observed["actor_id"] == "operator-17"
+    assert observed["approved_by"] == "operator-17"
+    assert observed["rejected_by"] is None
+    assert response.json()["evidence"]["actor"] == "operator-17"
+
+
+def test_control_plane_rejection_without_reason_fails_before_lifecycle(monkeypatch):
+    app = FastAPI()
+    app.include_router(router)
+    app.add_middleware(
+        AccessControlMiddleware,
+        mode="token",
+        tokens={"operator-token": Principal("operator-17", "operator", "tenant-a")},
+    )
+    monkeypatch.setattr(
+        control_plane_api.control_plane,
+        "run",
+        lambda **kwargs: pytest.fail("invalid rejection must not enter lifecycle"),
+    )
+
+    response = TestClient(app).post(
+        "/autonomy/control-plane/run",
+        headers={"Authorization": "Bearer operator-token"},
+        json={
+            "resource_type": "ec2",
+            "resource_id": "i-12345678",
+            "action_type": "restart_instance",
+            "rejected_by": "forged-admin",
+        },
+    )
+
+    assert response.status_code == 400
+    assert "rejection_reason is required" in response.json()["detail"]
