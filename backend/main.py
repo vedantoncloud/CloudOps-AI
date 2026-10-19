@@ -259,12 +259,18 @@ def _all_tenant_ec2_instances(request: Request, region: str | None = None):
     return {"service": "ec2", "status": "healthy", "instances": instances}
 
 
-def _tenant_ec2_instances(request: Request, state: str | None, tag: str | None, max_results=None, next_token=None, name=None, region=None):
-    region_kwargs = {"region": region} if region else {}
+def _tenant_ec2_instances(request: Request, state: str | None, tag: str | None, max_results=None, next_token=None, name=None, region=None, instance_type=None):
+    filters = {}
+    if name or max_results is not None or next_token is not None:
+        filters["name"] = name
+    if region:
+        filters["region"] = region
+    if instance_type:
+        filters["instance_type"] = instance_type
     if max_results is None and next_token is None:
-        result = aws_service.get_ec2_instances(state, tag, name=name, **region_kwargs) if name else aws_service.get_ec2_instances(state, tag, **region_kwargs)
+        result = aws_service.get_ec2_instances(state, tag, **filters)
     else:
-        result = aws_service.get_ec2_instances(state, tag, max_results, next_token, name=name, **region_kwargs)
+        result = aws_service.get_ec2_instances(state, tag, max_results, next_token, **filters)
     if result.get("status") != "healthy" or not getattr(request.state, "tenant_scoped", False):
         return result
     tenant_id = request.state.tenant_id
@@ -308,7 +314,7 @@ def _raise_aws_resource_unavailable() -> None:
 
 
 @app.get("/cloud/aws/ec2/instances")
-def aws_ec2_instances(request: Request, state: str = None, tag: str = None, max_results: int = None, next_token: str = None, name: str = None, region: str = None):
+def aws_ec2_instances(request: Request, state: str = None, tag: str = None, max_results: int = None, next_token: str = None, name: str = None, region: str = None, instance_type: str = None):
     valid_states = {
         "pending",
         "running",
@@ -330,9 +336,15 @@ def aws_ec2_instances(request: Request, state: str = None, tag: str = None, max_
     if name is not None and (not name.strip() or len(name) > 128):
         raise HTTPException(status_code=400, detail="name must contain 1 to 128 characters")
 
+    if instance_type is not None and (
+        not re.fullmatch(r"[a-z][a-z0-9-]*\.[a-z0-9-]+", instance_type, re.IGNORECASE)
+        or len(instance_type) > 64
+    ):
+        raise HTTPException(status_code=400, detail="instance_type must be a valid EC2 instance type")
+
     _validate_ec2_region(region)
 
-    return _tenant_ec2_instances(request, state, tag, max_results, next_token, name.strip() if name else None, region)
+    return _tenant_ec2_instances(request, state, tag, max_results, next_token, name.strip() if name else None, region, instance_type)
 
 
 @app.get("/cloud/aws/s3/buckets")
