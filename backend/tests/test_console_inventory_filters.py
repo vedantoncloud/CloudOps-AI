@@ -148,3 +148,40 @@ async function scenario(apiImpl,count,errorText){downloads=[];messages=[];blobs=
 """
     result = subprocess.run(["node", "-e", script, json.dumps(match.group(0))], capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_approval_review_can_inspect_plan_before_decision():
+    html = TestClient(app).get("/console").text
+    assert 'id="approvalDetails"' in html
+    assert "inspect.textContent='Inspect plan'" in html
+    assert "inspect.addEventListener('click',()=>inspectApprovalPlan(p.action_id))" in html
+    assert "Approve" in html and "Reject" in html
+
+
+def test_approval_plan_inspection_handles_success_failures_and_encoded_ids():
+    if not shutil.which("node"):
+        pytest.skip("Node.js is needed to run the console JavaScript behavior check")
+    html = TestClient(app).get("/console").text
+    match = re.search(r"async function inspectApprovalPlan\(actionId\).*?(?=async function loadApprovals)", html, re.S)
+    assert match
+    script = r"""
+const assert = require('node:assert/strict');
+const source = JSON.parse(process.argv[1]);
+const elements = {approvalDetails:{classList:{remove(value){assert.equal(value,'hidden')}}},approvalDetailsTitle:{textContent:''},approvalDetailsContent:{textContent:'',className:''}};
+const messages=[];
+const inspect = new Function('$','api','message',source+';return inspectApprovalPlan');
+(async()=>{
+ const calls=[];
+ await inspect(id=>elements[id],async path=>{calls.push(path);return {action:{action_id:'plan/one',status:'pending_approval',reason:'review me'}}},(text,error)=>messages.push([text,error]))('plan/one');
+ assert.equal(calls[0],'/autonomy/plans/plan%2Fone');
+ assert.equal(elements.approvalDetailsTitle.textContent,'Approval plan - plan/one');
+ assert.deepEqual(JSON.parse(elements.approvalDetailsContent.textContent),{action_id:'plan/one',status:'pending_approval',reason:'review me'});
+ assert.equal(elements.approvalDetailsContent.className,'');
+ await inspect(id=>elements[id],async()=>{throw new Error('plan not found')},(text,error)=>messages.push([text,error]))('missing');
+ assert.equal(elements.approvalDetailsContent.textContent,'Unable to load plan details: plan not found');
+ assert.equal(elements.approvalDetailsContent.className,'error');
+ assert(messages.some(([text,error])=>error&&text==='plan not found'));
+})().catch(error=>{console.error(error);process.exitCode=1});
+"""
+    result = subprocess.run(["node", "-e", script, json.dumps(match.group(0))], capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stdout + result.stderr

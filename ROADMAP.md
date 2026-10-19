@@ -21,6 +21,7 @@ Operators can filter their autonomous run history by outcome and search action I
 Operators can filter the tenant-scoped pending approval queue by risk and resource type, and search action IDs, action types, resource IDs, and reasons. Filters are applied before pagination so totals and queue pages match the active criteria.
 
 Operators can prioritize pending approvals by submission age or newest-first order. Plans carry durable UTC creation timestamps, the oldest-first default surfaces the longest-waiting requests, and plans created before timestamp tracking remain clearly marked as having no recorded submission time.
+Operators can inspect the full current action plan directly from the pending approval queue before approving or rejecting it; details load in a dedicated panel, encode action IDs safely, and surface lookup failures without hiding the queue.
 
 Operators can search tenant-visible GitOps change sets by change ID, source action, resource, field, or reason, filter by lifecycle status, and page through newest changes first. Results are tenant-scoped before filtering and pagination, with matching totals for the console.
 
@@ -66,6 +67,7 @@ When an operator selects an EC2 region, inventory, fleet-wide aggregate insights
 - Plan records and lifecycle decisions persist in a dedicated SQLite file configurable with `CLOUDOPS_ACTION_PLANS_DB_PATH`; readiness checks the store, and invalid stored data fails visibly.
 - Non-admin authenticated users can list and export only their own audit events; admins retain cross-actor audit access.
 - Operators can browse a tenant-scoped, newest-first pending approval queue through `/autonomy/approvals`, with bounded pagination.
+- Operators can inspect full action-plan details from the pending approval queue before making a decision; plan lookup is URL-encoded and errors are visible in an approval-specific panel.
 - Operators can filter the tenant-scoped action plan queue by status, risk, and resource type; filtered totals and pagination stay consistent when filters change in the console.
 - Operators can search the action plan queue case-insensitively by action type, target resource ID, or reason; search composes with status/risk/resource filters and keeps totals and pagination consistent.
 - Operators can reject a pending action plan with a required reason; the response records the authenticated reviewer and exposes a distinct `rejected` status.
