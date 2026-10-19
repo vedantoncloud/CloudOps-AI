@@ -1,6 +1,6 @@
 # CloudOps AI Roadmap
 
-**Repository audit:** 2026-10-18, updated after persisting the action-plan queue across service restarts. This roadmap contains **9 remaining tasks**: the nine numbered incomplete outcomes below. Sub-bullets and acceptance criteria do not count separately. Recount only when a complete outcome ships or scope is explicitly changed.
+**Repository audit:** 2026-10-19, updated after adding direct provider-neutral EC2 resource lookups. This roadmap contains **9 remaining tasks**: the nine numbered incomplete outcomes below. Sub-bullets and acceptance criteria do not count separately. Recount only when a complete outcome ships or scope is explicitly changed.
 
 ## Current state
 
@@ -73,6 +73,7 @@ When an operator selects an EC2 region, inventory, fleet-wide aggregate insights
 - Authenticated users can page through S3 bucket inventory with bounded `MaxBuckets` and AWS continuation tokens; the console can continue bucket pages, and tenant ownership filtering applies to each page.
 - S3 bucket inventory defaults to a bounded 1,000-bucket AWS page and always returns continuation metadata, including when clients omit pagination parameters.
 - Authenticated users can use `/console` to browse EC2/S3 inventory, inspect resource governance, review and decide pending approvals, and view their autonomous run history; bearer credentials stay in page memory.
+- Provider-neutral EC2 resource detail and governance lookups use direct instance-ID queries, so instances beyond the first inventory page remain discoverable; malformed IDs preserve generic observations without an AWS call.
 - Operators can review tenant-visible GitOps change sets in the console, inspect proposal manifests, approve or reject pending proposals, apply approved changes in dry-run mode, and verify applied proposals; real infrastructure mutation remains disabled.
 - Operators can search and status-filter tenant-visible GitOps change sets through bounded newest-first API and console pagination; matching totals and tenant filtering are applied before page slicing.
 - Token-scoped EC2/S3 plan generation verifies the source resource's tenant ownership first; foreign, untagged, missing, or unverifiable resources are hidden before insight analysis.

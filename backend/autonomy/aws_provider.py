@@ -1,3 +1,4 @@
+import re
 from typing import Any
 
 from autonomy.provider import CloudProvider
@@ -44,7 +45,13 @@ class AWSProvider(CloudProvider):
             return base
 
         if normalized_type == "ec2":
-            response = self.service.get_ec2_instances()
+            # Preserve the generic observation for IDs that cannot identify an
+            # EC2 instance; avoid sending malformed values to AWS.
+            if not re.fullmatch(r"i-[0-9a-fA-F]{8,17}", normalized_id):
+                return base
+            # DescribeInstances with an InstanceIds filter bypasses inventory
+            # pagination and avoids scanning an entire account for one record.
+            response = self.service.get_ec2_instance(normalized_id)
 
             if response.get("status") != "healthy":
                 return {
@@ -56,14 +63,7 @@ class AWSProvider(CloudProvider):
                     ),
                 }
 
-            instance = next(
-                (
-                    item
-                    for item in response.get("instances", [])
-                    if item.get("instance_id") == normalized_id
-                ),
-                None,
-            )
+            instance = response.get("instance")
 
             # Keep the original generic response for unknown resources.
             if instance is None:
