@@ -1693,6 +1693,7 @@ class AWSService:
                     "instance_status": None,
                     "system_status": None,
                     "state": None,
+                    "events": [],
                 }
 
             instance = statuses[0]
@@ -1708,6 +1709,14 @@ class AWSService:
                 "instance_status": instance_status.get("Status"),
                 "system_status": system_status.get("Status"),
                 "state": instance_state.get("Name"),
+                "events": [
+                    {
+                        key: event[key]
+                        for key in ("Code", "Description", "NotBefore", "NotAfter")
+                        if key in event
+                    }
+                    for event in instance.get("Events", [])
+                ],
             }
         except (BotoCoreError, ClientError) as error:
             return {

@@ -33,6 +33,8 @@ Operators can analyze fleet-wide EC2 efficiency, cost, rightsizing, and security
 
 When an operator selects an EC2 region, inventory, fleet-wide aggregate insights, per-instance detail, metrics, insights, and action-plan requests use that same region. Invalid region values are rejected before provider access.
 
+Operators can inspect EC2 instance and system reachability checks plus scheduled AWS maintenance events from the regional instance details panel; missing status data and provider failures are shown explicitly.
+
 ## Completed work
 
 - FastAPI application and AWS service status/connectivity checks.
@@ -80,6 +82,7 @@ When an operator selects an EC2 region, inventory, fleet-wide aggregate insights
 - Authenticated users can resume S3 object listings from an AWS continuation token through `/cloud/aws/s3/buckets/{bucket_name}/objects`; responses expose truncation state and the next token for incremental browsing.
 - Authenticated users can resume EC2 inventory listings from an AWS `NextToken` through `/cloud/aws/ec2/instances`; page sizes are bounded from 5 to 1,000 and results preserve tenant filtering.
 - Operators can inspect timestamped EC2 CPU and network metric samples over a selectable 1–24 hour window; the API bounds lookback duration and CloudWatch sampling periods.
+- Operators can inspect EC2 instance and system reachability checks and scheduled maintenance events from regional instance details; absent checks and failed status lookups remain visible as distinct states.
 - Operators can export every S3 object matching a bucket prefix as spreadsheet-safe CSV; export follows bounded continuation pages and stops without a partial download on provider failures or invalid cursors.
 - Authenticated users can page through S3 bucket inventory with bounded `MaxBuckets` and AWS continuation tokens; the console can continue bucket pages, and tenant ownership filtering applies to each page.
 - Tenant-scoped S3 bucket inventory fills the requested visible page across up to ten AWS pages, preserves the cursor for the next unexamined page, and fails closed on ownership or provider pagination failures.

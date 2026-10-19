@@ -1139,6 +1139,13 @@ def test_get_ec2_instance_status():
                 "SystemStatus": {
                     "Status": "ok"
                 },
+                "Events": [{
+                    "Code": "instance-retirement",
+                    "Description": "Instance retirement scheduled",
+                    "NotBefore": "2026-10-20T10:00:00Z",
+                    "NotAfter": "2026-10-20T12:00:00Z",
+                    "InternalField": "must not be exposed",
+                }],
             }
         ]
     }
@@ -1163,6 +1170,12 @@ def test_get_ec2_instance_status():
         "instance_status": "ok",
         "system_status": "ok",
         "state": "running",
+        "events": [{
+            "Code": "instance-retirement",
+            "Description": "Instance retirement scheduled",
+            "NotBefore": "2026-10-20T10:00:00Z",
+            "NotAfter": "2026-10-20T12:00:00Z",
+        }],
     }
 
 
@@ -1185,6 +1198,7 @@ def test_get_ec2_instance_status_when_no_status():
         "instance_status": None,
         "system_status": None,
         "state": None,
+        "events": [],
     }
 
 

@@ -29,6 +29,11 @@ def test_console_is_served_to_authenticated_reader():
     assert 'data-tab="audit"' in response.text
     assert 'id="auditRows"' in response.text
     assert 'id="moreAudit"' in response.text
+    assert "['Status checks',root+'/status'+regional]" in response.text
+    assert 'function renderInstanceStatus(data)' in response.text
+    assert 'No current status checks are available for this instance.' in response.text
+    assert 'No scheduled maintenance events are currently reported.' in response.text
+    assert "result.status==='rejected'?'error':''" in response.text
 
 
 def test_console_exposes_gitops_review_dry_run_and_verification_workflow():
