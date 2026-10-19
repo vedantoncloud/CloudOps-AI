@@ -56,6 +56,15 @@ positive integers to adjust it. Exceeded limits return HTTP 429 with a
 `Retry-After` header. Each application process tracks its own counters; use a
 shared gateway or limiter when a deployment needs a cluster-wide quota.
 
+GitOps change sets and their lifecycle state are stored in SQLite so proposals,
+approvals, dry-run applies, and verification results survive process restarts.
+The default file is `backend/gitops_changes.db`; set
+`CLOUDOPS_GITOPS_DB_PATH` to place it elsewhere. `/ready` checks this store.
+Corrupt stored change data fails startup rather than silently dropping pending
+reviews. This is local-file durability for a single process, not shared database
+or multi-process coordination. Back up this file with the audit and action-plan
+stores. Real infrastructure mutation remains disabled.
+
 The console is a small browser client served directly by FastAPI. Shared
 production persistence, container deployment, CI, infrastructure as code, and
 LLM integration are not currently provided.

@@ -1,4 +1,6 @@
-﻿from typing import Any
+import os
+from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -13,7 +15,11 @@ router = APIRouter(
     tags=["autonomy-gitops"],
 )
 
-registry = GitOpsChangeSetRegistry(audit_trail=audit_trail)
+registry = GitOpsChangeSetRegistry(
+    audit_trail=audit_trail,
+    database_path=os.getenv("CLOUDOPS_GITOPS_DB_PATH")
+    or Path(__file__).resolve().parents[1] / "gitops_changes.db",
+)
 engine = GitOpsEngine()
 
 

@@ -13,6 +13,7 @@ from autonomy.api import router as autonomy_router
 from autonomy.api import action_plan_store
 from autonomy.control_loop_api import router as control_loop_router
 from autonomy.gitops_api import router as gitops_router
+from autonomy.gitops_api import registry as gitops_registry
 from autonomy.control_plane_api import router as control_plane_router
 from autonomy.audit_api import router as audit_router
 from autonomy.autonomous_control_plane_api import router as autonomous_control_plane_router
@@ -144,6 +145,12 @@ def readiness_check():
         ),
         "action_plans": (
             "healthy" if _sqlite_store_ready(action_plan_store.database_path) else "unhealthy"
+        ),
+        "gitops_changes": (
+            "healthy"
+            if gitops_registry.database_path is None
+            or _sqlite_store_ready(gitops_registry.database_path)
+            else "unhealthy"
         ),
     }
     ready = aws_ready and all(status == "healthy" for status in persistence.values())
