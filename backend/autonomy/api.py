@@ -170,7 +170,7 @@ def plan_ec2_actions(instance_id: str, request: Request, region: str | None = No
     result = aws_service.get_ec2_insights(instance_id, **({"region": region} if region else {}))
 
     if result["status"] == "unhealthy":
-        raise HTTPException(status_code=403, detail=result["error"])
+        raise HTTPException(status_code=503, detail="AWS resource data is unavailable")
 
     plans = action_planner.plan_from_ec2_insights(
         instance_id,
@@ -201,7 +201,7 @@ def plan_s3_actions(
     )
 
     if result["status"] == "unhealthy":
-        raise HTTPException(status_code=403, detail=result["error"])
+        raise HTTPException(status_code=503, detail="AWS resource data is unavailable")
 
     plans = action_planner.plan_from_s3_insights(
         bucket_name,
