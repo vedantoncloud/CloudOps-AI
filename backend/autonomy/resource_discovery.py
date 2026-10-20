@@ -10,6 +10,10 @@ from autonomy.provider import CloudProvider
 from autonomy.provider_registry import ProviderRegistry
 
 
+class ResourceProviderUnavailable(RuntimeError):
+    """Raised when a registered provider cannot return a complete inventory."""
+
+
 @dataclass(frozen=True)
 class DiscoveredResource:
     provider: str
@@ -45,8 +49,18 @@ class ResourceDiscovery:
 
         cloud_provider: CloudProvider = self.registry.get(normalized_provider)
 
+        try:
+            if normalized_type == "ec2":
+                raw = cloud_provider.get_ec2_instances()
+            else:
+                raw = cloud_provider.get_s3_buckets()
+        except Exception as exc:
+            raise ResourceProviderUnavailable(str(exc)) from exc
+
+        if isinstance(raw, dict) and raw.get("status") == "unhealthy":
+            raise ResourceProviderUnavailable
+
         if normalized_type == "ec2":
-            raw = cloud_provider.get_ec2_instances()
             items = self._extract_items(
                 raw,
                 ("resources", "instances", "Instances"),
@@ -74,7 +88,6 @@ class ResourceDiscovery:
                             if isinstance(instance, dict)
                         )
         else:
-            raw = cloud_provider.get_s3_buckets()
             items = self._extract_items(
                 raw,
                 ("resources", "buckets", "Buckets"),

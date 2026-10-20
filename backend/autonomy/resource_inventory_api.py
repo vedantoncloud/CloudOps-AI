@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 
 from autonomy.provider import CloudProvider
 from autonomy.provider_registry import ProviderRegistry
-from autonomy.resource_discovery import ResourceDiscovery
+from autonomy.resource_discovery import ResourceDiscovery, ResourceProviderUnavailable
 
 
 router = APIRouter(
@@ -47,6 +47,10 @@ def list_resources(
             provider=provider,
             resource_type=resource_type,
         )
+    except ResourceProviderUnavailable as exc:
+        raise HTTPException(
+            status_code=503, detail="Resource inventory is unavailable"
+        ) from exc
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
