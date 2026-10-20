@@ -28,6 +28,7 @@ def test_s3_object_metadata_uses_head_object_and_returns_inspection_fields():
         "bucket": "reports",
         "object": {
             "key": "2026/month 1.csv",
+            "version_id": None,
             "size": 42,
             "content_type": "text/csv",
             "etag": '"abc"',
@@ -37,6 +38,38 @@ def test_s3_object_metadata_uses_head_object_and_returns_inspection_fields():
             "user_metadata": {"source": "billing"},
         },
     }
+
+
+def test_s3_object_metadata_inspects_requested_version():
+    modified = datetime(2026, 2, 3, tzinfo=timezone.utc)
+    with patch("services.aws_service.boto3.client") as client:
+        client.return_value.head_object.return_value = {
+            "VersionId": "version/1",
+            "ContentLength": 9,
+            "LastModified": modified,
+            "Metadata": {"release": "old"},
+        }
+
+        result = AWSService().get_s3_object_metadata("reports", "archive.csv", "version/1")
+
+    client.return_value.head_object.assert_called_once_with(
+        Bucket="reports", Key="archive.csv", VersionId="version/1"
+    )
+    assert result["object"]["version_id"] == "version/1"
+    assert result["object"]["user_metadata"] == {"release": "old"}
+
+
+def test_s3_object_metadata_reports_missing_version_as_unhealthy():
+    from botocore.exceptions import ClientError
+
+    error = ClientError({"Error": {"Code": "NoSuchVersion", "Message": "missing"}}, "HeadObject")
+    with patch("services.aws_service.boto3.client") as client:
+        client.return_value.head_object.side_effect = error
+
+        result = AWSService().get_s3_object_metadata("reports", "archive.csv", "gone")
+
+    assert result["status"] == "unhealthy"
+    assert "NoSuchVersion" in result["error"]
 
 
 def test_s3_download_url_is_a_short_lived_attachment_url():

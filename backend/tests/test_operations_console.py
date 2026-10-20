@@ -18,6 +18,8 @@ def test_console_is_served_to_authenticated_reader():
     assert "Action plans" in response.text
     assert "Browse objects" in response.text
     assert "Object key prefix" in response.text
+    assert "Inspect version" in response.text
+    assert "async function inspectObject(key,versionId=null)" in response.text
     assert "Next page" in response.text
     assert 'id="morePlans"' in response.text
     assert 'id="moreInstances"' in response.text

@@ -77,8 +77,8 @@ class FakeAWSService:
     def get_s3_bucket_details(self, bucket_name):
         return {"status": "healthy", "bucket": bucket_name}
 
-    def get_s3_object_metadata(self, bucket_name, object_key):
-        return {"status": "healthy", "bucket": bucket_name, "object": {"key": object_key}}
+    def get_s3_object_metadata(self, bucket_name, object_key, version_id=None):
+        return {"status": "healthy", "bucket": bucket_name, "object": {"key": object_key, "version_id": version_id}}
 
     def create_s3_object_download_url(self, bucket_name, object_key):
         return {
@@ -646,6 +646,21 @@ def test_s3_object_metadata_is_tenant_scoped_and_preserves_nested_key(monkeypatc
     )
     assert response.status_code == 200
     assert response.json()["object"]["key"] == "reports/annual report.csv"
+
+    historical = client.get(
+        "/cloud/aws/s3/buckets/owned/objects/metadata",
+        params={"key": "reports/annual report.csv", "version_id": "v/1"},
+        headers=headers,
+    )
+    assert historical.status_code == 200
+    assert historical.json()["object"]["version_id"] == "v/1"
+
+    empty_version = client.get(
+        "/cloud/aws/s3/buckets/owned/objects/metadata",
+        params={"key": "reports/annual report.csv", "version_id": ""},
+        headers=headers,
+    )
+    assert empty_version.status_code == 400
 
     foreign = client.get(
         "/cloud/aws/s3/buckets/foreign/objects/metadata",

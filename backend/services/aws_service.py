@@ -537,16 +537,20 @@ class AWSService:
                 "error": str(error),
             }
 
-    def get_s3_object_metadata(self, bucket_name, object_key):
+    def get_s3_object_metadata(self, bucket_name, object_key, version_id=None):
         """Return useful object metadata without downloading its body."""
         try:
-            response = _aws_client("s3").head_object(Bucket=bucket_name, Key=object_key)
+            params = {"Bucket": bucket_name, "Key": object_key}
+            if version_id is not None:
+                params["VersionId"] = version_id
+            response = _aws_client("s3").head_object(**params)
             return {
                 "service": "s3",
                 "status": "healthy",
                 "bucket": bucket_name,
                 "object": {
                     "key": object_key,
+                    "version_id": response.get("VersionId", version_id),
                     "size": response.get("ContentLength"),
                     "content_type": response.get("ContentType"),
                     "etag": response.get("ETag"),

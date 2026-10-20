@@ -471,12 +471,20 @@ def aws_s3_objects(
 
 
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/objects/metadata")
-def aws_s3_object_metadata(bucket_name: str, request: Request, key: str):
+def aws_s3_object_metadata(
+    bucket_name: str, request: Request, key: str, version_id: str = None
+):
     """Inspect one S3 object while enforcing the bucket's tenant boundary."""
     _require_tenant_s3_bucket(request, bucket_name)
     if not key:
         raise HTTPException(status_code=400, detail="key must not be empty")
-    result = aws_service.get_s3_object_metadata(bucket_name, key)
+    if version_id is not None and not version_id:
+        raise HTTPException(status_code=400, detail="version_id must not be empty")
+    result = (
+        aws_service.get_s3_object_metadata(bucket_name, key)
+        if version_id is None
+        else aws_service.get_s3_object_metadata(bucket_name, key, version_id)
+    )
     if result["status"] == "unhealthy":
         _raise_aws_resource_unavailable()
     return result
