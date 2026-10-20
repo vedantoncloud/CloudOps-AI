@@ -41,29 +41,48 @@ class AWSService:
         start = end - timedelta(days=days)
         try:
             client = _aws_client("ce", region_name="us-east-1")
-            response = client.get_cost_and_usage(
+            request = dict(
                 TimePeriod={"Start": start.isoformat(), "End": end.isoformat()},
                 Granularity="DAILY",
                 Metrics=["UnblendedCost"],
                 GroupBy=[{"Type": "DIMENSION", "Key": "SERVICE"}],
             )
-            daily = []
+            daily_totals = {}
             currency = None
             service_totals = {}
-            for item in response.get("ResultsByTime", []):
-                amount = item.get("Total", {}).get("UnblendedCost", {})
-                currency = currency or amount.get("Unit")
-                daily.append({
-                    "date": item.get("TimePeriod", {}).get("Start"),
-                    "amount": float(amount.get("Amount", 0)),
-                })
-                for group in item.get("Groups", []):
-                    name = (group.get("Keys") or ["Unknown"])[0]
-                    group_amount = group.get("Metrics", {}).get("UnblendedCost", {})
-                    currency = currency or group_amount.get("Unit")
-                    service_totals[name] = service_totals.get(name, 0.0) + float(
-                        group_amount.get("Amount", 0)
-                    )
+            seen_page_tokens = set()
+            while True:
+                response = client.get_cost_and_usage(**request)
+                for item in response.get("ResultsByTime", []):
+                    amount = item.get("Total", {}).get("UnblendedCost", {})
+                    currency = currency or amount.get("Unit")
+                    date = item.get("TimePeriod", {}).get("Start")
+                    if date:
+                        # Cost Explorer can repeat each period's total on every
+                        # page while splitting its service groups across pages.
+                        daily_totals[date] = float(amount.get("Amount", 0))
+                    for group in item.get("Groups", []):
+                        name = (group.get("Keys") or ["Unknown"])[0]
+                        group_amount = group.get("Metrics", {}).get("UnblendedCost", {})
+                        currency = currency or group_amount.get("Unit")
+                        service_totals[name] = service_totals.get(name, 0.0) + float(
+                            group_amount.get("Amount", 0)
+                        )
+                next_token = response.get("NextPageToken")
+                if not next_token:
+                    break
+                if next_token in seen_page_tokens:
+                    return {
+                        "service": "aws-cost-explorer",
+                        "status": "unhealthy",
+                        "error": "Cost Explorer returned a repeated page token",
+                    }
+                seen_page_tokens.add(next_token)
+                request["NextPageToken"] = next_token
+            daily = [
+                {"date": date, "amount": daily_totals[date]}
+                for date in sorted(daily_totals)
+            ]
             return {
                 "service": "aws-cost-explorer",
                 "status": "healthy",

@@ -46,6 +46,52 @@ def test_account_costs_requests_selected_complete_day_window():
     assert (datetime.fromisoformat(period["End"]) - datetime.fromisoformat(period["Start"])).days == 90
 
 
+def test_account_costs_follows_cost_explorer_pages_without_double_counting_daily_totals():
+    first_page = {"ResultsByTime": [{
+        "TimePeriod": {"Start": "2026-10-01"},
+        "Total": {"UnblendedCost": {"Amount": "3.00", "Unit": "USD"}},
+        "Groups": [{"Keys": ["Amazon EC2"], "Metrics": {"UnblendedCost": {"Amount": "2.00", "Unit": "USD"}}}],
+    }], "NextPageToken": "page-2"}
+    second_page = {"ResultsByTime": [{
+        "TimePeriod": {"Start": "2026-10-01"},
+        "Total": {"UnblendedCost": {"Amount": "3.00", "Unit": "USD"}},
+        "Groups": [{"Keys": ["Amazon S3"], "Metrics": {"UnblendedCost": {"Amount": "1.00", "Unit": "USD"}}}],
+    }]}
+    with patch("services.aws_service.boto3.client") as factory:
+        factory.return_value.get_cost_and_usage.side_effect = [first_page, second_page]
+        result = AWSService().get_account_costs()
+
+    calls = factory.return_value.get_cost_and_usage.call_args_list
+    assert len(calls) == 2
+    assert "NextPageToken" not in calls[0].kwargs
+    assert calls[1].kwargs["NextPageToken"] == "page-2"
+    assert result["total"] == 3.0
+    assert result["daily"] == [{"date": "2026-10-01", "amount": 3.0}]
+    assert result["services"] == [
+        {"service": "Amazon EC2", "amount": 2.0},
+        {"service": "Amazon S3", "amount": 1.0},
+    ]
+
+
+def test_account_costs_does_not_return_partial_data_when_later_page_fails():
+    with patch("services.aws_service.boto3.client") as factory:
+        factory.return_value.get_cost_and_usage.side_effect = [
+            {"ResultsByTime": [], "NextPageToken": "page-2"},
+            ClientError({"Error": {"Code": "ThrottlingException", "Message": "retry later"}}, "GetCostAndUsage"),
+        ]
+        result = AWSService().get_account_costs()
+    assert result["status"] == "unhealthy"
+    assert result["service"] == "aws-cost-explorer"
+
+
+def test_account_costs_stops_on_repeated_page_token():
+    with patch("services.aws_service.boto3.client") as factory:
+        factory.return_value.get_cost_and_usage.return_value = {"ResultsByTime": [], "NextPageToken": "repeat"}
+        result = AWSService().get_account_costs()
+    assert result["status"] == "unhealthy"
+    assert factory.return_value.get_cost_and_usage.call_count == 2
+
+
 def test_account_costs_service_returns_unhealthy_on_aws_error():
     with patch("services.aws_service.boto3.client") as factory:
         factory.return_value.get_cost_and_usage.side_effect = ClientError({"Error": {"Code": "AccessDeniedException", "Message": "denied"}}, "GetCostAndUsage")
@@ -92,6 +138,31 @@ def test_account_costs_api_sanitizes_billing_failure():
     assert response.status_code == 503
     assert response.json()["detail"] == "AWS billing data is unavailable"
     assert "secret AWS details" not in response.text
+
+
+def test_account_costs_api_sanitizes_provider_exception():
+    app = FastAPI()
+    app.add_middleware(AccessControlMiddleware, mode="token", tokens={
+        "admin": Principal("admin-1", "admin", "tenant-a"),
+    })
+    app.add_api_route("/cloud/aws/account-costs", aws_account_costs)
+    with patch("main.aws_service.get_account_costs", side_effect=RuntimeError("private billing endpoint detail")):
+        response = TestClient(app).get("/cloud/aws/account-costs?days=30", headers={"Authorization": "Bearer admin"})
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS billing data is unavailable"}
+    assert "private billing endpoint detail" not in response.text
+
+
+def test_account_costs_api_rejects_malformed_provider_response():
+    app = FastAPI()
+    app.add_middleware(AccessControlMiddleware, mode="token", tokens={
+        "admin": Principal("admin-1", "admin", "tenant-a"),
+    })
+    app.add_api_route("/cloud/aws/account-costs", aws_account_costs)
+    with patch("main.aws_service.get_account_costs", return_value={"total": 5.0}):
+        response = TestClient(app).get("/cloud/aws/account-costs?days=30", headers={"Authorization": "Bearer admin"})
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS billing data is unavailable"}
 
 
 def test_console_exposes_admin_account_billing_option():

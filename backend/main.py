@@ -209,8 +209,11 @@ def aws_account_costs(request: Request, days: int = 30):
     require_role(request.state.principal, "admin")
     if not 7 <= days <= 90:
         raise HTTPException(status_code=400, detail="days must be between 7 and 90")
-    result = aws_service.get_account_costs(days=days)
-    if result["status"] == "unhealthy":
+    try:
+        result = aws_service.get_account_costs(days=days)
+    except Exception:
+        raise HTTPException(status_code=503, detail="AWS billing data is unavailable")
+    if not isinstance(result, dict) or result.get("status") != "healthy":
         raise HTTPException(status_code=503, detail="AWS billing data is unavailable")
     return result
 
