@@ -1,6 +1,6 @@
 # CloudOps AI Roadmap
 
-**Repository audit:** 2026-10-20, updated after S3 direct resource endpoints began returning sanitized dependency failures for provider exceptions and malformed responses. This roadmap contains **9 remaining tasks**: the nine numbered incomplete outcomes below. Sub-bullets and acceptance criteria do not count separately. Recount only when a complete outcome ships or scope is explicitly changed.
+**Repository audit:** 2026-10-20, updated after S3 bucket analysis gained a spreadsheet-safe report export. This roadmap contains **9 remaining tasks**: the nine numbered incomplete outcomes below. Sub-bullets and acceptance criteria do not count separately. Recount only when a complete outcome ships or scope is explicitly changed.
 
 Focused GitOps persistence, API, attribution, and readiness regression tests passed after adding durable GitOps lifecycle state (52 tests).
 
@@ -59,6 +59,7 @@ S3 object statistics, largest-object analysis, bucket health, insights, and opti
 - Production environment startup validation rejects permissive development authentication and requires configured bearer tokens.
 - Approved dry-run action-plan execution records its status transition and authenticated actor in the audit trail; rejected and blocked execution requests do not emit a success event.
 - S3 object statistics, largest-object analysis, bucket health, insights, and optimization routes map thrown provider failures and unhealthy results to a stable sanitized `503`; successful responses and request-limit validation are covered.
+- Operators can export S3 bucket analysis results as spreadsheet-safe CSV, including successful check details, failed checks, selected prefix, and object-scan coverage metadata; export stays disabled until an analysis finishes.
 - The admin-only AWS account billing endpoint maps provider exceptions, unhealthy results, and malformed provider responses to a stable sanitized `503`; success, authorization, and billing-window validation remain covered.
 - Admin billing reports now follow Cost Explorer pagination, combine service groups across pages without double-counting repeated daily totals, and fail closed if a later page is unavailable.
 - Operators can inspect paginated CloudWatch CPU utilization alarms for an EC2 instance from its regional details panel; alarm lookup checks tenant ownership first, bounds each page to 100 alarms, and maps provider failures to a sanitized `503`.
