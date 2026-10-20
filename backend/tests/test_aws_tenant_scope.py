@@ -298,7 +298,7 @@ def test_ec2_instance_details_reports_inventory_unavailable(monkeypatch):
     )
 
     assert response.status_code == 503
-    assert response.json() == {"detail": "EC2 inventory is unavailable"}
+    assert response.json() == {"detail": "AWS resource data is unavailable"}
 
 
 def test_ec2_instance_details_finds_owned_instance_beyond_inventory_page(monkeypatch):

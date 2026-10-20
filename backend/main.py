@@ -294,9 +294,11 @@ def _require_tenant_ec2_instance(request: Request, instance_id: str, region: str
     """Hide EC2 instances that are not explicitly owned by this tenant."""
     if not getattr(request.state, "tenant_scoped", False):
         return
-    result = aws_service.get_ec2_instance(instance_id, **({"region": region} if region else {}))
-    if result.get("status") != "healthy":
-        raise HTTPException(status_code=503, detail="EC2 inventory is unavailable")
+    result = _aws_resource_result(
+        lambda: aws_service.get_ec2_instance(
+            instance_id, **({"region": region} if region else {})
+        )
+    )
     tenant_id = request.state.tenant_id
     instance = result.get("instance")
     owned = instance is not None and _resource_tenant({"tags": instance.get("tags", {})}) == tenant_id
@@ -327,7 +329,7 @@ def _aws_resource_result(operation):
         result = operation()
     except Exception:
         _raise_aws_resource_unavailable()
-    if not isinstance(result, dict) or result.get("status") == "unhealthy":
+    if not isinstance(result, dict) or result.get("status") != "healthy":
         _raise_aws_resource_unavailable()
     return result
 
@@ -641,12 +643,9 @@ def aws_ec2_insights(instance_id: str, request: Request, region: str | None = No
     _validate_ec2_instance_id(instance_id)
     _validate_ec2_region(region)
     _require_tenant_ec2_instance(request, instance_id, region)
-    result = aws_service.get_ec2_insights(instance_id, **({"region": region} if region else {}))
-
-    if result["status"] == "unhealthy":
-        _raise_aws_resource_unavailable()
-
-    return result
+    return _aws_resource_result(lambda: aws_service.get_ec2_insights(
+        instance_id, **({"region": region} if region else {})
+    ))
 
 
 @app.get("/cloud/aws/ec2/instances/{instance_id}")
@@ -655,9 +654,9 @@ def aws_ec2_instance_details(instance_id: str, request: Request, region: str | N
     _validate_ec2_instance_id(instance_id)
     _validate_ec2_region(region)
 
-    result = aws_service.get_ec2_instance(instance_id, **({"region": region} if region else {}))
-    if result.get("status") != "healthy":
-        raise HTTPException(status_code=503, detail="EC2 inventory is unavailable")
+    result = _aws_resource_result(lambda: aws_service.get_ec2_instance(
+        instance_id, **({"region": region} if region else {})
+    ))
 
     instance = result.get("instance")
     if instance is None or (
@@ -673,68 +672,56 @@ def aws_ec2_instance_details(instance_id: str, request: Request, region: str | N
 def aws_ec2_efficiency_insights(request: Request, region: str | None = None):
     _validate_ec2_region(region)
     if not getattr(request.state, "tenant_scoped", False) and not region:
-        result = aws_service.get_ec2_efficiency_insights()
+        operation = lambda: aws_service.get_ec2_efficiency_insights()
     else:
         inventory = _all_tenant_ec2_instances(request, region)
         if inventory.get("status") != "healthy":
             return inventory
-        result = aws_service.get_ec2_efficiency_insights(instances=inventory.get("instances", []), **({"region": region} if region else {}))
+        operation = lambda: aws_service.get_ec2_efficiency_insights(instances=inventory.get("instances", []), **({"region": region} if region else {}))
 
-    if result["status"] == "unhealthy":
-        _raise_aws_resource_unavailable()
-
-    return result
+    return _aws_resource_result(operation)
 
 
 @app.get("/cloud/aws/ec2/cost-insights")
 def aws_ec2_cost_insights(request: Request, region: str | None = None):
     _validate_ec2_region(region)
     if not getattr(request.state, "tenant_scoped", False) and not region:
-        result = aws_service.get_ec2_cost_insights()
+        operation = lambda: aws_service.get_ec2_cost_insights()
     else:
         inventory = _all_tenant_ec2_instances(request, region)
         if inventory.get("status") != "healthy":
             return inventory
-        result = aws_service.get_ec2_cost_insights(instances=inventory.get("instances", []), **({"region": region} if region else {}))
+        operation = lambda: aws_service.get_ec2_cost_insights(instances=inventory.get("instances", []), **({"region": region} if region else {}))
 
-    if result["status"] == "unhealthy":
-        _raise_aws_resource_unavailable()
-
-    return result
+    return _aws_resource_result(operation)
 
 
 @app.get("/cloud/aws/ec2/rightsizing-insights")
 def aws_ec2_rightsizing_insights(request: Request, region: str | None = None):
     _validate_ec2_region(region)
     if not getattr(request.state, "tenant_scoped", False) and not region:
-        result = aws_service.get_ec2_rightsizing_insights()
+        operation = lambda: aws_service.get_ec2_rightsizing_insights()
     else:
         inventory = _all_tenant_ec2_instances(request, region)
         if inventory.get("status") != "healthy":
             return inventory
-        result = aws_service.get_ec2_rightsizing_insights(instances=inventory.get("instances", []), **({"region": region} if region else {}))
+        operation = lambda: aws_service.get_ec2_rightsizing_insights(instances=inventory.get("instances", []), **({"region": region} if region else {}))
 
-    if result["status"] == "unhealthy":
-        _raise_aws_resource_unavailable()
-
-    return result
+    return _aws_resource_result(operation)
 
 
 @app.get("/cloud/aws/ec2/security-insights")
 def aws_ec2_security_insights(request: Request, region: str | None = None):
     _validate_ec2_region(region)
     if not getattr(request.state, "tenant_scoped", False) and not region:
-        result = aws_service.get_ec2_security_insights()
+        operation = lambda: aws_service.get_ec2_security_insights()
     else:
         inventory = _all_tenant_ec2_instances(request, region)
         if inventory.get("status") != "healthy":
             return inventory
-        result = aws_service.get_ec2_security_insights(instances=inventory.get("instances", []), **({"region": region} if region else {}))
+        operation = lambda: aws_service.get_ec2_security_insights(instances=inventory.get("instances", []), **({"region": region} if region else {}))
 
-    if result["status"] == "unhealthy":
-        _raise_aws_resource_unavailable()
-
-    return result
+    return _aws_resource_result(operation)
 
 
 @app.get("/cloud/aws/ec2/instances/{instance_id}/cpu")
@@ -742,12 +729,9 @@ def aws_ec2_cpu(instance_id: str, request: Request, region: str | None = None):
     _validate_ec2_instance_id(instance_id)
     _validate_ec2_region(region)
     _require_tenant_ec2_instance(request, instance_id, region)
-    result = aws_service.get_ec2_cpu_utilization(instance_id, **({"region": region} if region else {}))
-
-    if result["status"] == "unhealthy":
-        _raise_aws_resource_unavailable()
-
-    return result
+    return _aws_resource_result(lambda: aws_service.get_ec2_cpu_utilization(
+        instance_id, **({"region": region} if region else {})
+    ))
 
 
 @app.get("/cloud/aws/ec2/instances/{instance_id}/network")
@@ -755,12 +739,9 @@ def aws_ec2_network_utilization(instance_id: str, request: Request, region: str 
     _validate_ec2_instance_id(instance_id)
     _validate_ec2_region(region)
     _require_tenant_ec2_instance(request, instance_id, region)
-    result = aws_service.get_ec2_network_utilization(instance_id, **({"region": region} if region else {}))
-
-    if result["status"] == "unhealthy":
-        _raise_aws_resource_unavailable()
-
-    return result
+    return _aws_resource_result(lambda: aws_service.get_ec2_network_utilization(
+        instance_id, **({"region": region} if region else {})
+    ))
 
 
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/security-insights")
@@ -795,12 +776,9 @@ def aws_ec2_instance_status(instance_id: str, request: Request, region: str | No
     _validate_ec2_instance_id(instance_id)
     _validate_ec2_region(region)
     _require_tenant_ec2_instance(request, instance_id, region)
-    result = aws_service.get_ec2_instance_status(instance_id, **({"region": region} if region else {}))
-
-    if result["status"] == "unhealthy":
-        _raise_aws_resource_unavailable()
-
-    return result
+    return _aws_resource_result(lambda: aws_service.get_ec2_instance_status(
+        instance_id, **({"region": region} if region else {})
+    ))
 
 
 @app.get("/cloud/aws/ec2/instances/{instance_id}/alarms")
@@ -828,11 +806,9 @@ def aws_ec2_metrics(instance_id: str, request: Request, lookback_hours: int = 1,
     _require_tenant_ec2_instance(request, instance_id, region)
     if not 1 <= lookback_hours <= 24:
         raise HTTPException(status_code=400, detail="lookback_hours must be between 1 and 24")
-    result = aws_service.get_ec2_metrics(instance_id, lookback_hours=lookback_hours, **({"region": region} if region else {}))
-
-    if result["status"] == "unhealthy":
-        _raise_aws_resource_unavailable()
-
-    return result
+    return _aws_resource_result(lambda: aws_service.get_ec2_metrics(
+        instance_id, lookback_hours=lookback_hours,
+        **({"region": region} if region else {}),
+    ))
 
 
