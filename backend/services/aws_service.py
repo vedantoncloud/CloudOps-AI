@@ -1527,6 +1527,8 @@ class AWSService:
             configuration = {
                 "encryption": None,
                 "public_access_block": None,
+                "bucket_policy_public": None,
+                "public_acl_grantees": None,
             }
             unavailable_checks = []
 
@@ -1569,6 +1571,77 @@ class AWSService:
                         })
                     else:
                         raise
+                else:
+                    raise
+
+            try:
+                policy_status = s3.get_bucket_policy_status(Bucket=bucket_name)
+                policy_data = policy_status.get("PolicyStatus") if isinstance(policy_status, dict) else None
+                is_public = policy_data.get("IsPublic") if isinstance(policy_data, dict) else None
+                if isinstance(is_public, bool):
+                    configuration["bucket_policy_public"] = is_public
+                    if is_public:
+                        insights.append({
+                            "type": "public_bucket_policy",
+                            "severity": "high",
+                            "message": "The bucket policy is classified by AWS as public.",
+                            "recommendation": "Review the bucket policy and remove public access unless it is explicitly required.",
+                        })
+                else:
+                    unavailable_checks.append("bucket_policy_status")
+            except ClientError as error:
+                error_code = error.response.get("Error", {}).get("Code")
+                if error_code in {"AccessDenied", "AllAccessDisabled"}:
+                    unavailable_checks.append("bucket_policy_status")
+                elif error_code == "NoSuchBucketPolicy":
+                    configuration["bucket_policy_public"] = False
+                else:
+                    raise
+
+            try:
+                acl = s3.get_bucket_acl(Bucket=bucket_name)
+                grants = acl.get("Grants") if isinstance(acl, dict) else None
+                if not isinstance(grants, list) or any(
+                    not isinstance(grant, dict)
+                    or not isinstance(grant.get("Grantee"), dict)
+                    or (
+                        "URI" in grant.get("Grantee", {})
+                        and not isinstance(grant["Grantee"]["URI"], str)
+                    )
+                    for grant in grants
+                ):
+                    unavailable_checks.append("bucket_acl")
+                    grants = None
+                if grants is None:
+                    public_grantees = None
+                else:
+                    public_grantees = sorted({
+                        grant["Grantee"].get("URI", "").rsplit("/", 1)[-1]
+                        for grant in grants
+                        if grant["Grantee"].get("Type") == "Group"
+                        and isinstance(grant["Grantee"].get("URI", ""), str)
+                        and grant["Grantee"].get("URI", "").rstrip("/").endswith((
+                            "AllUsers", "AuthenticatedUsers"
+                        ))
+                    })
+                if public_grantees is not None:
+                    configuration["public_acl_grantees"] = public_grantees
+                if public_grantees:
+                    insights.append({
+                        "type": "public_bucket_acl",
+                        "severity": "high",
+                        "grantees": public_grantees,
+                        "message": "The bucket ACL grants access to a public group.",
+                        "recommendation": "Review and remove public ACL grants unless public access is explicitly required.",
+                    })
+            except ClientError as error:
+                error_code = error.response.get("Error", {}).get("Code")
+                if error_code in {"AccessDenied", "AllAccessDisabled"}:
+                    unavailable_checks.append("bucket_acl")
+                elif error_code == "AccessControlListNotSupported":
+                    # Object Ownership's bucket-owner-enforced mode disables ACLs.
+                    configuration["public_acl_grantees"] = []
+                    configuration["bucket_acl_status"] = "disabled"
                 else:
                     raise
 

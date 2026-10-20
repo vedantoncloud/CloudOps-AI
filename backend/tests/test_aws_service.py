@@ -3023,6 +3023,8 @@ def test_ec2_security_insights_api_access_denied():
 
 def test_get_s3_security_insights_secure_bucket():
     mock_s3 = MagicMock()
+    mock_s3.get_bucket_policy_status.return_value = {"PolicyStatus": {"IsPublic": False}}
+    mock_s3.get_bucket_acl.return_value = {"Grants": []}
     mock_s3.get_bucket_encryption.return_value = {
         "ServerSideEncryptionConfiguration": {
             "Rules": [{
@@ -3052,6 +3054,8 @@ def test_get_s3_security_insights_secure_bucket():
 
 def test_get_s3_security_insights_detects_missing_encryption():
     mock_s3 = MagicMock()
+    mock_s3.get_bucket_policy_status.return_value = {"PolicyStatus": {"IsPublic": False}}
+    mock_s3.get_bucket_acl.return_value = {"Grants": []}
     mock_s3.get_bucket_encryption.side_effect = ClientError(
         {"Error": {"Code": "ServerSideEncryptionConfigurationNotFoundError", "Message": "Not configured"}},
         "GetBucketEncryption",
@@ -3076,6 +3080,8 @@ def test_get_s3_security_insights_detects_missing_encryption():
 
 def test_get_s3_security_insights_detects_incomplete_public_access_block():
     mock_s3 = MagicMock()
+    mock_s3.get_bucket_policy_status.return_value = {"PolicyStatus": {"IsPublic": False}}
+    mock_s3.get_bucket_acl.return_value = {"Grants": []}
     mock_s3.get_bucket_encryption.return_value = {
         "ServerSideEncryptionConfiguration": {
             "Rules": [{
@@ -3109,6 +3115,8 @@ def test_get_s3_security_insights_detects_incomplete_public_access_block():
 
 def test_get_s3_security_insights_handles_missing_public_access_block():
     mock_s3 = MagicMock()
+    mock_s3.get_bucket_policy_status.return_value = {"PolicyStatus": {"IsPublic": False}}
+    mock_s3.get_bucket_acl.return_value = {"Grants": []}
     mock_s3.get_bucket_encryption.return_value = {
         "ServerSideEncryptionConfiguration": {
             "Rules": [{
@@ -3135,6 +3143,14 @@ def test_get_s3_security_insights_handles_missing_public_access_block():
 
 def test_get_s3_security_insights_permission_limited():
     mock_s3 = MagicMock()
+    mock_s3.get_bucket_policy_status.side_effect = ClientError(
+        {"Error": {"Code": "AccessDenied", "Message": "Access denied"}},
+        "GetBucketPolicyStatus",
+    )
+    mock_s3.get_bucket_acl.side_effect = ClientError(
+        {"Error": {"Code": "AccessDenied", "Message": "Access denied"}},
+        "GetBucketAcl",
+    )
     access_denied = ClientError(
         {"Error": {"Code": "AccessDenied", "Message": "Access denied"}},
         "GetBucketEncryption",
@@ -3155,7 +3171,133 @@ def test_get_s3_security_insights_permission_limited():
     assert set(result["insights"][0]["checks"]) == {
         "encryption",
         "public_access_block",
+        "bucket_policy_status",
+        "bucket_acl",
     }
+
+
+def test_get_s3_security_insights_detects_public_policy_and_acl_grants():
+    mock_s3 = MagicMock()
+    mock_s3.get_bucket_encryption.return_value = {
+        "ServerSideEncryptionConfiguration": {"Rules": [{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]}
+    }
+    mock_s3.get_public_access_block.return_value = {
+        "PublicAccessBlockConfiguration": {
+            "BlockPublicAcls": True, "IgnorePublicAcls": True,
+            "BlockPublicPolicy": True, "RestrictPublicBuckets": True,
+        }
+    }
+    mock_s3.get_bucket_policy_status.return_value = {"PolicyStatus": {"IsPublic": True}}
+    mock_s3.get_bucket_acl.return_value = {"Grants": [
+        {"Grantee": {"Type": "Group", "URI": "http://acs.amazonaws.com/groups/global/AllUsers"}, "Permission": "READ"},
+        {"Grantee": {"Type": "Group", "URI": "http://acs.amazonaws.com/groups/global/AuthenticatedUsers"}, "Permission": "READ"},
+        {"Grantee": {"Type": "CanonicalUser", "ID": "private"}, "Permission": "FULL_CONTROL"},
+    ]}
+
+    with patch("boto3.client", return_value=mock_s3):
+        result = AWSService().get_s3_security_insights("public-bucket")
+
+    assert result["health"] == "warning"
+    assert {item["type"] for item in result["insights"]} == {
+        "public_bucket_policy", "public_bucket_acl"
+    }
+    assert result["configuration"]["bucket_policy_public"] is True
+    assert result["configuration"]["public_acl_grantees"] == ["AllUsers", "AuthenticatedUsers"]
+
+
+def test_get_s3_security_insights_reports_unknown_when_policy_response_is_malformed():
+    mock_s3 = MagicMock()
+    mock_s3.get_bucket_encryption.return_value = {
+        "ServerSideEncryptionConfiguration": {"Rules": [{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]}
+    }
+    mock_s3.get_public_access_block.return_value = {
+        "PublicAccessBlockConfiguration": {
+            "BlockPublicAcls": True, "IgnorePublicAcls": True,
+            "BlockPublicPolicy": True, "RestrictPublicBuckets": True,
+        }
+    }
+    mock_s3.get_bucket_policy_status.return_value = {"PolicyStatus": {}}
+    mock_s3.get_bucket_acl.return_value = {"Grants": []}
+
+    with patch("boto3.client", return_value=mock_s3):
+        result = AWSService().get_s3_security_insights("unknown-bucket")
+
+    assert result["health"] == "unknown"
+    assert result["configuration"]["bucket_policy_public"] is None
+    unavailable = next(item for item in result["insights"] if item["type"] == "security_configuration_unavailable")
+    assert unavailable["checks"] == ["bucket_policy_status"]
+
+
+def test_get_s3_security_insights_accepts_acl_disabled_bucket_ownership():
+    mock_s3 = MagicMock()
+    mock_s3.get_bucket_encryption.return_value = {
+        "ServerSideEncryptionConfiguration": {"Rules": [{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]}
+    }
+    mock_s3.get_public_access_block.return_value = {
+        "PublicAccessBlockConfiguration": {
+            "BlockPublicAcls": True, "IgnorePublicAcls": True,
+            "BlockPublicPolicy": True, "RestrictPublicBuckets": True,
+        }
+    }
+    mock_s3.get_bucket_policy_status.return_value = {"PolicyStatus": {"IsPublic": False}}
+    mock_s3.get_bucket_acl.side_effect = ClientError(
+        {"Error": {"Code": "AccessControlListNotSupported", "Message": "ACLs disabled"}},
+        "GetBucketAcl",
+    )
+
+    with patch("boto3.client", return_value=mock_s3):
+        result = AWSService().get_s3_security_insights("owner-enforced-bucket")
+
+    assert result["health"] == "healthy"
+    assert result["configuration"]["public_acl_grantees"] == []
+    assert result["configuration"]["bucket_acl_status"] == "disabled"
+
+
+def test_get_s3_security_insights_reports_malformed_acl_as_unknown():
+    mock_s3 = MagicMock()
+    mock_s3.get_bucket_encryption.return_value = {
+        "ServerSideEncryptionConfiguration": {"Rules": [{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]}
+    }
+    mock_s3.get_public_access_block.return_value = {
+        "PublicAccessBlockConfiguration": {
+            "BlockPublicAcls": True, "IgnorePublicAcls": True,
+            "BlockPublicPolicy": True, "RestrictPublicBuckets": True,
+        }
+    }
+    mock_s3.get_bucket_policy_status.return_value = {"PolicyStatus": {"IsPublic": False}}
+    mock_s3.get_bucket_acl.return_value = {"Grants": "unexpected"}
+
+    with patch("boto3.client", return_value=mock_s3):
+        result = AWSService().get_s3_security_insights("malformed-acl-bucket")
+
+    assert result["health"] == "unknown"
+    assert result["configuration"]["public_acl_grantees"] is None
+    unavailable = next(item for item in result["insights"] if item["type"] == "security_configuration_unavailable")
+    assert unavailable["checks"] == ["bucket_acl"]
+
+
+def test_get_s3_security_insights_fails_closed_on_unexpected_policy_error():
+    mock_s3 = MagicMock()
+    mock_s3.get_bucket_encryption.return_value = {
+        "ServerSideEncryptionConfiguration": {"Rules": [{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]}
+    }
+    mock_s3.get_public_access_block.return_value = {
+        "PublicAccessBlockConfiguration": {
+            "BlockPublicAcls": True, "IgnorePublicAcls": True,
+            "BlockPublicPolicy": True, "RestrictPublicBuckets": True,
+        }
+    }
+    mock_s3.get_bucket_policy_status.side_effect = ClientError(
+        {"Error": {"Code": "InternalError", "Message": "private provider detail"}},
+        "GetBucketPolicyStatus",
+    )
+    mock_s3.get_bucket_acl.return_value = {"Grants": []}
+
+    with patch("boto3.client", return_value=mock_s3):
+        result = AWSService().get_s3_security_insights("unavailable-bucket")
+
+    assert result["status"] == "unhealthy"
+    assert "private provider detail" in result["error"]
 
 
 def test_get_s3_security_insights_bucket_failure():

@@ -14,6 +14,13 @@ the console. The token is held in page memory and cleared when the page closes.
 The console and API show planning and governance information. Infrastructure
 mutations remain disabled; action execution is dry-run only.
 
+S3 bucket analysis checks encryption, Public Access Block, whether AWS classifies
+the bucket policy as public, public ACL grants, and versioning. The AWS role needs
+`s3:GetBucketPolicyStatus` and `s3:GetBucketAcl` for the policy and ACL checks.
+Denied or malformed check results are reported as unknown; they are not treated
+as evidence that the bucket is private. Buckets using bucket-owner-enforced
+Object Ownership have ACL checks reported as disabled.
+
 ## API access control
 
 The assembled API supports two access modes. For local development, set
