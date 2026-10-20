@@ -37,6 +37,8 @@ Operators can inspect EC2 instance and system reachability checks plus scheduled
 
 Operators can export every S3 object version and delete marker for the currently selected object prefix as a spreadsheet-safe CSV. The export follows S3 key/version pagination markers and stops without a partial download if listing fails or pagination becomes invalid.
 
+Operators can export loaded EC2 fleet efficiency, cost, rightsizing, and security insights as a spreadsheet-safe CSV with category, region, and nested result fields; provider failures clear stale results and keep export disabled.
+
 ## Completed work
 
 - FastAPI application and AWS service status/connectivity checks.
