@@ -318,6 +318,17 @@ def _raise_aws_resource_unavailable() -> None:
     raise HTTPException(status_code=503, detail="AWS resource data is unavailable")
 
 
+def _aws_resource_result(operation):
+    """Map provider exceptions and unhealthy results to a stable dependency error."""
+    try:
+        result = operation()
+    except Exception:
+        _raise_aws_resource_unavailable()
+    if result.get("status") == "unhealthy":
+        _raise_aws_resource_unavailable()
+    return result
+
+
 @app.get("/cloud/aws/ec2/instances")
 def aws_ec2_instances(request: Request, state: str = None, tag: str = None, max_results: int = None, next_token: str = None, name: str = None, region: str = None, instance_type: str = None, vpc_id: str = None, subnet_id: str = None):
     valid_states = {
@@ -546,16 +557,9 @@ def aws_s3_object_statistics(
             detail="max_keys must be between 1 and 1000",
         )
 
-    result = aws_service.get_s3_object_statistics(
-        bucket_name,
-        prefix=prefix,
-        max_keys=max_keys,
-    )
-
-    if result["status"] == "unhealthy":
-        _raise_aws_resource_unavailable()
-
-    return result
+    return _aws_resource_result(lambda: aws_service.get_s3_object_statistics(
+        bucket_name, prefix=prefix, max_keys=max_keys,
+    ))
 
 
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/largest-objects")
@@ -579,17 +583,9 @@ def aws_s3_largest_objects(
             detail="top_n must be between 1 and 100",
         )
 
-    result = aws_service.get_s3_largest_objects(
-        bucket_name,
-        prefix=prefix,
-        max_keys=max_keys,
-        top_n=top_n,
-    )
-
-    if result["status"] == "unhealthy":
-        _raise_aws_resource_unavailable()
-
-    return result
+    return _aws_resource_result(lambda: aws_service.get_s3_largest_objects(
+        bucket_name, prefix=prefix, max_keys=max_keys, top_n=top_n,
+    ))
 
 
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/health")
@@ -606,16 +602,9 @@ def aws_s3_bucket_health(
             detail="max_keys must be between 1 and 1000",
         )
 
-    result = aws_service.get_s3_bucket_health(
-        bucket_name,
-        prefix=prefix,
-        max_keys=max_keys,
-    )
-
-    if result["status"] == "unhealthy":
-        _raise_aws_resource_unavailable()
-
-    return result
+    return _aws_resource_result(lambda: aws_service.get_s3_bucket_health(
+        bucket_name, prefix=prefix, max_keys=max_keys,
+    ))
 
 
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/insights")
@@ -632,16 +621,9 @@ def aws_s3_bucket_insights(
             detail="max_keys must be between 1 and 1000",
         )
 
-    result = aws_service.get_s3_bucket_insights(
-        bucket_name,
-        prefix=prefix,
-        max_keys=max_keys,
-    )
-
-    if result["status"] == "unhealthy":
-        _raise_aws_resource_unavailable()
-
-    return result
+    return _aws_resource_result(lambda: aws_service.get_s3_bucket_insights(
+        bucket_name, prefix=prefix, max_keys=max_keys,
+    ))
 
 
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/optimization")
@@ -658,16 +640,9 @@ def aws_s3_bucket_optimization(
             detail="max_keys must be between 1 and 1000",
         )
 
-    result = aws_service.get_s3_bucket_optimization(
-        bucket_name,
-        prefix=prefix,
-        max_keys=max_keys,
-    )
-
-    if result["status"] == "unhealthy":
-        _raise_aws_resource_unavailable()
-
-    return result
+    return _aws_resource_result(lambda: aws_service.get_s3_bucket_optimization(
+        bucket_name, prefix=prefix, max_keys=max_keys,
+    ))
 
 
 @app.get("/cloud/aws/ec2/instances/{instance_id}/insights")
