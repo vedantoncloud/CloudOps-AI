@@ -1746,6 +1746,70 @@ class AWSService:
                 "error": str(error),
             }
 
+    def get_ec2_alarms(self, instance_id, next_token=None, region=None):
+        """Return one bounded page of CPU utilization alarms for an instance."""
+        try:
+            cloudwatch = _aws_client(
+                "cloudwatch", **({"region_name": region} if region else {})
+            )
+            params = {"AlarmTypes": ["MetricAlarm"], "MaxRecords": 100}
+            if next_token:
+                params["NextToken"] = next_token
+            response = cloudwatch.describe_alarms(**params)
+            alarms = []
+            for alarm in response.get("MetricAlarms", []):
+                if not isinstance(alarm, dict):
+                    continue
+                metrics = [
+                    {
+                        "MetricName": alarm.get("MetricName"),
+                        "Namespace": alarm.get("Namespace"),
+                        "Dimensions": alarm.get("Dimensions", []),
+                    }
+                ]
+                metrics.extend(
+                    query.get("MetricStat", {}).get("Metric", {})
+                    for query in alarm.get("Metrics", [])
+                    if isinstance(query, dict)
+                    and isinstance(query.get("MetricStat"), dict)
+                )
+                if not any(
+                    metric.get("MetricName") == "CPUUtilization"
+                    and metric.get("Namespace") == "AWS/EC2"
+                    and any(
+                        dimension.get("Name") == "InstanceId"
+                        and dimension.get("Value") == instance_id
+                        for dimension in metric.get("Dimensions", [])
+                        if isinstance(dimension, dict)
+                    )
+                    for metric in metrics
+                    if isinstance(metric, dict)
+                ):
+                    continue
+                alarms.append({
+                    key: alarm[key]
+                    for key in (
+                        "AlarmName", "AlarmDescription", "StateValue", "StateReason",
+                        "MetricName", "Namespace", "Threshold", "ComparisonOperator",
+                        "Period", "EvaluationPeriods", "TreatMissingData",
+                    )
+                    if key in alarm
+                })
+            return {
+                "service": "cloudwatch",
+                "status": "healthy",
+                "instance_id": instance_id,
+                "alarms": alarms,
+                "next_token": response.get("NextToken"),
+            }
+        except (BotoCoreError, ClientError) as error:
+            return {
+                "service": "cloudwatch",
+                "status": "unhealthy",
+                "instance_id": instance_id,
+                "error": str(error),
+            }
+
 
 def _record_operation_metrics(method):
     """Record provider operation outcomes using only a fixed method label."""

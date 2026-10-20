@@ -793,6 +793,24 @@ def aws_ec2_instance_status(instance_id: str, request: Request, region: str | No
     return result
 
 
+@app.get("/cloud/aws/ec2/instances/{instance_id}/alarms")
+def aws_ec2_alarms(
+    instance_id: str,
+    request: Request,
+    next_token: str | None = None,
+    region: str | None = None,
+):
+    """List CloudWatch CPU alarms attached to one visible EC2 instance."""
+    _validate_ec2_instance_id(instance_id)
+    _validate_ec2_region(region)
+    _require_tenant_ec2_instance(request, instance_id, region)
+    return _aws_resource_result(lambda: aws_service.get_ec2_alarms(
+        instance_id,
+        next_token=next_token,
+        **({"region": region} if region else {}),
+    ))
+
+
 @app.get("/cloud/aws/ec2/instances/{instance_id}/metrics")
 def aws_ec2_metrics(instance_id: str, request: Request, lookback_hours: int = 1, region: str | None = None):
     _validate_ec2_instance_id(instance_id)
