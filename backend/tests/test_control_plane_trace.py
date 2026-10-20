@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from autonomy.audit_api import audit_trail, router as audit_router
 from autonomy.control_loop_api import router as control_loop_router
 from autonomy.control_plane_api import router as control_plane_router
+from autonomy.gitops import GitOpsChange, GitOpsEngine
 from autonomy.gitops_api import registry as gitops_registry
 from autonomy.gitops_api import router as gitops_router
 from auth import AccessControlMiddleware, Principal
@@ -193,6 +194,7 @@ def test_action_trace_hides_other_actors_from_tenant_users():
         action_id="private-trace", action_type="inspect", resource_type="ec2",
         resource_id="i-private", old_status="pending", new_status="approved",
         event="approval", actor_id="tenant-a",
+        details={"tenant_id": "tenant-a"},
     )
     token_app = FastAPI()
     token_app.include_router(control_plane_router)
@@ -214,3 +216,66 @@ def test_action_trace_hides_other_actors_from_tenant_users():
     assert own.status_code == 200
     assert own.json()["audit_events"][0]["actor_id"] == "tenant-a"
     assert foreign.status_code == 404
+
+
+def test_action_trace_isolated_when_subject_is_shared_across_tenants():
+    action_id = "shared-subject-action"
+    engine = GitOpsEngine()
+    change = engine.create_change_set(
+        source_action_id=action_id,
+        changes=[GitOpsChange(
+            resource_type="ec2", resource_id="i-tenant-a",
+            field="instance_type", current_value="t3.small",
+            desired_value="t3.medium", reason="capacity",
+        )],
+        requires_approval=True,
+    )
+    change.metadata["tenant_id"] = "tenant-a"
+    gitops_registry.register(change, actor_id="shared-operator")
+    audit_trail.record(
+        action_id=action_id, action_type="review", resource_type="ec2",
+        resource_id="i-tenant-a", old_status="pending", new_status="approved",
+        event="approval", actor_id="shared-operator",
+        details={"tenant_id": "tenant-a"},
+    )
+
+    tenant_app = FastAPI()
+    tenant_app.include_router(control_plane_router)
+    tenant_app.add_middleware(
+        AccessControlMiddleware, mode="token",
+        tokens={
+            "tenant-a-token": Principal("shared-operator", "operator", "tenant-a"),
+            "tenant-b-token": Principal("shared-operator", "operator", "tenant-b"),
+        },
+    )
+    tenant_client = TestClient(tenant_app)
+    trace_url = f"/autonomy/control-plane/actions/{action_id}/trace"
+
+    own = tenant_client.get(trace_url, headers={"Authorization": "Bearer tenant-a-token"})
+    foreign = tenant_client.get(trace_url, headers={"Authorization": "Bearer tenant-b-token"})
+
+    assert own.status_code == 200
+    assert own.json()["gitops"]["changes"][0]["resource_id"] == "i-tenant-a"
+    assert len(own.json()["audit_events"]) == 2
+    assert foreign.status_code == 404
+
+
+def test_action_trace_hides_legacy_events_without_tenant_attribution():
+    audit_trail.record(
+        action_id="legacy-trace", action_type="review", resource_type="ec2",
+        resource_id="i-legacy", old_status="pending", new_status="approved",
+        event="approval", actor_id="shared-operator",
+    )
+    tenant_app = FastAPI()
+    tenant_app.include_router(control_plane_router)
+    tenant_app.add_middleware(
+        AccessControlMiddleware, mode="token",
+        tokens={"token": Principal("shared-operator", "operator", "tenant-a")},
+    )
+
+    response = TestClient(tenant_app).get(
+        "/autonomy/control-plane/actions/legacy-trace/trace",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert response.status_code == 404

@@ -245,6 +245,8 @@ def evaluate_control_loop(request: ControlLoopEvaluateRequest, http_request: Req
                 "requires_human_review": result.decision.requires_human_review,
                 "gitops_created": gitops_created,
                 "gitops_change_id": gitops_change_id,
+                **({"tenant_id": http_request.state.tenant_id}
+                   if getattr(http_request.state, "tenant_scoped", False) else {}),
                 "resource_pipeline": pipeline_evidence,
                 "resource_context": { "provider": getattr(pipeline.resource_context, "provider", pipeline.resource_context.observation.get("provider", provider.provider_name)), "resource_id": getattr(pipeline.resource_context, "resource_id", pipeline.resource_context.observation.get("resource_id", request.resource_id)), "resource_type": getattr(pipeline.resource_context, "resource_type", pipeline.resource_context.observation.get("resource_type", request.resource_type)), "observation": pipeline.resource_context.observation },
                 "governance": governance_evidence,

@@ -120,7 +120,11 @@ class GitOpsChangeSetRegistry:
                 event="gitops_change_registered",
                 old_status="none",
                 new_status=change_set.status.value,
-                details={"change_count": change_set.change_count},
+                details={
+                    "change_count": change_set.change_count,
+                    **({"tenant_id": change_set.metadata["tenant_id"]}
+                       if isinstance(change_set.metadata.get("tenant_id"), str) else {}),
+                },
                 actor_id=actor_id,
             )
 
@@ -177,7 +181,11 @@ class GitOpsChangeSetRegistry:
             event="gitops_change_approved",
             old_status=old_status,
             new_status=change_set.status.value,
-            details={"approved_by": approved_by},
+            details={
+                "approved_by": approved_by,
+                **({"tenant_id": change_set.metadata["tenant_id"]}
+                   if isinstance(change_set.metadata.get("tenant_id"), str) else {}),
+            },
             actor_id=actor_id,
         )
 
@@ -213,6 +221,8 @@ class GitOpsChangeSetRegistry:
             details={
                 "rejected_by": rejected_by,
                 "reason": reason,
+                **({"tenant_id": change_set.metadata["tenant_id"]}
+                   if isinstance(change_set.metadata.get("tenant_id"), str) else {}),
             },
             actor_id=actor_id,
         )
@@ -259,6 +269,8 @@ class GitOpsChangeSetRegistry:
                 "success": result.success,
                 "applied_changes": result.applied_changes,
                 "message": result.message,
+                **({"tenant_id": change_set.metadata["tenant_id"]}
+                   if isinstance(change_set.metadata.get("tenant_id"), str) else {}),
             },
             actor_id=actor_id,
         )
@@ -303,6 +315,8 @@ class GitOpsChangeSetRegistry:
             details={
                 "verified": verified,
                 "observed_values_provided": observed_values is not None,
+                **({"tenant_id": change_set.metadata["tenant_id"]}
+                   if isinstance(change_set.metadata.get("tenant_id"), str) else {}),
             },
             actor_id=actor_id,
         )

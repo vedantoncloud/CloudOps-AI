@@ -108,6 +108,8 @@ def get_control_plane_summary() -> ControlPlaneSummaryResponse:
 )
 def get_action_trace(action_id: str, request: Request) -> ControlPlaneActionTraceResponse:
     principal = getattr(request.state, "principal", None)
+    tenant_scoped = getattr(request.state, "tenant_scoped", False)
+    tenant_id = getattr(request.state, "tenant_id", None)
     if principal is not None and principal.role == "admin":
         visible_actor_ids = None
     else:
@@ -120,11 +122,22 @@ def get_action_trace(action_id: str, request: Request) -> ControlPlaneActionTrac
         change_set
         for change_set in gitops_registry.list_all()
         if change_set.source_action_id == action_id
+        and (
+            not tenant_scoped
+            or change_set.metadata.get("tenant_id") == tenant_id
+        )
     ]
 
     audit_events = audit_trail.get_events(action_id)
     if visible_actor_ids is not None:
         audit_events = [event for event in audit_events if event.actor_id in visible_actor_ids]
+    if tenant_scoped:
+        # Subject identifiers may be reused across tenants. Legacy events without
+        # tenant attribution cannot be safely exposed through a tenant trace.
+        audit_events = [
+            event for event in audit_events
+            if event.details.get("tenant_id") == tenant_id
+        ]
 
     # GitOps traces are exposed only when the caller has an actor-owned audit
     # event for this action. This also hides legacy/unattributed shared records.
