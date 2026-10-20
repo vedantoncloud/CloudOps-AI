@@ -88,6 +88,7 @@ Operators can export every S3 object version and delete marker for the currently
 - Operators can inspect EC2 instance and system reachability checks and scheduled maintenance events from regional instance details; absent checks and failed status lookups remain visible as distinct states.
 - Operators can export every S3 object matching a bucket prefix as spreadsheet-safe CSV; export follows bounded continuation pages and stops without a partial download on provider failures or invalid cursors.
 - Authenticated users can page through S3 bucket inventory with bounded `MaxBuckets` and AWS continuation tokens; the console can continue bucket pages, and tenant ownership filtering applies to each page.
+- Operators can search S3 bucket inventory by a bucket-name prefix applied by AWS before pagination; the console retains the prefix across pages and full CSV exports, including tenant-scoped page filling.
 - Tenant-scoped S3 bucket inventory fills the requested visible page across up to ten AWS pages, preserves the cursor for the next unexamined page, and fails closed on ownership or provider pagination failures.
 - S3 bucket inventory defaults to a bounded 1,000-bucket AWS page and always returns continuation metadata, including when clients omit pagination parameters.
 - Authenticated users can use `/console` to browse EC2/S3 inventory, inspect resource governance, review and decide pending approvals, and view their autonomous run history; bearer credentials stay in page memory.

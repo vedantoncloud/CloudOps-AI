@@ -368,10 +368,16 @@ def aws_s3_buckets(
     request: Request,
     max_buckets: int = 1000,
     continuation_token: str = None,
+    prefix: str = None,
 ):
     if max_buckets is not None and not 1 <= max_buckets <= 10000:
         raise HTTPException(status_code=400, detail="max_buckets must be between 1 and 10000")
-    result = aws_service.get_s3_buckets(max_buckets, continuation_token)
+    if prefix is not None and (not prefix.strip() or len(prefix) > 255):
+        raise HTTPException(status_code=400, detail="prefix must contain 1 to 255 characters")
+    result = aws_service.get_s3_buckets(
+        max_buckets, continuation_token,
+        **({"prefix": prefix} if prefix is not None else {}),
+    )
     if result.get("status") != "healthy":
         _raise_aws_resource_unavailable()
     if not getattr(request.state, "tenant_scoped", False):
@@ -395,7 +401,10 @@ def aws_s3_buckets(
         if not cursor or cursor in seen_cursors:
             raise HTTPException(status_code=503, detail="S3 inventory pagination is unavailable")
         seen_cursors.add(cursor)
-        result = aws_service.get_s3_buckets(max_buckets - len(visible_buckets), cursor)
+        result = aws_service.get_s3_buckets(
+            max_buckets - len(visible_buckets), cursor,
+            **({"prefix": prefix} if prefix is not None else {}),
+        )
     result["buckets"] = visible_buckets
     return result
 

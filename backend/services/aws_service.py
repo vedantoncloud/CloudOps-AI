@@ -373,7 +373,7 @@ class AWSService:
         except (BotoCoreError, ClientError) as error:
             return {"service": "ec2", "status": "unhealthy", "error": str(error)}
 
-    def get_s3_buckets(self, max_buckets=1000, continuation_token=None):
+    def get_s3_buckets(self, max_buckets=1000, continuation_token=None, prefix=None):
         try:
             s3 = _aws_client("s3")
             request = {}
@@ -381,6 +381,8 @@ class AWSService:
                 request["MaxBuckets"] = max_buckets
             if continuation_token is not None:
                 request["ContinuationToken"] = continuation_token
+            if prefix is not None:
+                request["Prefix"] = prefix
             response = s3.list_buckets(**request)
 
             buckets = []
