@@ -74,6 +74,7 @@ def _filter_audit_events(
     resource_type: str | None = None,
     event: str | None = None,
     action_type: str | None = None,
+    new_status: str | None = None,
     actor_id: str | None = None,
     start_time: datetime | None = None,
     end_time: datetime | None = None,
@@ -97,6 +98,9 @@ def _filter_audit_events(
 
     if action_type is not None:
         events = [item for item in events if item.action_type == action_type]
+
+    if new_status is not None:
+        events = [item for item in events if item.new_status == new_status]
 
     if actor_id is not None:
         events = [item for item in events if item.actor_id == actor_id]
@@ -135,6 +139,7 @@ def list_audit_events(
     resource_type: str | None = Query(default=None),
     event: str | None = Query(default=None),
     action_type: str | None = Query(default=None),
+    new_status: str | None = Query(default=None),
     actor_id: str | None = Query(default=None),
     start_time: datetime | None = Query(default=None),
     end_time: datetime | None = Query(default=None),
@@ -148,6 +153,7 @@ def list_audit_events(
         resource_type=resource_type,
         event=event,
         action_type=action_type,
+        new_status=new_status,
         actor_id=actor_id,
         start_time=start_time,
         end_time=end_time,
@@ -171,6 +177,7 @@ def export_audit_events(
     resource_type: str | None = Query(default=None),
     event: str | None = Query(default=None),
     action_type: str | None = Query(default=None),
+    new_status: str | None = Query(default=None),
     actor_id: str | None = Query(default=None),
     start_time: datetime | None = Query(default=None),
     end_time: datetime | None = Query(default=None),
@@ -185,6 +192,7 @@ def export_audit_events(
         resource_type=resource_type,
         event=event,
         action_type=action_type,
+        new_status=new_status,
         actor_id=actor_id,
         start_time=start_time,
         end_time=end_time,

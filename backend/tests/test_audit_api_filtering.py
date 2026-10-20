@@ -88,6 +88,34 @@ def test_audit_api_filters_by_action_type():
     ]
 
 
+def test_audit_api_filters_by_action_id_and_current_status_before_pagination():
+    seed_events()
+    response = make_client().get(
+        "/autonomy/audit/events",
+        params={"action_id": "action-c", "new_status": "approved", "limit": 1},
+    )
+
+    assert response.status_code == 200
+    assert [item["action_id"] for item in response.json()] == ["action-c"]
+
+    no_match = make_client().get(
+        "/autonomy/audit/events", params={"new_status": "missing"}
+    )
+    assert no_match.status_code == 200
+    assert no_match.json() == []
+
+
+def test_audit_export_uses_current_status_filter():
+    seed_events()
+    response = make_client().get(
+        "/autonomy/audit/events/export", params={"new_status": "blocked"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["action_id"] == "action-b"
+    assert response.headers["content-type"].startswith("application/x-ndjson")
+
+
 def test_audit_api_supports_combined_filters():
     seed_events()
     response = make_client().get(

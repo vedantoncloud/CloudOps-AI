@@ -50,6 +50,20 @@ def test_console_audit_event_type_filter_is_shared_by_listing_and_export():
     assert "const query=auditFilters();const response=await fetch" in html
 
 
+def test_console_audit_action_and_status_filters_are_shared_by_listing_and_export():
+    html = TestClient(app).get("/console").text
+
+    assert 'id="auditAction"' in html
+    assert 'id="auditStatus"' in html
+    assert "action=$('auditAction').value.trim()" in html
+    assert "status=$('auditStatus').value.trim()" in html
+    assert "query.set('action_id',action)" in html
+    assert "query.set('new_status',status)" in html
+    assert "$('auditAction').addEventListener('keydown'" in html
+    assert "$('auditStatus').addEventListener('keydown'" in html
+    assert "const query=auditFilters();const response=await fetch" in html
+
+
 def test_console_exposes_admin_audit_integrity_check():
     response = TestClient(app).get("/console")
 
