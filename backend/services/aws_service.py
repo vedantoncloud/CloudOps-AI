@@ -47,9 +47,19 @@ def _tenant_role_arn(tenant_id: str) -> str | None:
     return roles.get(tenant_id)
 
 
+def _tenant_roles_required() -> bool:
+    """Whether authenticated tenant calls must use a tenant-specific role."""
+    setting = os.getenv("CLOUDOPS_REQUIRE_TENANT_AWS_ROLE", "false").strip().lower()
+    if setting not in {"true", "false"}:
+        raise RuntimeError("CLOUDOPS_REQUIRE_TENANT_AWS_ROLE must be true or false")
+    return setting == "true"
+
+
 def _tenant_session(tenant_id: str) -> boto3.Session | None:
     role_arn = _tenant_role_arn(tenant_id)
     if role_arn is None:
+        if _tenant_roles_required():
+            raise RuntimeError("No AWS role is configured for this tenant")
         return None
     with _assumed_sessions_lock:
         cached = _assumed_sessions.get(tenant_id)

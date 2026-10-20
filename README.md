@@ -47,9 +47,14 @@ events record the authenticated subject as their actor. In token mode, the
 provider-neutral `/autonomy/resources` inventory and governance routes only
 return resources tagged `CloudOpsTenantId` with the token's `tenant_id`; missing
 or mismatched ownership tags are hidden as not found for governance lookups.
-This tag convention does not yet scope the direct `/cloud/aws/*` inventory and
-insight routes, or provide AWS account isolation, so resource-level tenant
-isolation remains incomplete.
+Direct EC2 and S3 inventory and resource routes also enforce tenant ownership
+using the `CloudOpsTenantId` tag. Configure `CLOUDOPS_TENANT_AWS_ROLES` as a
+JSON object mapping tenant IDs to IAM role ARNs to route each tenant's AWS
+calls through its own account role. Assumed credentials are cached until near
+expiry, and a failed role assumption never falls back to the process identity.
+For compatibility, tenants without a mapping use the process AWS identity by
+default. Set `CLOUDOPS_REQUIRE_TENANT_AWS_ROLE=true` to fail closed when any
+authenticated tenant has no configured role; the setting defaults to `false`.
 
 ## Runtime
 

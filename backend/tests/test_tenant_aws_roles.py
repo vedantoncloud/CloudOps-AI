@@ -60,6 +60,28 @@ def test_unmapped_tenant_keeps_default_aws_identity(monkeypatch):
         aws_service.reset_aws_tenant(token)
 
 
+def test_required_tenant_role_fails_closed_without_using_process_identity(monkeypatch):
+    monkeypatch.setenv("CLOUDOPS_TENANT_AWS_ROLES", "{}")
+    monkeypatch.setenv("CLOUDOPS_REQUIRE_TENANT_AWS_ROLE", "true")
+    monkeypatch.setattr(
+        aws_service.boto3, "client",
+        lambda *_args, **_kwargs: pytest.fail("shared AWS identity must not be used"),
+    )
+    token = aws_service.set_aws_tenant("tenant-without-role")
+    try:
+        with pytest.raises(RuntimeError, match="No AWS role is configured"):
+            aws_service._aws_client("ec2")
+    finally:
+        aws_service.reset_aws_tenant(token)
+
+
+@pytest.mark.parametrize("setting", ["yes", "1", "", "sometimes"])
+def test_required_tenant_role_setting_rejects_ambiguous_values(monkeypatch, setting):
+    monkeypatch.setenv("CLOUDOPS_REQUIRE_TENANT_AWS_ROLE", setting)
+    with pytest.raises(RuntimeError, match="must be true or false"):
+        aws_service._tenant_roles_required()
+
+
 def test_failed_role_assumption_does_not_fall_back_to_shared_credentials(monkeypatch):
     class DeniedSts:
         def assume_role(self, **kwargs):
