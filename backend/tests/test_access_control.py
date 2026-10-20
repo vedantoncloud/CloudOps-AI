@@ -103,6 +103,29 @@ def test_admin_can_access_operational_audit_diagnostics():
     assert response.status_code == 200
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/autonomy/audit/health/",
+        "/autonomy/audit/health/details",
+        "/operations/failures/",
+    ],
+)
+def test_admin_only_route_policy_covers_slash_variants_and_subroutes(path):
+    app = FastAPI()
+    app.add_middleware(AccessControlMiddleware, mode="token", tokens=TOKENS)
+
+    @app.get("/autonomy/audit/health/")
+    @app.get("/autonomy/audit/health/details")
+    @app.get("/operations/failures/")
+    def diagnostic():
+        return {"ok": True}
+
+    client = TestClient(app)
+    assert client.get(path, headers={"Authorization": "Bearer operator-a"}).status_code == 403
+    assert client.get(path, headers={"Authorization": "Bearer admin-a"}).status_code == 200
+
+
 def test_admin_can_access_shared_control_plane_summary():
     response = build_client().get(
         "/autonomy/control-plane/summary",

@@ -40,6 +40,16 @@ ADMIN_ONLY_PATHS = {
 }
 
 
+def is_admin_only_path(path: str) -> bool:
+    """Match an admin endpoint and any subroutes independent of slash form."""
+    normalized = path.rstrip("/") or "/"
+    return any(
+        normalized == protected.rstrip("/")
+        or normalized.startswith(protected.rstrip("/") + "/")
+        for protected in ADMIN_ONLY_PATHS
+    )
+
+
 def load_token_registry(raw: str | None = None) -> dict[str, Principal]:
     """Parse CLOUDOPS_API_TOKENS as {token: {subject, role, tenant_id}}."""
     raw = os.getenv("CLOUDOPS_API_TOKENS") if raw is None else raw
@@ -101,10 +111,8 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
         if principal is None:
             return JSONResponse(status_code=401, content={"detail": "Bearer token required"}, headers={"WWW-Authenticate": "Bearer"})
 
-        required_role = (
-            "admin"
-            if request.url.path in ADMIN_ONLY_PATHS
-            else "reader" if request.method in {"GET", "HEAD"} else "operator"
+        required_role = "admin" if is_admin_only_path(request.url.path) else (
+            "reader" if request.method in {"GET", "HEAD"} else "operator"
         )
         if ROLE_LEVEL[principal.role] < ROLE_LEVEL[required_role]:
             return JSONResponse(status_code=403, content={"detail": "Insufficient role"})
