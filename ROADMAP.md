@@ -2,6 +2,8 @@
 
 **Repository audit:** 2026-10-20, updated after S3 bucket analysis gained a spreadsheet-safe report export. This roadmap contains **9 remaining tasks**: the nine numbered incomplete outcomes below. Sub-bullets and acceptance criteria do not count separately. Recount only when a complete outcome ships or scope is explicitly changed.
 
+Tenant AWS role routing now uses `CLOUDOPS_TENANT_AWS_ROLES` (JSON tenant ID to IAM role ARN map). Authenticated tenant AWS calls assume the configured role, cache short-lived credentials until near expiry, and propagate role-assumption failures without falling back to shared credentials. Unmapped tenants continue using the process AWS identity for compatibility, so deployments must configure a role for every tenant that needs an isolated AWS account. Readiness remains process-wide; admin-only account-cost reports use the admin principal's configured role when present.
+
 Focused GitOps persistence, API, attribution, and readiness regression tests passed after adding durable GitOps lifecycle state (52 tests).
 
 ## Current state
@@ -51,6 +53,7 @@ EC2 instance detail, ownership checks, metrics, status, CPU/network trends, per-
 
 - Operators can inspect S3 bucket versioning state (enabled, suspended, or disabled) and MFA Delete status in bucket analysis; the lookup enforces tenant ownership and reports provider failures without exposing diagnostics.
 - S3 bucket security analysis detects AWS-classified public bucket policies and public ACL grants, reports denied or malformed checks as unknown, and handles bucket-owner-enforced ACL-disabled buckets; analysis results flow into the existing console report and CSV export.
+- Deployments can route AWS operations for each authenticated tenant through a configured IAM role using `CLOUDOPS_TENANT_AWS_ROLES`; assumed credentials are cached with expiry awareness, and failed role assumption does not fall back to the shared identity.
 - FastAPI application and AWS service status/connectivity checks.
 - EC2 and S3 inventory, filtering, metrics, security, cost-awareness, and optimization insights.
 - Autonomous action models and planning; policy/governance decisions; approval gates; simulation; dry-run execution; verification, recovery, and rollback foundations.
@@ -170,7 +173,7 @@ EC2 instance detail, ownership checks, metrics, status, CPU/network trends, per-
 
 ## Prioritized remaining work
 
-1. **Complete API authorization, tenant isolation, and attribution (P0).** Extend resource ownership enforcement to every tenant-sensitive direct AWS inventory, detail, metric, and insight route; establish tenant-specific AWS account/credential boundaries; verify access rules across privileged operations; consistently attach the authenticated principal to audit events. Define and operate token issuance, rotation, revocation, and external identity integration. **Done when:** every protected route has an explicit tested authorization policy, cross-tenant reads are prevented across all AWS/resource routes and account boundaries, and operational audit events identify their actor.
+1. **Complete API authorization, tenant isolation, and attribution (P0).** Resource ownership enforcement covers the current tenant-sensitive AWS inventory, detail, metric, and insight routes. Configured `CLOUDOPS_TENANT_AWS_ROLES` mappings provide tenant-specific AWS credentials, but unmapped tenants retain the process identity for compatibility; require complete role coverage before treating a deployment as account-isolated. Verify access rules across privileged operations; consistently attach the authenticated principal to audit events. Define and operate token issuance, rotation, revocation, and external identity integration. **Done when:** every protected route has an explicit tested authorization policy, cross-tenant reads are prevented across all AWS/resource routes and account boundaries, and operational audit events identify their actor.
 
 2. **Adopt a production persistence architecture (P0).** Select a supported shared database for operational state and audit/idempotency records. Provide schema migrations, transaction and locking behavior, backup/restore, retention, and upgrade procedures. Existing SQLite persistence is local-file durability, not shared database support. **Done when:** clean installation and upgrades work against the chosen database, restart/concurrency behavior is verified, and restore/retention procedures are documented and exercised.
 

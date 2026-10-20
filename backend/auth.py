@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from fastapi import HTTPException, Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
+from services.aws_service import reset_aws_tenant, set_aws_tenant
 
 
 @dataclass(frozen=True)
@@ -115,7 +116,11 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
         request.state.principal = principal
         request.state.tenant_id = principal.tenant_id
         request.state.tenant_scoped = True
-        return await call_next(request)
+        tenant_token = set_aws_tenant(principal.tenant_id)
+        try:
+            return await call_next(request)
+        finally:
+            reset_aws_tenant(tenant_token)
 
 
 def require_role(principal: Principal, role: str) -> None:

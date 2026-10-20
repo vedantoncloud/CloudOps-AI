@@ -1,4 +1,10 @@
 import boto3
+import hashlib
+import json
+import os
+import threading
+import time
+from contextvars import ContextVar
 from functools import wraps
 from datetime import datetime, timedelta, timezone
 from botocore.config import Config
@@ -12,9 +18,67 @@ AWS_CLIENT_CONFIG = Config(
     retries={"mode": "standard", "total_max_attempts": 3},
 )
 
+# Requests set this from the authenticated token claim.  Role ARNs are trusted
+# deployment configuration, never supplied by callers.
+_request_tenant: ContextVar[str | None] = ContextVar("cloudops_aws_tenant", default=None)
+_assumed_sessions: dict[str, tuple[float, boto3.Session]] = {}
+_assumed_sessions_lock = threading.Lock()
+
+
+def set_aws_tenant(tenant_id: str | None):
+    """Select the configured AWS role for the current request context."""
+    return _request_tenant.set(tenant_id)
+
+
+def reset_aws_tenant(token) -> None:
+    _request_tenant.reset(token)
+
+
+def _tenant_role_arn(tenant_id: str) -> str | None:
+    try:
+        roles = json.loads(os.getenv("CLOUDOPS_TENANT_AWS_ROLES", "{}"))
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise RuntimeError("CLOUDOPS_TENANT_AWS_ROLES must be a JSON object") from exc
+    if not isinstance(roles, dict) or any(
+        not isinstance(key, str) or not isinstance(value, str) or not value.startswith("arn:")
+        for key, value in roles.items()
+    ):
+        raise RuntimeError("CLOUDOPS_TENANT_AWS_ROLES must map tenant IDs to role ARNs")
+    return roles.get(tenant_id)
+
+
+def _tenant_session(tenant_id: str) -> boto3.Session | None:
+    role_arn = _tenant_role_arn(tenant_id)
+    if role_arn is None:
+        return None
+    with _assumed_sessions_lock:
+        cached = _assumed_sessions.get(tenant_id)
+        if cached and cached[0] > time.time() + 60:
+            return cached[1]
+        sts = boto3.client("sts", config=AWS_CLIENT_CONFIG)
+        response = sts.assume_role(
+            RoleArn=role_arn,
+            RoleSessionName="cloudops-" + hashlib.sha256(tenant_id.encode()).hexdigest()[:16],
+            DurationSeconds=3600,
+        )
+        credentials = response["Credentials"]
+        expiry = credentials["Expiration"].timestamp()
+        session = boto3.Session(
+            aws_access_key_id=credentials["AccessKeyId"],
+            aws_secret_access_key=credentials["SecretAccessKey"],
+            aws_session_token=credentials["SessionToken"],
+        )
+        _assumed_sessions[tenant_id] = (expiry, session)
+        return session
+
 
 def _aws_client(service_name, **kwargs):
     """Create an AWS client with bounded network waits and standard retries."""
+    tenant_id = _request_tenant.get()
+    if tenant_id is not None:
+        session = _tenant_session(tenant_id)
+        if session is not None:
+            return session.client(service_name, config=AWS_CLIENT_CONFIG, **kwargs)
     return boto3.client(service_name, config=AWS_CLIENT_CONFIG, **kwargs)
 
 
