@@ -223,6 +223,35 @@ def test_run_history_filters_outcome_and_search_before_pagination(monkeypatch):
     assert client.get("/autonomy/runs?search=" + "x" * 201).status_code == 422
 
 
+def test_run_history_filters_updated_time_before_pagination(monkeypatch):
+    events = [
+        SimpleNamespace(
+            action_id=action_id, actor_id="local-development", event=event,
+            action_type="resize_instance", resource_type="ec2_instance", resource_id="i-123",
+            old_status="pending_approval", new_status="completed", timestamp=timestamp,
+            details={},
+        )
+        for action_id, event, timestamp in (
+            ("run-before", "autonomous_lifecycle_completed", "2026-01-01T00:00:00+00:00"),
+            ("run-in-window", "autonomous_lifecycle_completed", "2026-01-02T12:00:00+00:00"),
+            ("run-after", "autonomous_lifecycle_blocked", "2026-01-04T00:00:00+00:00"),
+        )
+    ]
+    monkeypatch.setattr(api, "audit_trail", SimpleNamespace(get_events=lambda: events))
+
+    client = make_client(FakeRunner("completed"))
+    response = client.get(
+        "/autonomy/runs?start_time=2026-01-02T12:00:00Z&end_time=2026-01-03T00:00:00Z&limit=1"
+    )
+    assert response.status_code == 200
+    assert response.json()["total"] == 1
+    assert [run["action_id"] for run in response.json()["runs"]] == ["run-in-window"]
+    assert client.get(
+        "/autonomy/runs?start_time=2026-01-03T00:00:00Z&end_time=2026-01-02T00:00:00Z"
+    ).status_code == 422
+    assert client.get("/autonomy/runs?start_time=not-a-date").status_code == 422
+
+
 def test_deny_stops_before_lifecycle():
     fake = FakeRunner("blocked")
     client = make_client(fake)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -33,12 +34,22 @@ def list_autonomous_runs(
     offset: int = 0,
     outcome: str | None = Query(default=None, pattern="^(completed|awaiting_approval|blocked|in_progress)$"),
     search: str | None = Query(default=None, max_length=200),
+    start_time: datetime | None = None,
+    end_time: datetime | None = None,
 ) -> dict[str, Any]:
     """Return the authenticated principal's durable autonomous run history."""
     if not 1 <= limit <= 200:
         raise HTTPException(status_code=422, detail="limit must be between 1 and 200")
     if offset < 0:
         raise HTTPException(status_code=422, detail="offset must be non-negative")
+
+    def as_utc(value: datetime) -> datetime:
+        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+    start = as_utc(start_time) if start_time else None
+    end = as_utc(end_time) if end_time else None
+    if start and end and start > end:
+        raise HTTPException(status_code=422, detail="start_time must be at or before end_time")
 
     principal = getattr(request.state, "principal", None)
     actor_id = getattr(principal, "subject", None)
@@ -73,6 +84,15 @@ def list_autonomous_runs(
         })
 
     runs.sort(key=lambda run: (run["updated_at"], run["action_id"]), reverse=True)
+    if start or end:
+        def in_window(run: dict[str, Any]) -> bool:
+            try:
+                updated = as_utc(datetime.fromisoformat(run["updated_at"].replace("Z", "+00:00")))
+            except (TypeError, ValueError):
+                return False
+            return (start is None or updated >= start) and (end is None or updated <= end)
+
+        runs = [run for run in runs if in_window(run)]
     if outcome:
         runs = [run for run in runs if run["outcome"] == outcome]
     if search:

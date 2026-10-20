@@ -18,6 +18,8 @@ Administrators can view 7, 30, or 90 complete days of shared AWS account daily u
 
 Operators can filter their autonomous run history by outcome and search action IDs, action types, resource types, and resource IDs. Filtering is applied before pagination, and run history remains scoped to the authenticated actor.
 
+Operators can filter their actor-scoped autonomous run history by inclusive update-time bounds; date filtering composes with outcome, search, and pagination, and invalid or reversed ranges are rejected.
+
 Operators can filter the tenant-scoped pending approval queue by risk and resource type, and search action IDs, action types, resource IDs, and reasons. Filters are applied before pagination so totals and queue pages match the active criteria.
 
 Operators can prioritize pending approvals by submission age or newest-first order. Plans carry durable UTC creation timestamps, the oldest-first default surfaces the longest-waiting requests, and plans created before timestamp tracking remain clearly marked as having no recorded submission time.
