@@ -13,6 +13,7 @@ import main
         ("/object-versions", "get_s3_object_versions", {"max_keys": 3}),
         ("/objects/download?key=logs%2Ftoday.json", "create_s3_object_download_url", {}),
         ("/security-insights", "get_s3_security_insights", {}),
+        ("/lifecycle", "get_s3_bucket_lifecycle", {}),
         ("/cost-insights", "get_s3_cost_insights", {}),
     ],
 )

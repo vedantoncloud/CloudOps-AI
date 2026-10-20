@@ -53,6 +53,7 @@ EC2 instance detail, ownership checks, metrics, status, CPU/network trends, per-
 
 - Operators can inspect S3 bucket versioning state (enabled, suspended, or disabled) and MFA Delete status in bucket analysis; the lookup enforces tenant ownership and reports provider failures without exposing diagnostics.
 - S3 bucket security analysis detects AWS-classified public bucket policies and public ACL grants, reports denied or malformed checks as unknown, and handles bucket-owner-enforced ACL-disabled buckets; analysis results flow into the existing console report and CSV export.
+- Operators can inspect an S3 bucket's lifecycle configuration, including enabled and disabled rules; buckets with no lifecycle configuration are reported as such, ownership is checked before reads, provider errors are sanitized, and the console analysis and CSV export include the result.
 - Deployments can route AWS operations for each authenticated tenant through a configured IAM role using `CLOUDOPS_TENANT_AWS_ROLES`; assumed credentials are cached with expiry awareness, and failed role assumption does not fall back to the shared identity.
 - FastAPI application and AWS service status/connectivity checks.
 - EC2 and S3 inventory, filtering, metrics, security, cost-awareness, and optimization insights.

@@ -547,6 +547,52 @@ class AWSService:
                 "error": str(error),
             }
 
+    def get_s3_bucket_lifecycle(self, bucket_name):
+        """Return the configured S3 lifecycle rules without implying they save money."""
+        try:
+            response = _aws_client("s3").get_bucket_lifecycle_configuration(
+                Bucket=bucket_name
+            )
+            rules = response.get("Rules", [])
+            if not isinstance(rules, list):
+                return {"service": "s3", "status": "unhealthy", "bucket": bucket_name}
+            return {
+                "service": "s3",
+                "status": "healthy",
+                "bucket": bucket_name,
+                "configured": bool(rules),
+                "rule_count": len(rules),
+                "enabled_rule_count": sum(
+                    isinstance(rule, dict) and rule.get("Status") == "Enabled"
+                    for rule in rules
+                ),
+                "rules": rules,
+            }
+        except ClientError as error:
+            if error.response.get("Error", {}).get("Code") == "NoSuchLifecycleConfiguration":
+                return {
+                    "service": "s3",
+                    "status": "healthy",
+                    "bucket": bucket_name,
+                    "configured": False,
+                    "rule_count": 0,
+                    "enabled_rule_count": 0,
+                    "rules": [],
+                }
+            return {
+                "service": "s3",
+                "status": "unhealthy",
+                "bucket": bucket_name,
+                "error": str(error),
+            }
+        except BotoCoreError as error:
+            return {
+                "service": "s3",
+                "status": "unhealthy",
+                "bucket": bucket_name,
+                "error": str(error),
+            }
+
     def get_s3_bucket_tags(self, bucket_name):
         """Return a bucket's tags for tenant ownership checks."""
         try:

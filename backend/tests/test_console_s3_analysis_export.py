@@ -66,7 +66,7 @@ const document={createElement(){return {className:'',append(){}}}};
 let calls=0;
 const api=async()=>{calls++;if(calls===2)throw new Error('check unavailable');return {status:'healthy',scan_complete:false,scan_limit:1000}};
 const make=new Function('$','api','document',"let activeBucket='old',bucketAnalysisReport={old:true};"+source+';return {analyzeBucket,get:()=>bucketAnalysisReport}');
-(async()=>{const run=make(id=>elements[id],api,document);await run.analyzeBucket('new-bucket');const report=run.get();assert.equal(report.bucket,'new-bucket');assert.equal(report.prefix,'logs/');assert.equal(report.checks.length,6);assert.equal(report.checks[1].status,'failed');assert.equal(report.checks[1].error,'check unavailable');assert.equal(report.checks[0].data.scan_complete,false);assert.equal(elements.exportBucketAnalysis.disabled,false);assert.match(elements.bucketAnalysisStatus.textContent,/5 of 6 checks loaded; 1 failed/);assert.equal(calls,6)})().catch(error=>{console.error(error);process.exitCode=1});
+(async()=>{const run=make(id=>elements[id],api,document);await run.analyzeBucket('new-bucket');const report=run.get();assert.equal(report.bucket,'new-bucket');assert.equal(report.prefix,'logs/');assert.equal(report.checks.length,7);assert.equal(report.checks[1].status,'failed');assert.equal(report.checks[1].error,'check unavailable');assert.equal(report.checks[0].data.scan_complete,false);assert.equal(elements.exportBucketAnalysis.disabled,false);assert.match(elements.bucketAnalysisStatus.textContent,/6 of 7 checks loaded; 1 failed/);assert.equal(calls,7)})().catch(error=>{console.error(error);process.exitCode=1});
 """
     result = subprocess.run(
         ["node", "-e", script, json.dumps(match.group(0))],
