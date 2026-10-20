@@ -324,7 +324,7 @@ def _aws_resource_result(operation):
         result = operation()
     except Exception:
         _raise_aws_resource_unavailable()
-    if result.get("status") == "unhealthy":
+    if not isinstance(result, dict) or result.get("status") == "unhealthy":
         _raise_aws_resource_unavailable()
     return result
 
@@ -443,12 +443,7 @@ def _require_tenant_s3_bucket(request: Request, bucket_name: str) -> None:
 @app.get("/cloud/aws/s3/buckets/{bucket_name}")
 def aws_s3_bucket_details(bucket_name: str, request: Request):
     _require_tenant_s3_bucket(request, bucket_name)
-    result = aws_service.get_s3_bucket_details(bucket_name)
-
-    if result["status"] == "unhealthy":
-        _raise_aws_resource_unavailable()
-
-    return result
+    return _aws_resource_result(lambda: aws_service.get_s3_bucket_details(bucket_name))
 
 
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/objects")
@@ -467,18 +462,13 @@ def aws_s3_objects(
             detail="max_keys must be between 1 and 1000",
         )
 
-    result = aws_service.get_s3_objects(
+    return _aws_resource_result(lambda: aws_service.get_s3_objects(
         bucket_name,
         prefix=prefix,
         max_keys=max_keys,
         continuation_token=continuation_token,
         delimiter=delimiter,
-    )
-
-    if result["status"] == "unhealthy":
-        _raise_aws_resource_unavailable()
-
-    return result
+    ))
 
 
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/objects/metadata")
@@ -491,14 +481,11 @@ def aws_s3_object_metadata(
         raise HTTPException(status_code=400, detail="key must not be empty")
     if version_id is not None and not version_id:
         raise HTTPException(status_code=400, detail="version_id must not be empty")
-    result = (
+    return _aws_resource_result(lambda: (
         aws_service.get_s3_object_metadata(bucket_name, key)
         if version_id is None
         else aws_service.get_s3_object_metadata(bucket_name, key, version_id)
-    )
-    if result["status"] == "unhealthy":
-        _raise_aws_resource_unavailable()
-    return result
+    ))
 
 
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/object-versions")
@@ -514,13 +501,10 @@ def aws_s3_object_versions(
     _require_tenant_s3_bucket(request, bucket_name)
     if max_keys <= 0 or max_keys > 1000:
         raise HTTPException(status_code=400, detail="max_keys must be between 1 and 1000")
-    result = aws_service.get_s3_object_versions(
+    return _aws_resource_result(lambda: aws_service.get_s3_object_versions(
         bucket_name, prefix=prefix, key_marker=key_marker,
         version_id_marker=version_id_marker, max_keys=max_keys,
-    )
-    if result["status"] == "unhealthy":
-        _raise_aws_resource_unavailable()
-    return result
+    ))
 
 
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/objects/download")
@@ -533,14 +517,11 @@ def aws_s3_object_download_url(
         raise HTTPException(status_code=400, detail="key must not be empty")
     if version_id == "":
         raise HTTPException(status_code=400, detail="version_id must not be empty")
-    result = (
+    return _aws_resource_result(lambda: (
         aws_service.create_s3_object_download_url(bucket_name, key, version_id)
         if version_id is not None
         else aws_service.create_s3_object_download_url(bucket_name, key)
-    )
-    if result["status"] == "unhealthy":
-        _raise_aws_resource_unavailable()
-    return result
+    ))
 
 
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/statistics")
@@ -775,12 +756,7 @@ def aws_ec2_network_utilization(instance_id: str, request: Request, region: str 
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/security-insights")
 def aws_s3_bucket_security_insights(bucket_name: str, request: Request):
     _require_tenant_s3_bucket(request, bucket_name)
-    result = aws_service.get_s3_security_insights(bucket_name)
-
-    if result["status"] == "unhealthy":
-        _raise_aws_resource_unavailable()
-
-    return result
+    return _aws_resource_result(lambda: aws_service.get_s3_security_insights(bucket_name))
 
 
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/cost-insights")
@@ -797,16 +773,11 @@ def aws_s3_bucket_cost_insights(
             detail="max_keys must be between 1 and 1000",
         )
 
-    result = aws_service.get_s3_cost_insights(
+    return _aws_resource_result(lambda: aws_service.get_s3_cost_insights(
         bucket_name,
         prefix=prefix,
         max_keys=max_keys,
-    )
-
-    if result["status"] == "unhealthy":
-        _raise_aws_resource_unavailable()
-
-    return result
+    ))
 
 
 @app.get("/cloud/aws/ec2/instances/{instance_id}/status")

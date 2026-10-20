@@ -1,6 +1,6 @@
 # CloudOps AI Roadmap
 
-**Repository audit:** 2026-10-20, updated after provider-neutral resource inventory began returning sanitized dependency failures instead of internal errors or false empty inventories. This roadmap contains **9 remaining tasks**: the nine numbered incomplete outcomes below. Sub-bullets and acceptance criteria do not count separately. Recount only when a complete outcome ships or scope is explicitly changed.
+**Repository audit:** 2026-10-20, updated after S3 direct resource endpoints began returning sanitized dependency failures for provider exceptions and malformed responses. This roadmap contains **9 remaining tasks**: the nine numbered incomplete outcomes below. Sub-bullets and acceptance criteria do not count separately. Recount only when a complete outcome ships or scope is explicitly changed.
 
 Focused GitOps persistence, API, attribution, and readiness regression tests passed after adding durable GitOps lifecycle state (52 tests).
 
@@ -58,6 +58,7 @@ S3 object statistics, largest-object analysis, bucket health, insights, and opti
 - Production environment startup validation rejects permissive development authentication and requires configured bearer tokens.
 - Approved dry-run action-plan execution records its status transition and authenticated actor in the audit trail; rejected and blocked execution requests do not emit a success event.
 - S3 object statistics, largest-object analysis, bucket health, insights, and optimization routes map thrown provider failures and unhealthy results to a stable sanitized `503`; successful responses and request-limit validation are covered.
+- S3 bucket detail, object listing, object metadata, version listing, download URL, security insight, and cost insight endpoints return the same sanitized `503` for provider exceptions, unhealthy results, and malformed provider responses; successful object listing behavior and request validation remain covered.
 - Aggregate EC2 efficiency, cost, rightsizing, and security insights analyze only authenticated-tenant inventory in token mode.
 - Tenant-scoped EC2 fleet summaries and aggregate efficiency, cost, rightsizing, and security insights now traverse every AWS inventory page before computing results; a failed later page prevents insights from being computed on partial inventory.
 - Authenticated tenant users receive a sanitized AWS status response without the shared AWS account ID, principal ARN, or raw diagnostics; admins retain full status details.
