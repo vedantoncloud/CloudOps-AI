@@ -463,6 +463,26 @@ class AWSService:
                 "error": str(error),
             }
 
+    def get_s3_bucket_versioning(self, bucket_name):
+        """Report whether a bucket has versioning enabled, suspended, or never enabled."""
+        try:
+            response = _aws_client("s3").get_bucket_versioning(Bucket=bucket_name)
+            state = response.get("Status") or "disabled"
+            return {
+                "service": "s3",
+                "status": "healthy",
+                "bucket": bucket_name,
+                "versioning": state.lower(),
+                "mfa_delete": (response.get("MFADelete") or "disabled").lower(),
+            }
+        except (BotoCoreError, ClientError) as error:
+            return {
+                "service": "s3",
+                "status": "unhealthy",
+                "bucket": bucket_name,
+                "error": str(error),
+            }
+
     def get_s3_bucket_tags(self, bucket_name):
         """Return a bucket's tags for tenant ownership checks."""
         try:

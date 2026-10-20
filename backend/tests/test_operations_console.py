@@ -194,9 +194,10 @@ def test_console_exposes_bounded_s3_bucket_analysis_with_independent_results():
     assert "${base}/security-insights" in html
     assert "${base}/cost-insights?${query}" in html
     assert "${base}/largest-objects?${query}&top_n=10" in html
+    assert "['Versioning',`${base}/versioning`]" in html
     assert "Promise.allSettled(checks.map(([,path])=>api(path)))" in html
     assert "outcome.reason.message" in html
-    assert "Results cover at most 1,000 matching objects." in html
+    assert "Object scan results cover at most 1,000 matching objects." in html
 
 
 def test_run_inspection_handles_success_failure_and_escapes_run_id():

@@ -47,6 +47,7 @@ S3 object statistics, largest-object analysis, bucket health, insights, and opti
 
 ## Completed work
 
+- Operators can inspect S3 bucket versioning state (enabled, suspended, or disabled) and MFA Delete status in bucket analysis; the lookup enforces tenant ownership and reports provider failures without exposing diagnostics.
 - FastAPI application and AWS service status/connectivity checks.
 - EC2 and S3 inventory, filtering, metrics, security, cost-awareness, and optimization insights.
 - Autonomous action models and planning; policy/governance decisions; approval gates; simulation; dry-run execution; verification, recovery, and rollback foundations.
