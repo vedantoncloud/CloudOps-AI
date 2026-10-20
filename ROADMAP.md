@@ -157,6 +157,7 @@ S3 object statistics, largest-object analysis, bucket health, insights, and opti
 - Core EC2 inventory, fleet summary, and S3 bucket inventory endpoints return sanitized `503` responses when AWS data is unavailable; tenant fleet summaries and aggregate insights do not report partial inventory as successful after a later-page failure or pagination loop.
 - Provider-neutral resource inventory returns a sanitized `503` when a provider throws or reports an unhealthy result, preventing internal diagnostics from leaking and outages from appearing as empty inventories.
 - Operators can export the complete S3 object version history for the selected prefix, including delete markers and version metadata; cursor cycles, missing cursors, and provider failures stop the export without producing a partial CSV.
+- Operators can export GitOps change proposals as spreadsheet-safe CSV using the current search and status filters; exports apply tenant visibility before filtering and include one row per proposed resource change.
 
 ## Prioritized remaining work
 

@@ -1,4 +1,8 @@
-﻿from fastapi import FastAPI
+﻿import csv
+import io
+from pathlib import Path
+
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from auth import AccessControlMiddleware, Principal
 
@@ -25,7 +29,7 @@ def make_tenant_client():
     return TestClient(app)
 
 
-def make_change_set(*, requires_approval=True):
+def make_change_set(*, requires_approval=True, reason="Resize instance"):
     return GitOpsEngine().create_change_set(
         source_action_id="action-api",
         changes=[
@@ -35,7 +39,7 @@ def make_change_set(*, requires_approval=True):
                 field="instance_type",
                 desired_value="t3.large",
                 current_value="t3.medium",
-                reason="Resize instance",
+                reason=reason,
             )
         ],
         requires_approval=requires_approval,
@@ -468,3 +472,63 @@ def test_foreign_gitops_change_cannot_be_mutated_and_actor_is_authenticated():
     )
     assert approved.status_code == 200
     assert approved.json()["approved_by"] == "alice"
+
+def test_gitops_csv_export_applies_search_status_and_tenant_scope():
+    matching = make_change_set(reason="Resize production instance")
+    matching.change_id = "change-matching"
+    matching.metadata["tenant_id"] = "tenant-a"
+    other = make_change_set()
+    other.change_id = "change-other"
+    other.metadata["tenant_id"] = "tenant-a"
+    foreign = make_change_set()
+    foreign.change_id = "change-foreign"
+    foreign.metadata["tenant_id"] = "tenant-b"
+    registry.register(matching)
+    registry.register(other)
+    registry.register(foreign)
+    client = make_tenant_client()
+
+    response = client.get(
+        "/autonomy/gitops/changes/export.csv?status=pending_approval&search=PRODUCTION",
+        headers={"Authorization": "Bearer tenant-a"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/csv")
+    assert 'attachment; filename="gitops-changes.csv"' in response.headers["content-disposition"]
+    records = list(csv.DictReader(io.StringIO(response.content.decode("utf-8-sig"))))
+    assert len(records) == 1
+    assert records[0]["Change ID"] == matching.change_id
+    assert records[0]["Resource ID"] == "i-api-123"
+    assert records[0]["Reason"] == "Resize production instance"
+
+
+def test_gitops_csv_export_neutralizes_spreadsheet_formulas_and_handles_empty_result():
+    change_set = make_change_set(reason='=HYPERLINK("https://example.invalid")')
+    registry.register(change_set)
+    client = TestClient(make_app())
+
+    exported = client.get("/autonomy/gitops/changes/export.csv")
+    records = list(csv.DictReader(io.StringIO(exported.content.decode("utf-8-sig"))))
+    assert records[0]["Reason"].startswith("'=HYPERLINK")
+
+    empty = client.get("/autonomy/gitops/changes/export.csv?search=does-not-match")
+    assert empty.status_code == 200
+    assert len(list(csv.reader(io.StringIO(empty.content.decode("utf-8-sig"))))) == 1
+
+
+def test_gitops_csv_export_rejects_invalid_filters():
+    client = TestClient(make_app())
+
+    assert client.get("/autonomy/gitops/changes/export.csv?status=unknown").status_code == 400
+    assert client.get("/autonomy/gitops/changes/export.csv?search=" + "x" * 201).status_code == 422
+
+def test_gitops_export_is_available_in_console_with_current_filters_and_auth():
+    console = (Path(__file__).parents[1] / "static" / "console.html").read_text(encoding="utf-8")
+
+    assert 'id="exportGitops"' in console
+    assert "$('exportGitops').addEventListener('click',exportGitops)" in console
+    assert "/autonomy/gitops/changes/export.csv" in console
+    assert "Authorization:'Bearer '+bearer" in console
+    assert "query.set('status',status)" in console
+    assert "query.set('search',search)" in console

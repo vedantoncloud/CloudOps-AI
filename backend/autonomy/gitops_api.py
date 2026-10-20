@@ -1,8 +1,11 @@
+import csv
+import io
 import os
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from autonomy.audit_api import audit_trail
@@ -110,22 +113,12 @@ def _authenticated_actor(request: Request) -> str | None:
     return principal.subject if principal is not None else None
 
 
-@router.get(
-    "/changes",
-    response_model=GitOpsChangePageResponse,
-)
-def list_gitops_changes(
-    request: Request,
-    status: str | None = None,
-    search: str | None = Query(default=None, max_length=200),
-    limit: int = Query(default=50, ge=1, le=200),
-    offset: int = Query(default=0, ge=0),
-) -> GitOpsChangePageResponse:
+def _matching_changes(request: Request, status: str | None, search: str | None):
     valid_statuses = {item.value for item in GitOpsChangeStatus}
     if status is not None and status not in valid_statuses:
         raise HTTPException(status_code=400, detail="Invalid GitOps change status")
     normalized_search = search.strip().casefold() if search else ""
-    visible = [
+    return [
         change_set
         for change_set in reversed(registry.list_all())
         if (
@@ -144,11 +137,61 @@ def list_gitops_changes(
             )).casefold()
         )
     ]
+
+
+def _spreadsheet_cell(value: Any) -> str:
+    text = "" if value is None else str(value)
+    if text.lstrip().startswith(("=", "+", "-", "@", "\t", "\r")):
+        return "'" + text
+    return text
+
+
+@router.get(
+    "/changes",
+    response_model=GitOpsChangePageResponse,
+)
+def list_gitops_changes(
+    request: Request,
+    status: str | None = None,
+    search: str | None = Query(default=None, max_length=200),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> GitOpsChangePageResponse:
+    visible = _matching_changes(request, status, search)
     return GitOpsChangePageResponse(
         changes=[_serialize_change_set(item) for item in visible[offset:offset + limit]],
         total=len(visible),
         limit=limit,
         offset=offset,
+    )
+
+
+@router.get("/changes/export.csv", response_class=Response)
+def export_gitops_changes(
+    request: Request,
+    status: str | None = None,
+    search: str | None = Query(default=None, max_length=200),
+) -> Response:
+    """Export all matching, tenant-visible proposals as spreadsheet-safe CSV."""
+    visible = _matching_changes(request, status, search)
+    output = io.StringIO(newline="")
+    writer = csv.writer(output, lineterminator="\r\n")
+    writer.writerow(("Change ID", "Source action ID", "Status", "Requires approval",
+                     "Approved by", "Commit message", "Resource type", "Resource ID",
+                     "Field", "Current value", "Desired value", "Reason"))
+    for change_set in visible:
+        for change in change_set.changes:
+            writer.writerow(tuple(_spreadsheet_cell(value) for value in (
+                change_set.change_id, change_set.source_action_id,
+                change_set.status.value, change_set.requires_approval,
+                change_set.approved_by, change_set.commit_message,
+                change.resource_type, change.resource_id, change.field,
+                change.current_value, change.desired_value, change.reason,
+            )))
+    return Response(
+        content="\ufeff" + output.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="gitops-changes.csv"'},
     )
 
 
