@@ -121,6 +121,7 @@ EC2 instance detail, ownership checks, metrics, status, CPU/network trends, per-
 - The operations console can browse S3 bucket objects by prefix, choose a bounded page size, and continue through truncated listings.
 - Operators can navigate S3 bucket folder prefixes in the console; delimiter-based listings show common prefixes as folders, support moving up one level, and retain bounded continuation pagination.
 - Operators can inspect bounded S3 object version history, including delete markers, through the console; AWS key and version markers support continuation, historical versions can be downloaded using version-specific presigned URLs, and provider failures return a sanitized unavailable response.
+- Operators can inspect a selected S3 object version's metadata from version history; the console presents version, content, encryption, and user metadata as text-safe labeled fields, shows missing metadata explicitly, and the tenant-scoped lookup sanitizes provider failures.
 - The operations console appends subsequent S3 object pages to the visible listing, reports the cumulative loaded count, and preserves earlier results if a later page fails.
 - Operators can inspect S3 object metadata from the console, including size, content type, ETag, storage class, encryption, modification time, and user metadata; the lookup uses `HeadObject` and enforces the bucket tenant boundary.
 - S3 object statistics, largest-object results, and derived bucket health and insight responses report whether the scan covered the complete matching set or stopped at its object limit, along with the configured limit.
@@ -201,7 +202,6 @@ EC2 instance detail, ownership checks, metrics, status, CPU/network trends, per-
 - No CI workflow, deployment/container configuration, IaC, or substantive operator documentation was found; `docs/` is empty. The console is a lightweight browser client served by FastAPI, with inventory/governance, plan generation, inspection and review, approvals, and run history.
 - No supported Python runtime or automated dependency update/security workflow is documented.
 - EC2/S3 optimization insights remain qualitative and do not attribute Cost Explorer charges to tenants or individual resources; the admin-only account billing view reports daily shared-account totals.
-- Operators can inspect metadata for a specific S3 object version from the version history; version lookups remain bucket-tenant-scoped and return sanitized provider-unavailable responses.
 - EC2 inventory browsing, fleet-wide aggregate insights, and per-instance follow-up operations accept an explicit AWS region. Routes without a selected-region control use the configured default region.
 - Operators can filter EC2 inventory by exact instance type at the AWS API before pagination; the console preserves the filter across pages and full CSV exports.
 - Operators can filter EC2 inventory by VPC and subnet IDs at the AWS API before pagination; tenant scoping remains in effect, and the console preserves both filters across pages and full CSV exports while showing placement IDs.
