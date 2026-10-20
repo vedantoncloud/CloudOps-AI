@@ -313,10 +313,49 @@ def test_approver_and_idempotency_are_forwarded():
 
     assert response.status_code == 200
     call = fake.calls[0]
-    assert call["approved_by"] == "operator"
+    assert call["approved_by"] == "local-development"
     assert call["idempotency_key"] == "idem-123"
     assert call["idempotency_seen"] is False
     assert call["dry_run"] is False
+
+
+def test_authenticated_reviewer_identity_overrides_caller_claim():
+    fake = FakeRunner("completed")
+    client = make_client(fake)
+    body = payload("run-api-forged-reviewer")
+    body.update({"approved_by": "forged-admin"})
+
+    response = client.post("/autonomy/run", json=body)
+
+    assert response.status_code == 200
+    assert fake.calls[0]["approved_by"] == "local-development"
+    assert fake.calls[0]["actor_id"] == "local-development"
+
+
+def test_rejection_requires_reason_before_runner_is_called():
+    fake = FakeRunner("blocked")
+    client = make_client(fake)
+    body = payload("run-api-rejection-no-reason")
+    body["rejected_by"] = "forged-reviewer"
+
+    response = client.post("/autonomy/run", json=body)
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "rejection_reason is required when rejecting."
+    assert fake.calls == []
+
+
+def test_rejection_reason_and_authenticated_reviewer_are_forwarded():
+    fake = FakeRunner("blocked")
+    client = make_client(fake)
+    body = payload("run-api-rejected")
+    body.update({"rejected_by": "forged-reviewer", "rejection_reason": "Risk is too high"})
+
+    response = client.post("/autonomy/run", json=body)
+
+    assert response.status_code == 200
+    assert fake.calls[0]["rejected_by"] == "local-development"
+    assert fake.calls[0]["rejection_reason"] == "Risk is too high"
 
 
 def test_empty_action_id_is_rejected():

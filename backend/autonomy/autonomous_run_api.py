@@ -194,19 +194,27 @@ def _result(result: GovernedAutonomousRunResult) -> dict[str, Any]:
 @router.post("/run")
 def run_autonomous(payload: AutonomousRunRequest, request: Request) -> dict[str, Any]:
     try:
+        principal = getattr(request.state, "principal", None)
+        actor_id = getattr(principal, "subject", None)
+        # Reviewer fields select a requested transition, but identity comes from
+        # the authenticated principal. Never accept a caller-supplied actor.
+        approved_by = actor_id if payload.approved_by is not None and actor_id else payload.approved_by
+        rejected_by = actor_id if payload.rejected_by is not None and actor_id else payload.rejected_by
+        if rejected_by is not None and not (payload.rejection_reason or "").strip():
+            raise ValueError("rejection_reason is required when rejecting.")
         action = _action(payload)
         result = runner.run(
             provider=payload.provider.strip(),
             action=action,
             resource_type=payload.resource_type.strip(),
             resource_id=payload.resource_id.strip(),
-            approved_by=payload.approved_by,
-            rejected_by=payload.rejected_by,
+            approved_by=approved_by,
+            rejected_by=rejected_by,
             rejection_reason=payload.rejection_reason,
             idempotency_key=payload.idempotency_key,
             idempotency_seen=payload.idempotency_seen,
             dry_run=payload.dry_run,
-            actor_id=getattr(getattr(request.state, "principal", None), "subject", None),
+            actor_id=actor_id,
         )
         return _result(result)
     except (ValueError, PermissionError, RuntimeError) as exc:
