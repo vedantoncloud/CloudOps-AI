@@ -41,6 +41,8 @@ Operators can export every S3 object version and delete marker for the currently
 
 Operators can export loaded EC2 fleet efficiency, cost, rightsizing, and security insights as a spreadsheet-safe CSV with category, region, and nested result fields; provider failures clear stale results and keep export disabled.
 
+Approved dry-run action-plan execution now records the resulting lifecycle status and authenticated actor in the audit trail. Requests blocked by the approval gate or by disabled real execution do not emit a success event.
+
 ## Completed work
 
 - FastAPI application and AWS service status/connectivity checks.
@@ -52,6 +54,7 @@ Operators can export loaded EC2 fleet efficiency, cost, rightsizing, and securit
 - SQLite-backed persistent audit events and autonomous-run audit events, plus idempotency, reconciliation, health checks, and extensive malformed-input/concurrency tests.
 - Configurable development/token access modes, method-based reader/operator/admin authorization, tenant claim/header checks, admin-only audit diagnostics, autonomous-run actor attribution, and partial resource/EC2/S3 tenant filtering.
 - Production environment startup validation rejects permissive development authentication and requires configured bearer tokens.
+- Approved dry-run action-plan execution records its status transition and authenticated actor in the audit trail; rejected and blocked execution requests do not emit a success event.
 - Aggregate EC2 efficiency, cost, rightsizing, and security insights analyze only authenticated-tenant inventory in token mode.
 - Tenant-scoped EC2 fleet summaries and aggregate efficiency, cost, rightsizing, and security insights now traverse every AWS inventory page before computing results; a failed later page prevents insights from being computed on partial inventory.
 - Authenticated tenant users receive a sanitized AWS status response without the shared AWS account ID, principal ARN, or raw diagnostics; admins retain full status details.

@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 
 from autonomy.action_models import ActionPlan, ActionStatus, ActionTarget, RiskLevel
 from autonomy.api import _plan_registry
+from autonomy import api as autonomy_api
 from main import app
 
 
@@ -82,6 +83,50 @@ def test_execute_approved_action_succeeds():
     assert body["execution"]["dry_run"] is True
     assert body["execution"]["executed"] is False
     assert body["execution"]["successful"] is True
+
+
+def test_execute_records_attributed_audit_transition(monkeypatch):
+    action = create_approved_action()
+    events = []
+    monkeypatch.setattr(autonomy_api.audit_trail, "record", lambda **event: events.append(event))
+    monkeypatch.setattr(autonomy_api, "_persist_plan", lambda plan: None)
+
+    response = client.post(f"/autonomy/plans/{action.action_id}/execute")
+
+    assert response.status_code == 200
+    assert len(events) == 1
+    assert events[0]["event"] == "plan_succeeded"
+    assert events[0]["old_status"] == "approved"
+    assert events[0]["new_status"] == "succeeded"
+    assert events[0]["actor_id"] == "local-development"
+    assert events[0]["action_id"] == action.action_id
+
+
+def test_blocked_execution_does_not_record_success_event(monkeypatch):
+    action = create_approved_action()
+    events = []
+    monkeypatch.setattr(autonomy_api.audit_trail, "record", lambda **event: events.append(event))
+
+    response = client.post(
+        f"/autonomy/plans/{action.action_id}/execute",
+        params={"dry_run": "false"},
+    )
+
+    assert response.status_code == 400
+    assert events == []
+    assert action.status is ActionStatus.APPROVED
+
+
+def test_unapproved_execution_does_not_record_success_event(monkeypatch):
+    action = create_approved_action()
+    action.status = ActionStatus.PENDING_APPROVAL
+    events = []
+    monkeypatch.setattr(autonomy_api.audit_trail, "record", lambda **event: events.append(event))
+
+    response = client.post(f"/autonomy/plans/{action.action_id}/execute")
+
+    assert response.status_code == 409
+    assert events == []
 
 
 def test_execute_requires_approval():

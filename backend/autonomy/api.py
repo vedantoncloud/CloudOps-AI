@@ -437,6 +437,7 @@ def execute_plan(
             detail="Action must be approved before execution.",
         )
 
+    old_status = action.status
     try:
         execution_result = action_executor.execute(
             action,
@@ -452,6 +453,7 @@ def execute_plan(
     except (ValueError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    _record_plan_transition(final_action, request, old_status)
     _persist_plan(final_action)
 
     return {
