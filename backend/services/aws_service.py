@@ -603,6 +603,40 @@ class AWSService:
                 "error": str(error),
             }
 
+    def get_s3_bucket_replication(self, bucket_name):
+        """Report whether cross-region/region replication rules are configured."""
+        try:
+            response = _aws_client("s3").get_bucket_replication(Bucket=bucket_name)
+            configuration = response.get("ReplicationConfiguration", {})
+            rules = configuration.get("Rules", []) if isinstance(configuration, dict) else None
+            if not isinstance(rules, list) or any(not isinstance(rule, dict) for rule in rules):
+                return {"service": "s3", "status": "unhealthy", "bucket": bucket_name}
+            return {
+                "service": "s3",
+                "status": "healthy",
+                "bucket": bucket_name,
+                "configured": bool(rules),
+                "rule_count": len(rules),
+                "enabled_rule_count": sum(rule.get("Status") == "Enabled" for rule in rules),
+                "rules": rules,
+            }
+        except ClientError as error:
+            if error.response.get("Error", {}).get("Code") == "ReplicationConfigurationNotFoundError":
+                return {
+                    "service": "s3", "status": "healthy", "bucket": bucket_name,
+                    "configured": False, "rule_count": 0, "enabled_rule_count": 0,
+                    "rules": [],
+                }
+            return {
+                "service": "s3", "status": "unhealthy", "bucket": bucket_name,
+                "error": str(error),
+            }
+        except BotoCoreError as error:
+            return {
+                "service": "s3", "status": "unhealthy", "bucket": bucket_name,
+                "error": str(error),
+            }
+
     def get_s3_bucket_tags(self, bucket_name):
         """Return a bucket's tags for tenant ownership checks."""
         try:

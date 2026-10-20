@@ -465,6 +465,13 @@ def aws_s3_bucket_lifecycle(bucket_name: str, request: Request):
     return _aws_resource_result(lambda: aws_service.get_s3_bucket_lifecycle(bucket_name))
 
 
+@app.get("/cloud/aws/s3/buckets/{bucket_name}/replication")
+def aws_s3_bucket_replication(bucket_name: str, request: Request):
+    """Inspect replication rules after verifying tenant ownership."""
+    _require_tenant_s3_bucket(request, bucket_name)
+    return _aws_resource_result(lambda: aws_service.get_s3_bucket_replication(bucket_name))
+
+
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/objects")
 def aws_s3_objects(
     bucket_name: str,
