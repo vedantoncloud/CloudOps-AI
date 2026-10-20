@@ -313,12 +313,22 @@ def evaluate_plan(action_id: str, request: Request):
     if action is None:
         raise HTTPException(status_code=404, detail="Action plan not found")
 
+    old_status = action.status
+    old_requires_approval = action.requires_approval
     try:
         evaluated = policy_engine.evaluate(action)
     except (ValueError, TypeError) as exc:
+        action.status = old_status
+        action.requires_approval = old_requires_approval
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    _persist_plan(evaluated)
+    try:
+        _record_plan_transition(evaluated, request, old_status)
+        _persist_plan(evaluated)
+    except Exception:
+        action.status = old_status
+        action.requires_approval = old_requires_approval
+        raise
     return _action_response(evaluated)
 
 

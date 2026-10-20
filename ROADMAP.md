@@ -43,7 +43,7 @@ Operators can export every S3 object version and delete marker for the currently
 
 Operators can export loaded EC2 fleet efficiency, cost, rightsizing, and security insights as a spreadsheet-safe CSV with category, region, and nested result fields; provider failures clear stale results and keep export disabled.
 
-Approved dry-run action-plan execution now records the resulting lifecycle status and authenticated actor in the audit trail. Requests blocked by the approval gate or by disabled real execution do not emit a success event.
+Approved dry-run action-plan execution now records the resulting lifecycle status and authenticated actor in the audit trail. Policy evaluation records its plan status transition with the authenticated actor and tenant, and restores in-memory policy state if audit or persistence fails. Requests blocked by the approval gate or by disabled real execution do not emit a success event.
 
 S3 object statistics, largest-object analysis, bucket health, insights, and optimization routes map both provider exceptions and unhealthy results to the same sanitized `503` response; focused tests preserve successful responses and input validation.
 
@@ -66,6 +66,7 @@ EC2 instance detail, ownership checks, metrics, status, CPU/network trends, per-
 - Configurable development/token access modes, method-based reader/operator/admin authorization, tenant claim/header checks, admin-only audit diagnostics, autonomous-run actor attribution, and partial resource/EC2/S3 tenant filtering.
 - Production environment startup validation rejects permissive development authentication and requires configured bearer tokens.
 - Approved dry-run action-plan execution records its status transition and authenticated actor in the audit trail; rejected and blocked execution requests do not emit a success event.
+- Action-plan policy evaluation records its status transition with the authenticated actor and tenant; failed audit or persistence writes restore the in-memory policy state.
 - S3 object statistics, largest-object analysis, bucket health, insights, and optimization routes map thrown provider failures and unhealthy results to a stable sanitized `503`; successful responses and request-limit validation are covered.
 - EC2 instance detail, ownership checks, metrics, status, CPU/network trends, per-instance insights, and fleet insight routes map provider exceptions, unhealthy results, and malformed responses to the shared sanitized `503` contract; successful payloads, selected-region behavior, and input validation remain covered.
 - Operators can export S3 bucket analysis results as spreadsheet-safe CSV, including successful check details, failed checks, selected prefix, and object-scan coverage metadata; export stays disabled until an analysis finishes.
@@ -102,7 +103,7 @@ EC2 instance detail, ownership checks, metrics, status, CPU/network trends, per-
 - Operators can inspect full action-plan details from the pending approval queue before making a decision; plan lookup is URL-encoded and errors are visible in an approval-specific panel.
 - Operators can filter the tenant-scoped action plan queue by status, risk, and resource type; filtered totals and pagination stay consistent when filters change in the console.
 - Operators can search the action plan queue case-insensitively by action type, target resource ID, or reason; search composes with status/risk/resource filters and keeps totals and pagination consistent.
-- Operators can reject a pending action plan with a required reason; the response records the authenticated reviewer and exposes a distinct `rejected` status.
+- Operators can reject a pending action plan with a required reason; the response records the authenticated reviewer and exposes a distinct `rejected` status. Policy evaluation transitions are also attributed in the audit trail.
 - Operators can cancel a pending action plan with the authenticated actor recorded as its decision maker, matching approval and rejection attribution in plan state.
 - Authenticated users can retrieve an action plan's current state through `GET /autonomy/plans/{action_id}`; token-mode lookups hide plans belonging to another tenant.
 - Authenticated operators can use the end-to-end autonomous lifecycle API in the assembled app; approval and rejection identities and lifecycle audit attribution come from the authenticated subject, and lifecycle audit reads are restricted to the action's tenant.
