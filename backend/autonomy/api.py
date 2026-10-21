@@ -117,6 +117,23 @@ def _action_response(action):
     }
 
 
+def _load_action_insights(provider_call):
+    """Read a validated insight payload or fail closed on provider problems."""
+    try:
+        result = provider_call()
+    except Exception:
+        raise HTTPException(
+            status_code=503, detail="AWS resource data is unavailable"
+        ) from None
+    if (not isinstance(result, dict)
+            or result.get("status") != "healthy"
+            or not isinstance(result.get("insights"), list)):
+        raise HTTPException(
+            status_code=503, detail="AWS resource data is unavailable"
+        )
+    return result["insights"]
+
+
 def _record_plan_transition(action: ActionPlan, request: Request, old_status: ActionStatus) -> None:
     """Persist an attributed audit event for a lifecycle decision."""
     principal = getattr(request.state, "principal", None)
@@ -179,14 +196,15 @@ def plan_ec2_actions(instance_id: str, request: Request, region: str | None = No
     if region is not None and not re.fullmatch(r"[a-z]{2}(?:-[a-z0-9]+)+-[0-9]", region):
         raise HTTPException(status_code=400, detail="Invalid AWS region")
     _require_tenant_ec2_instance(request, instance_id, region)
-    result = aws_service.get_ec2_insights(instance_id, **({"region": region} if region else {}))
-
-    if result["status"] == "unhealthy":
-        raise HTTPException(status_code=503, detail="AWS resource data is unavailable")
+    insights = _load_action_insights(
+        lambda: aws_service.get_ec2_insights(
+            instance_id, **({"region": region} if region else {})
+        )
+    )
 
     plans = action_planner.plan_from_ec2_insights(
         instance_id,
-        result.get("insights", []),
+        insights,
     )
 
     return _plan_response(plans, request)
@@ -206,18 +224,17 @@ def plan_s3_actions(
             detail="max_keys must be between 1 and 1000",
         )
 
-    result = aws_service.get_s3_bucket_insights(
-        bucket_name,
-        prefix=prefix,
-        max_keys=max_keys,
+    insights = _load_action_insights(
+        lambda: aws_service.get_s3_bucket_insights(
+            bucket_name,
+            prefix=prefix,
+            max_keys=max_keys,
+        )
     )
-
-    if result["status"] == "unhealthy":
-        raise HTTPException(status_code=503, detail="AWS resource data is unavailable")
 
     plans = action_planner.plan_from_s3_insights(
         bucket_name,
-        result.get("insights", []),
+        insights,
         prefix=prefix,
     )
 
