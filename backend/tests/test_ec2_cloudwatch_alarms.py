@@ -207,3 +207,13 @@ def test_fleet_alarm_endpoint_limits_tenant_to_owned_instances(monkeypatch):
     })
     assert response.status_code == 200
     assert response.json()["alarms"] == [{"AlarmName": "owned", "instance_ids": ["i-aaaaaaaa"]}]
+
+def test_console_renders_filterable_fleet_alarm_summary_and_table():
+    html = (Path(__file__).parents[1] / "static" / "console.html").read_text(encoding="utf-8")
+    assert 'id="alarmStateFilter"' in html
+    assert 'value="INSUFFICIENT_DATA"' in html
+    assert "function renderFleetAlarms(data" in html
+    assert "counts.ALARM||0" in html
+    assert "alarm.instance_ids.join(', ')" in html
+    assert "$('alarmStateFilter').addEventListener('change'" in html
+    assert "cell.textContent=value" in html
