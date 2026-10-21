@@ -217,3 +217,34 @@ def test_console_renders_filterable_fleet_alarm_summary_and_table():
     assert "alarm.instance_ids.join(', ')" in html
     assert "$('alarmStateFilter').addEventListener('change'" in html
     assert "cell.textContent=value" in html
+
+
+def test_fleet_alarm_csv_export_respects_filter_and_is_spreadsheet_safe():
+    import json
+    import re
+    import shutil
+    import subprocess
+
+    import pytest
+
+    if not shutil.which("node"):
+        pytest.skip("Node.js is needed to run the console JavaScript behavior check")
+    html = (Path(__file__).parents[1] / "static" / "console.html").read_text(encoding="utf-8")
+    assert 'id="exportFleetAlarms"' in html
+    match = re.search(r"function exportFleetAlarms\(\).*?(?=function renderFleetAlarms)", html, re.S)
+    assert match
+    script = r"""
+const assert=require('node:assert/strict'),source=JSON.parse(process.argv[1]);
+let downloads=[],blobs=[];const filter={value:'ALARM'};
+const csvCell=value=>{let text=String(value??'');if(/^[\t\r ]*[=+\-@]/.test(text))text="'"+text;return '"'+text.replaceAll('"','""')+'"'};
+const document={body:{append(link){downloads.push(link)}},createElement(){return {click(){},remove(){}}}};
+const URL={createObjectURL(blob){blobs.push(blob);return 'blob:test'},revokeObjectURL(){}};
+const make=new Function('fleetAlarmData','filter','csvCell','URL','Blob','document',"const $=()=>filter;"+source+";return exportFleetAlarms");
+(async()=>{
+ const exportCsv=make({alarms:[{AlarmName:'=cmd',StateValue:'ALARM',instance_ids:['i-1'],Threshold:80,ComparisonOperator:'GreaterThanThreshold',Period:60,EvaluationPeriods:2},{AlarmName:'healthy',StateValue:'OK'}]},filter,csvCell,URL,Blob,document);
+ exportCsv();assert.equal(downloads.length,1);assert.equal(downloads[0].download,'ec2-fleet-alarms.csv');const csv=await blobs[0].text();assert(csv.includes("'=cmd"));assert(csv.includes('GreaterThanThreshold 80'));assert(!csv.includes('healthy'));
+ filter.value='INSUFFICIENT_DATA';exportCsv();assert.equal(downloads.length,1);
+})().catch(error=>{console.error(error);process.exitCode=1});
+"""
+    result = subprocess.run(["node", "-e", script, json.dumps(match.group(0))], capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stdout + result.stderr

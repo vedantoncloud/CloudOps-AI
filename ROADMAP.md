@@ -60,6 +60,7 @@ EC2 instance detail, ownership checks, metrics, status, CPU/network trends, per-
 
 ## Completed work
 
+- Operators can export the currently visible regional EC2 CPU alarms as spreadsheet-safe CSV, including state, attached instances, threshold, and evaluation settings; the active state filter is applied and empty matches stay disabled.
 - Operators can inspect default S3 bucket server-side encryption configuration, including SSE algorithm, KMS key, and bucket-key settings, in bucket analysis and CSV exports; missing configuration is reported explicitly, malformed/provider responses fail closed, and tenant ownership is verified before reads. Deployments need `s3:GetEncryptionConfiguration`.
 
 - Operators can inspect S3 bucket tags in bucket analysis and CSV exports; tag reads validate provider responses, fail closed on unavailable or malformed data, and enforce tenant ownership before returning metadata. Deployments need `s3:GetBucketTagging`.
