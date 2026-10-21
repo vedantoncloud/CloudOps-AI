@@ -795,6 +795,17 @@ def aws_ec2_instance_status(instance_id: str, request: Request, region: str | No
     ))
 
 
+@app.get("/cloud/aws/ec2/instances/{instance_id}/volumes")
+def aws_ec2_instance_volumes(instance_id: str, request: Request, region: str | None = None):
+    """Inspect attached EBS encryption only after verifying instance ownership."""
+    _validate_ec2_instance_id(instance_id)
+    _validate_ec2_region(region)
+    _require_tenant_ec2_instance(request, instance_id, region)
+    return _aws_resource_result(lambda: aws_service.get_ec2_instance_volumes(
+        instance_id, **({"region": region} if region else {})
+    ))
+
+
 @app.get("/cloud/aws/ec2/instances/{instance_id}/alarms")
 def aws_ec2_alarms(
     instance_id: str,

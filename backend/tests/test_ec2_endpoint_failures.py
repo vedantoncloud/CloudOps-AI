@@ -10,6 +10,7 @@ FOLLOW_UPS = [
     ("/network", "get_ec2_network_utilization"),
     ("/status", "get_ec2_instance_status"),
     ("/metrics", "get_ec2_metrics"),
+    ("/volumes", "get_ec2_instance_volumes"),
 ]
 
 
@@ -62,6 +63,22 @@ def test_ec2_instance_lookup_exception_is_sanitized_before_tenant_check(monkeypa
     assert response.status_code == 503
     assert response.json() == {"detail": "AWS resource data is unavailable"}
     assert "credentials" not in response.text
+
+
+def test_ec2_volume_success_and_invalid_instance_id(monkeypatch):
+    expected = {
+        "service": "ec2", "status": "healthy", "instance_id": "i-12345678",
+        "volumes": [{"volume_id": "vol-123", "encrypted": False}],
+    }
+    monkeypatch.setattr(main.aws_service, "get_ec2_instance_volumes", lambda *a, **k: expected)
+    client = TestClient(main.app)
+
+    success = client.get("/cloud/aws/ec2/instances/i-12345678/volumes?region=eu-west-1")
+    invalid = client.get("/cloud/aws/ec2/instances/not-an-instance/volumes")
+
+    assert success.status_code == 200
+    assert success.json() == expected
+    assert invalid.status_code == 400
 
 
 @pytest.mark.parametrize(

@@ -466,6 +466,50 @@ class AWSService:
         except (BotoCoreError, ClientError) as error:
             return {"service": "ec2", "status": "unhealthy", "error": str(error)}
 
+    def get_ec2_instance_volumes(self, instance_id, region=None):
+        """Return attached EBS volume encryption and attachment details."""
+        try:
+            client = _aws_client("ec2", **({"region_name": region} if region else {}))
+            response = client.describe_instances(InstanceIds=[instance_id])
+            instances = [
+                instance
+                for reservation in response.get("Reservations", [])
+                for instance in reservation.get("Instances", [])
+            ]
+            if not instances:
+                return {"service": "ec2", "status": "healthy", "instance_id": instance_id, "volumes": []}
+            mappings = instances[0].get("BlockDeviceMappings", [])
+            volume_ids = sorted({
+                mapping.get("Ebs", {}).get("VolumeId")
+                for mapping in mappings
+                if isinstance(mapping, dict)
+                and isinstance(mapping.get("Ebs"), dict)
+                and isinstance(mapping["Ebs"].get("VolumeId"), str)
+            })
+            if not volume_ids:
+                return {"service": "ec2", "status": "healthy", "instance_id": instance_id, "volumes": []}
+            volumes_response = client.describe_volumes(VolumeIds=volume_ids)
+            volumes = []
+            for volume in volumes_response.get("Volumes", []):
+                if not isinstance(volume, dict) or not isinstance(volume.get("VolumeId"), str):
+                    continue
+                volumes.append({
+                    "volume_id": volume["VolumeId"],
+                    "encrypted": volume.get("Encrypted") if isinstance(volume.get("Encrypted"), bool) else None,
+                    "kms_key_id": volume.get("KmsKeyId"),
+                    "size_gib": volume.get("Size"),
+                    "volume_type": volume.get("VolumeType"),
+                    "state": volume.get("State"),
+                    "attachments": [
+                        {"device": attachment.get("Device"), "state": attachment.get("State")}
+                        for attachment in volume.get("Attachments", [])
+                        if isinstance(attachment, dict) and attachment.get("InstanceId") == instance_id
+                    ],
+                })
+            return {"service": "ec2", "status": "healthy", "instance_id": instance_id, "volumes": volumes}
+        except (BotoCoreError, ClientError) as error:
+            return {"service": "ec2", "status": "unhealthy", "error": str(error)}
+
     def get_s3_buckets(self, max_buckets=1000, continuation_token=None, prefix=None):
         try:
             s3 = _aws_client("s3")

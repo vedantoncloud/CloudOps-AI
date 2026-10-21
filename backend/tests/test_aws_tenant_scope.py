@@ -133,6 +133,29 @@ def test_ec2_network_filter_preserves_tenant_scoping(monkeypatch):
     ]
 
 
+def test_ec2_volume_details_verify_instance_tenant_before_provider_lookup(monkeypatch):
+    client = tenant_client(monkeypatch)
+    service = main.aws_service
+    calls = []
+    original_instance_lookup = service.get_ec2_instance
+    service.get_ec2_instance = lambda instance_id, **kwargs: original_instance_lookup(instance_id)
+    service.get_ec2_instance_volumes = lambda instance_id, **kwargs: (
+        calls.append((instance_id, kwargs)) or {
+            "service": "ec2", "status": "healthy", "instance_id": instance_id,
+            "volumes": [{"volume_id": "vol-a", "encrypted": True}],
+        }
+    )
+    headers = {"Authorization": "Bearer token-a"}
+
+    owned = client.get("/cloud/aws/ec2/instances/i-aaaaaaaa/volumes?region=eu-west-1", headers=headers)
+    foreign = client.get("/cloud/aws/ec2/instances/i-bbbbbbbb/volumes", headers=headers)
+
+    assert owned.status_code == 200
+    assert owned.json()["volumes"][0]["encrypted"] is True
+    assert calls == [("i-aaaaaaaa", {"region": "eu-west-1"})]
+    assert foreign.status_code == 404
+
+
 def test_aws_status_retains_full_diagnostics_for_admin(monkeypatch):
     client = tenant_client(monkeypatch)
     response = client.get(
