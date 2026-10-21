@@ -20,6 +20,8 @@ The audit trail, idempotency/reconciliation state, action-plan lifecycle state, 
 
 Administrators can view 7, 30, or 90 complete days of shared AWS account daily unblended spend and service-level totals through Cost Explorer in the console. This endpoint is admin-only because the AWS account and billing data are shared; it does not provide tenant- or resource-level charge attribution. S3 bucket analysis responses identify whether object scans completed or stopped at their configured limit. S3 bucket security analysis also identifies AWS-classified public bucket policies and public ACL grants; denied or malformed policy data is surfaced as unknown.
 
+Administrators can compare the selected account billing window with the immediately preceding window of equal length. The report and CSV show prior spend, absolute change, and percentage change; a zero prior total is reported without inventing a percentage.
+
 Operators can filter their autonomous run history by outcome and search action IDs, action types, resource types, and resource IDs. Filtering is applied before pagination, and run history remains scoped to the authenticated actor.
 
 Operators can filter their actor-scoped autonomous run history by inclusive update-time bounds; date filtering composes with outcome, search, and pagination, and invalid or reversed ranges are rejected.
@@ -88,6 +90,7 @@ EC2 instance detail, ownership checks, metrics, status, CPU/network trends, per-
 - Operators can export S3 bucket analysis results as spreadsheet-safe CSV, including successful check details, failed checks, selected prefix, and object-scan coverage metadata; export stays disabled until an analysis finishes.
 - The admin-only AWS account billing endpoint maps provider exceptions, unhealthy results, and malformed provider responses to a stable sanitized `503`; success, authorization, and billing-window validation remain covered.
 - Admin billing reports now follow Cost Explorer pagination, combine service groups across pages without double-counting repeated daily totals, and fail closed if a later page is unavailable.
+- Admin account billing now compares equal-length current and preceding spend windows, includes absolute and percentage changes in the console and CSV, and represents zero-baseline percentage change as unavailable.
 - Operators can inspect paginated CloudWatch CPU utilization alarms for an EC2 instance from its regional details panel; alarm lookup checks tenant ownership first, bounds each page to 100 alarms, and maps provider failures to a sanitized `503`.
 - Operators can review regional EC2 CPU alarms across their fleet in a state-filterable console table with counts by alarm state, affected instance IDs, thresholds, and evaluation periods. Alarm discovery follows CloudWatch pagination, fails on repeated cursors or provider errors, excludes unrelated alarms, and tenant results include only alarms attached to owned instances.
 - S3 bucket detail, object listing, object metadata, version listing, download URL, security insight, and cost insight endpoints return the same sanitized `503` for provider exceptions, unhealthy results, and malformed provider responses; successful object listing behavior and request validation remain covered.

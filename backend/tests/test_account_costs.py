@@ -1,5 +1,5 @@
 from unittest.mock import patch
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from botocore.exceptions import ClientError
@@ -43,7 +43,24 @@ def test_account_costs_requests_selected_complete_day_window():
         factory.return_value.get_cost_and_usage.return_value = {"ResultsByTime": []}
         AWSService().get_account_costs(days=90)
     period = factory.return_value.get_cost_and_usage.call_args.kwargs["TimePeriod"]
-    assert (datetime.fromisoformat(period["End"]) - datetime.fromisoformat(period["Start"])).days == 90
+    assert (datetime.fromisoformat(period["End"]) - datetime.fromisoformat(period["Start"])).days == 180
+
+
+def test_account_costs_compares_equal_windows_and_calculates_change():
+    end = datetime.now(timezone.utc).date()
+    current_start = end - timedelta(days=30)
+    prior_start = current_start - timedelta(days=1)
+    response = {"ResultsByTime": [
+        {"TimePeriod": {"Start": prior_start.isoformat()}, "Total": {"UnblendedCost": {"Amount": "2", "Unit": "USD"}}, "Groups": []},
+        {"TimePeriod": {"Start": current_start.isoformat()}, "Total": {"UnblendedCost": {"Amount": "5", "Unit": "USD"}}, "Groups": []},
+    ]}
+    with patch("services.aws_service.boto3.client") as factory:
+        factory.return_value.get_cost_and_usage.return_value = response
+        result = AWSService().get_account_costs(days=30)
+    period = factory.return_value.get_cost_and_usage.call_args.kwargs["TimePeriod"]
+    assert period == {"Start": (end - timedelta(days=60)).isoformat(), "End": end.isoformat()}
+    assert result["total"] == 5 and result["previous_total"] == 2
+    assert result["change"] == 3 and result["change_percent"] == 150
 
 
 def test_account_costs_follows_cost_explorer_pages_without_double_counting_daily_totals():
@@ -71,6 +88,9 @@ def test_account_costs_follows_cost_explorer_pages_without_double_counting_daily
         {"service": "Amazon EC2", "amount": 2.0},
         {"service": "Amazon S3", "amount": 1.0},
     ]
+    assert result["days"] == 30
+    assert result["previous_total"] == 0
+    assert result["change"] == 3.0 and result["change_percent"] is None
 
 
 def test_account_costs_does_not_return_partial_data_when_later_page_fails():
@@ -173,6 +193,8 @@ def test_console_exposes_admin_account_billing_option():
     assert 'value="7">Last 7 complete days' in html and 'value="90">Last 90 complete days' in html
     assert "account-costs?days=${encodeURIComponent($('billingWindow').value)}" in html
     assert 'id="billingDaily"' in html and 'id="billingServices"' in html
+    assert "data.previous_total" in html and "data.change_percent" in html
+    assert "billingData.previous_total" in html and "billingData.change_percent" in html
     assert 'id="exportBilling" disabled' in html
     assert "data.daily.map(x=>[x.date,Number(x.amount).toFixed(2),data.currency||''])" in html
     assert "data.services.map(x=>[x.service,Number(x.amount).toFixed(2),data.currency||''])" in html

@@ -112,7 +112,8 @@ class AWSService:
     def get_account_costs(self, days=30):
         """Return a bounded window of complete days of account-level AWS spend."""
         end = datetime.now(timezone.utc).date()
-        start = end - timedelta(days=days)
+        current_start = end - timedelta(days=days)
+        start = end - timedelta(days=days * 2)
         try:
             client = _aws_client("ce", region_name="us-east-1")
             request = dict(
@@ -122,6 +123,7 @@ class AWSService:
                 GroupBy=[{"Type": "DIMENSION", "Key": "SERVICE"}],
             )
             daily_totals = {}
+            previous_daily_totals = {}
             currency = None
             service_totals = {}
             seen_page_tokens = set()
@@ -134,14 +136,19 @@ class AWSService:
                     if date:
                         # Cost Explorer can repeat each period's total on every
                         # page while splitting its service groups across pages.
-                        daily_totals[date] = float(amount.get("Amount", 0))
+                        parsed_amount = float(amount.get("Amount", 0))
+                        if date < current_start.isoformat():
+                            previous_daily_totals[date] = parsed_amount
+                        else:
+                            daily_totals[date] = parsed_amount
                     for group in item.get("Groups", []):
                         name = (group.get("Keys") or ["Unknown"])[0]
                         group_amount = group.get("Metrics", {}).get("UnblendedCost", {})
                         currency = currency or group_amount.get("Unit")
-                        service_totals[name] = service_totals.get(name, 0.0) + float(
-                            group_amount.get("Amount", 0)
-                        )
+                        if date and date >= current_start.isoformat():
+                            service_totals[name] = service_totals.get(name, 0.0) + float(
+                                group_amount.get("Amount", 0)
+                            )
                 next_token = response.get("NextPageToken")
                 if not next_token:
                     break
@@ -157,12 +164,20 @@ class AWSService:
                 {"date": date, "amount": daily_totals[date]}
                 for date in sorted(daily_totals)
             ]
+            previous_total = sum(previous_daily_totals.values())
+            current_total = sum(day["amount"] for day in daily)
+            change = current_total - previous_total
             return {
                 "service": "aws-cost-explorer",
                 "status": "healthy",
-                "period": {"start": start.isoformat(), "end_exclusive": end.isoformat()},
+                "days": days,
+                "period": {"start": current_start.isoformat(), "end_exclusive": end.isoformat()},
+                "comparison_period": {"start": start.isoformat(), "end_exclusive": current_start.isoformat()},
                 "currency": currency,
-                "total": round(sum(day["amount"] for day in daily), 6),
+                "total": round(current_total, 6),
+                "previous_total": round(previous_total, 6),
+                "change": round(change, 6),
+                "change_percent": round(change / previous_total * 100, 2) if previous_total else None,
                 "daily": daily,
                 "services": [
                     {"service": name, "amount": round(amount, 6)}
