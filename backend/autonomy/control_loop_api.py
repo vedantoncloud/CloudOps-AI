@@ -13,6 +13,7 @@ from autonomy.gitops_api import registry as gitops_registry
 from autonomy.provider_registry import ProviderRegistry
 from autonomy.resource_context_pipeline import ResourceContextPipeline
 from autonomy.resource_discovery import ResourceDiscovery
+from autonomy.resource_inventory_api import _resource_tenant
 
 router = APIRouter(
     prefix="/autonomy/control-loop",
@@ -142,6 +143,14 @@ def evaluate_control_loop(request: ControlLoopEvaluateRequest, http_request: Req
             resource_type=request.resource_type,
             resource_id=request.resource_id,
         )
+
+        # This endpoint can create GitOps proposals, so tenant callers must
+        # prove ownership from the same provider observation used by policy.
+        # Hide foreign, untagged, and malformed ownership data uniformly.
+        if getattr(http_request.state, "tenant_scoped", False):
+            observed_tags = pipeline.resource_context.observation.get("tags", {})
+            if _resource_tenant({"tags": observed_tags}) != http_request.state.tenant_id:
+                raise HTTPException(status_code=404, detail="Resource not found")
 
         governance = pipeline.governance
         governance_evidence = {

@@ -153,6 +153,25 @@ def test_control_loop_audit_events_include_authenticated_actor(monkeypatch):
     trail = AuditTrail()
     monkeypatch.setattr(control_loop_api, "audit_trail", trail)
     monkeypatch.setattr(control_loop_api.gitops_registry, "audit_trail", trail)
+
+    class TenantProvider:
+        provider_name = "aws"
+
+        def get_resource(self, resource_type, resource_id):
+            return {
+                "provider": "aws",
+                "resource_type": resource_type,
+                "resource_id": resource_id,
+                "state": "running",
+                "health": "healthy",
+                "tags": {"CloudOpsTenantId": "tenant-a"},
+            }
+
+    monkeypatch.setattr(
+        control_loop_api,
+        "provider_registry",
+        type("Registry", (), {"get": lambda self, name: TenantProvider()})(),
+    )
     app = FastAPI()
     app.add_middleware(
         AccessControlMiddleware,

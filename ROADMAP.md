@@ -28,6 +28,8 @@ Operators can prioritize pending approvals by submission age or newest-first ord
 
 Operators can search provider-neutral EC2 and S3 resource inventory and page through matching tenant-visible results. The API applies tenant ownership filtering before search and pagination, reports the filtered total and next offset, and bounds page size.
 
+Tenant-scoped control-loop evaluations verify `CloudOpsTenantId` against the resource observation before returning governance results, creating GitOps proposals, or recording audit events; foreign, untagged, and malformed ownership observations are hidden uniformly.
+
 Operators can inspect the full current action plan directly from the pending approval queue before approving or rejecting it; details load in a dedicated panel, encode action IDs safely, and surface lookup failures without hiding the queue.
 
 Operators can search tenant-visible GitOps change sets by change ID, source action, resource, field, or reason, filter by lifecycle status, and page through newest changes first. Results are tenant-scoped before filtering and pagination, with matching totals for the console.
@@ -61,6 +63,7 @@ EC2 instance detail, ownership checks, metrics, status, CPU/network trends, per-
 - Operators can inspect an S3 bucket's lifecycle configuration, including enabled and disabled rules; buckets with no lifecycle configuration are reported as such, ownership is checked before reads, provider errors are sanitized, and the console analysis and CSV export include the result.
 - Deployments can route AWS operations for each authenticated tenant through a configured IAM role using `CLOUDOPS_TENANT_AWS_ROLES`; assumed credentials are cached with expiry awareness, and failed role assumption does not fall back to the shared identity.
 - Tenant users can inspect action traces only when both the authenticated subject and tenant match; GitOps lifecycle events retain tenant attribution, and unattributed legacy events fail closed in tenant trace views.
+- Tenant-scoped control-loop evaluations fail closed for foreign, untagged, or malformed resource ownership observations before generating proposals or audit events; owned resources continue through governance with authenticated actor attribution.
 - FastAPI application and AWS service status/connectivity checks.
 - EC2 and S3 inventory, filtering, metrics, security, cost-awareness, and optimization insights.
 - Autonomous action models and planning; policy/governance decisions; approval gates; simulation; dry-run execution; verification, recovery, and rollback foundations.
