@@ -208,3 +208,34 @@ const inspect = new Function('$','api','message',source+';return inspectApproval
 """
     result = subprocess.run(["node", "-e", script, json.dumps(match.group(0))], capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+
+def test_action_plan_export_includes_review_context_and_fails_without_partial_csv():
+    if not shutil.which("node"):
+        pytest.skip("Node.js is needed to run the console JavaScript behavior check")
+    html = TestClient(app).get("/console").text
+    match = re.search(r"async function exportPlans\(\).*?(?=async function loadPlans\()", html, re.S)
+    assert match
+    script = r"""
+const assert=require('node:assert/strict');
+const source=JSON.parse(process.argv[1]);
+const elements={exportPlans:{disabled:false},planSearch:{value:'prod'},planStatus:{value:'pending_approval'},planRisk:{value:'high'},planResourceType:{value:'ec2_instance'}};
+let downloads=[],blobs=[],messages=[],calls=[];
+const document={body:{append(link){downloads.push(link)}},createElement(){return {click(){},remove(){}}}};
+const URL={createObjectURL(blob){blobs.push(blob);return 'blob:plans'},revokeObjectURL(){}};
+const csvCell=value=>{let text=String(value??'');if(/^[\t\r ]*[=+\-@]/.test(text))text="'"+text;return '"'+text.replaceAll('"','""')+'"'};
+const make=new Function('$','api','message','csvCell','URL','Blob','document',source+';return exportPlans');
+async function run(apiImpl){downloads=[];blobs=[];messages=[];calls=[];elements.exportPlans.disabled=false;const api=async path=>{calls.push(path);return apiImpl(path,calls.length)};await make(id=>elements[id],api,(text,error)=>messages.push([text,error]),csvCell,URL,Blob,document)();assert.equal(elements.exportPlans.disabled,false);return {calls,downloads,blobs,messages}}
+(async()=>{
+ let out=await run((path,n)=>n===1?{plans:[{action_id:'act-1',action_type:'restart',target:{resource_type:'ec2_instance',resource_id:'i-1',metadata:{recommendation:'check "CPU"',note:'=HYPERLINK(1)'}},risk:'high',status:'pending_approval',reason:'review this',requires_approval:true,rollback_available:true,created_at:'2026-01-01T00:00:00Z'}],total:2}:{plans:[{action_id:'act-2',action_type:'resize',target:{resource_type:'ec2_instance',resource_id:'i-2',metadata:{}},risk:'high',status:'pending_approval',reason:'second',requires_approval:false,rollback_available:false,decision_by:'operator',decision_reason:'approved'}],total:2});
+ assert.equal(out.downloads.length,1);assert.equal(out.calls.length,2);assert(out.calls[0].includes('search=prod'));assert(out.calls[0].includes('status=pending_approval'));assert(out.calls[0].includes('risk=high'));assert(out.calls[0].includes('resource_type=ec2_instance'));assert(out.calls[1].includes('offset=1'));
+ let csv=await out.blobs[0].text();for(const field of ['Target metadata','Approval required','Rollback available','Created at','Decision by','Decision reason','recommendation','check','note','approved'])assert(csv.includes(field),field);
+ out=await run((path,n)=>n===1?{plans:[{action_id:'partial'}],total:2}:Promise.reject(new Error('provider unavailable')));assert.equal(out.downloads.length,0);assert(out.messages.some(([m,e])=>e&&m.includes('provider unavailable')));
+ out=await run(()=>({plans:[],total:2}));assert.equal(out.downloads.length,0);assert(out.messages.some(([m,e])=>e&&m.includes('ended early')));
+ out=await run((path,n)=>({plans:[{action_id:'act-'+n}],total:n===1?2:3}));assert.equal(out.downloads.length,0);assert(out.messages.some(([m,e])=>e&&m.includes('changed during export')));
+ out=await run(()=>({plans:[],total:0}));assert.equal(out.downloads.length,0);assert(out.messages.some(([m,e])=>e&&m.includes('No action plans')));
+})().catch(error=>{console.error(error);process.exitCode=1});
+"""
+    result = subprocess.run(["node", "-e", script, json.dumps(match.group(0))], capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stdout + result.stderr

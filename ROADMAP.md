@@ -62,6 +62,8 @@ EC2 instance detail, ownership checks, metrics, status, CPU/network trends, per-
 
 ## Completed work
 
+- Operators can export all action plans matching the active filters with target metadata, risk and lifecycle state, approval and rollback requirements, submission time, and reviewer decision context; pagination failures or changing result sets stop the download rather than producing a partial CSV.
+
 - Operators can inspect historical EC2 instance and system status-check failures in the selected metric window; CloudWatch maximum values preserve any failed interval, empty series are explicit, and provider failures follow the sanitized resource-unavailable contract.
 
 - Operators can export the currently visible regional EC2 CPU alarms as spreadsheet-safe CSV, including state, attached instances, threshold, and evaluation settings; the active state filter is applied and empty matches stay disabled.
