@@ -309,7 +309,7 @@ class AWSService:
                 "error": str(error),
             }
 
-    def get_ec2_instances(self, state=None, tag=None, max_results=None, next_token=None, name=None, region=None, instance_type=None, vpc_id=None, subnet_id=None):
+    def get_ec2_instances(self, state=None, tag=None, max_results=None, next_token=None, name=None, region=None, instance_type=None, vpc_id=None, subnet_id=None, availability_zone=None):
         try:
             ec2 = _aws_client("ec2", **({"region_name": region} if region else {}))
 
@@ -360,6 +360,9 @@ class AWSService:
 
             if subnet_id:
                 filters.append({"Name": "subnet-id", "Values": [subnet_id]})
+
+            if availability_zone:
+                filters.append({"Name": "availability-zone", "Values": [availability_zone]})
 
             params = {}
             if filters:

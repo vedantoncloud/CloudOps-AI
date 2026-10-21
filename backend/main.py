@@ -263,7 +263,7 @@ def _all_tenant_ec2_instances(request: Request, region: str | None = None):
     return {"service": "ec2", "status": "healthy", "instances": instances}
 
 
-def _tenant_ec2_instances(request: Request, state: str | None, tag: str | None, max_results=None, next_token=None, name=None, region=None, instance_type=None, vpc_id=None, subnet_id=None):
+def _tenant_ec2_instances(request: Request, state: str | None, tag: str | None, max_results=None, next_token=None, name=None, region=None, instance_type=None, vpc_id=None, subnet_id=None, availability_zone=None):
     filters = {}
     if name or max_results is not None or next_token is not None:
         filters["name"] = name
@@ -275,6 +275,8 @@ def _tenant_ec2_instances(request: Request, state: str | None, tag: str | None, 
         filters["vpc_id"] = vpc_id
     if subnet_id:
         filters["subnet_id"] = subnet_id
+    if availability_zone:
+        filters["availability_zone"] = availability_zone
     if max_results is None and next_token is None:
         result = aws_service.get_ec2_instances(state, tag, **filters)
     else:
@@ -335,7 +337,7 @@ def _aws_resource_result(operation):
 
 
 @app.get("/cloud/aws/ec2/instances")
-def aws_ec2_instances(request: Request, state: str = None, tag: str = None, max_results: int = None, next_token: str = None, name: str = None, region: str = None, instance_type: str = None, vpc_id: str = None, subnet_id: str = None):
+def aws_ec2_instances(request: Request, state: str = None, tag: str = None, max_results: int = None, next_token: str = None, name: str = None, region: str = None, instance_type: str = None, vpc_id: str = None, subnet_id: str = None, availability_zone: str = None):
     valid_states = {
         "pending",
         "running",
@@ -367,12 +369,14 @@ def aws_ec2_instances(request: Request, state: str = None, tag: str = None, max_
         raise HTTPException(status_code=400, detail="vpc_id must be a valid VPC ID")
     if subnet_id is not None and not re.fullmatch(r"subnet-[0-9a-fA-F]{8,17}", subnet_id):
         raise HTTPException(status_code=400, detail="subnet_id must be a valid subnet ID")
+    if availability_zone is not None and not re.fullmatch(r"[a-z]{2}(?:-[a-z0-9]+)+-[0-9][a-z]", availability_zone):
+        raise HTTPException(status_code=400, detail="availability_zone must be a valid AWS availability zone")
 
     _validate_ec2_region(region)
 
     result = _tenant_ec2_instances(
         request, state, tag, max_results, next_token,
-        name.strip() if name else None, region, instance_type, vpc_id, subnet_id,
+        name.strip() if name else None, region, instance_type, vpc_id, subnet_id, availability_zone,
     )
     if result.get("status") != "healthy":
         _raise_aws_resource_unavailable()

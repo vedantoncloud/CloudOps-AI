@@ -1,6 +1,6 @@
 # CloudOps AI Roadmap
 
-**Repository audit:** 2026-10-20, updated after S3 bucket analysis gained a spreadsheet-safe report export. This roadmap contains **9 remaining tasks**: the nine numbered incomplete outcomes below. Sub-bullets and acceptance criteria do not count separately. Recount only when a complete outcome ships or scope is explicitly changed.
+**Repository audit:** 2026-10-21, updated after EC2 inventory gained provider-side Availability Zone filtering. This roadmap contains **9 remaining tasks**: the nine numbered incomplete outcomes below. Sub-bullets and acceptance criteria do not count separately. Recount only when a complete outcome ships or scope is explicitly changed.
 
 Tenant AWS role routing now uses `CLOUDOPS_TENANT_AWS_ROLES` (JSON tenant ID to IAM role ARN map). Authenticated tenant AWS calls assume the configured role, cache short-lived credentials until near expiry, and propagate role-assumption failures without falling back to shared credentials. Unmapped tenants continue using the process AWS identity for compatibility unless `CLOUDOPS_REQUIRE_TENANT_AWS_ROLE=true`, which rejects AWS calls for tenants without a mapping. Readiness remains process-wide; admin-only account-cost reports use the admin principal's configured role when present.
 
@@ -227,7 +227,7 @@ EC2 instance detail, ownership checks, metrics, status, CPU/network trends, per-
 - EC2/S3 optimization insights remain qualitative and do not attribute Cost Explorer charges to tenants or individual resources; the admin-only account billing view reports daily shared-account totals.
 - EC2 inventory browsing, fleet-wide aggregate insights, and per-instance follow-up operations accept an explicit AWS region. Routes without a selected-region control use the configured default region.
 - Operators can filter EC2 inventory by exact instance type at the AWS API before pagination; the console preserves the filter across pages and full CSV exports.
-- Operators can filter EC2 inventory by VPC and subnet IDs at the AWS API before pagination; tenant scoping remains in effect, and the console preserves both filters across pages and full CSV exports while showing placement IDs.
+- Operators can filter EC2 inventory by VPC, subnet, and Availability Zone at the AWS API before pagination; tenant scoping remains in effect, and the console preserves all three filters across pages and full CSV exports while showing placement IDs.
 - The checkout contains untracked SQLite database files. They were left untouched and are not part of this roadmap change.
 
 ## Scope and count

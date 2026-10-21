@@ -171,3 +171,36 @@ def test_ec2_network_filtered_inventory_sanitizes_provider_failure():
     assert response.status_code == 503
     assert response.json() == {"detail": "AWS resource data is unavailable"}
     assert "private AWS diagnostic" not in response.text
+
+
+def test_ec2_inventory_filters_availability_zone_before_pagination():
+    with patch("services.aws_service.boto3.client") as mock_client:
+        ec2 = mock_client.return_value
+        ec2.describe_instances.return_value = {"Reservations": [], "NextToken": "next"}
+        result = AWSService().get_ec2_instances(
+            availability_zone="ap-south-1a", max_results=100, next_token="cursor"
+        )
+
+    assert ec2.describe_instances.call_args.kwargs == {
+        "Filters": [{"Name": "availability-zone", "Values": ["ap-south-1a"]}],
+        "MaxResults": 100,
+        "NextToken": "cursor",
+    }
+    assert result["next_token"] == "next"
+
+
+def test_ec2_inventory_endpoint_forwards_and_validates_availability_zone():
+    with patch("main.aws_service.get_ec2_instances", return_value={"status": "healthy", "instances": []}) as get_instances:
+        response = TestClient(app).get(
+            "/cloud/aws/ec2/instances?availability_zone=ap-south-1a&region=ap-south-1"
+        )
+
+    assert response.status_code == 200
+    get_instances.assert_called_once_with(
+        None, None, availability_zone="ap-south-1a", region="ap-south-1"
+    )
+    client = TestClient(app)
+    for value in ("", "ap-south-1", "ap_south_1a", "a" * 33):
+        assert client.get(
+            "/cloud/aws/ec2/instances", params={"availability_zone": value}
+        ).status_code == 400
