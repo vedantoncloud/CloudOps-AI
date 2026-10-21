@@ -1278,6 +1278,12 @@ def test_get_ec2_metrics():
     network_client = MagicMock()
     network_client.get_metric_statistics.side_effect = network_responses
 
+    status_check_client = MagicMock()
+    status_check_client.get_metric_statistics.side_effect = [
+        {"Datapoints": [{"Maximum": 1.0, "Timestamp": datetime(2026, 9, 1, 10, 0, 0)}]},
+        {"Datapoints": []},
+    ]
+
     ec2_client = MagicMock()
     ec2_client.describe_instance_status.return_value = status_response
 
@@ -1286,6 +1292,7 @@ def test_get_ec2_metrics():
         side_effect=[
             cpu_client,
             network_client,
+            status_check_client,
             ec2_client,
         ],
     ):
@@ -1303,6 +1310,10 @@ def test_get_ec2_metrics():
     assert result["network"]["service"] == "cloudwatch"
     assert result["network"]["metrics"]["NetworkIn"] == 12345.0
     assert result["network"]["metrics"]["NetworkOut"] == 67890.0
+    assert result["status_checks"]["datapoints"]["StatusCheckFailed_Instance"] == [
+        {"timestamp": "2026-09-01T10:00:00", "value": 1.0}
+    ]
+    assert result["status_checks"]["datapoints"]["StatusCheckFailed_System"] == []
 
     assert result["instance_status"]["service"] == "ec2"
     assert result["instance_status"]["instance_status"] == "ok"
@@ -1333,6 +1344,10 @@ def test_get_ec2_metrics_when_one_metric_is_unhealthy():
         },
     ), patch.object(
         AWSService,
+        "get_ec2_status_check_metrics",
+        return_value={"service": "cloudwatch", "status": "healthy", "datapoints": {}},
+    ), patch.object(
+        AWSService,
         "get_ec2_instance_status",
         return_value={
             "service": "ec2",
@@ -1351,6 +1366,47 @@ def test_get_ec2_metrics_when_one_metric_is_unhealthy():
     assert result["status"] == "unhealthy"
     assert result["instance_id"] == "i-1234567890"
     assert result["network"]["status"] == "unhealthy"
+
+
+def test_ec2_status_check_metrics_uses_maximum_and_selected_region():
+    client = MagicMock()
+    client.get_metric_statistics.side_effect = [
+        {"Datapoints": [
+            {"Maximum": 1.0, "Timestamp": datetime(2026, 9, 1, 10, 1, 0)},
+            {"Maximum": 0.0, "Timestamp": datetime(2026, 9, 1, 10, 0, 0)},
+        ]},
+        {"Datapoints": []},
+    ]
+    with patch("services.aws_service.boto3.client", return_value=client) as make_client:
+        result = AWSService().get_ec2_status_check_metrics(
+            "i-1234567890", lookback_hours=6, region="eu-west-1"
+        )
+
+    assert result["status"] == "healthy"
+    assert [point["value"] for point in result["datapoints"]["StatusCheckFailed_Instance"]] == [0.0, 1.0]
+    assert result["datapoints"]["StatusCheckFailed_System"] == []
+    make_client.assert_called_once()
+    assert make_client.call_args.args == ("cloudwatch",)
+    assert make_client.call_args.kwargs["region_name"] == "eu-west-1"
+    calls = client.get_metric_statistics.call_args_list
+    assert [call.kwargs["MetricName"] for call in calls] == [
+        "StatusCheckFailed_Instance", "StatusCheckFailed_System"
+    ]
+    assert all(call.kwargs["Statistics"] == ["Maximum"] for call in calls)
+    assert all(call.kwargs["Period"] == 300 for call in calls)
+
+
+def test_ec2_status_check_metrics_reports_provider_failure():
+    client = MagicMock()
+    client.get_metric_statistics.side_effect = ClientError(
+        {"Error": {"Code": "AccessDenied", "Message": "denied"}}, "GetMetricStatistics"
+    )
+    with patch("services.aws_service.boto3.client", return_value=client):
+        result = AWSService().get_ec2_status_check_metrics("i-1234567890")
+
+    assert result["status"] == "unhealthy"
+    assert result["instance_id"] == "i-1234567890"
+    assert "AccessDenied" in result["error"]
 
 
 def test_ec2_metrics_api_success():

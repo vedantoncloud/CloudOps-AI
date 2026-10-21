@@ -1421,16 +1421,59 @@ class AWSService:
                 "error": str(error),
             }
 
+    def get_ec2_status_check_metrics(self, instance_id, lookback_hours=1, region=None):
+        """Return historical instance and host status-check failures from CloudWatch."""
+        try:
+            cloudwatch = _aws_client("cloudwatch", **({"region_name": region} if region else {}))
+            end_time = datetime.now(timezone.utc)
+            start_time = end_time - timedelta(hours=lookback_hours)
+            series = {}
+
+            for metric_name in ("StatusCheckFailed_Instance", "StatusCheckFailed_System"):
+                response = cloudwatch.get_metric_statistics(
+                    Namespace="AWS/EC2",
+                    MetricName=metric_name,
+                    Dimensions=[{"Name": "InstanceId", "Value": instance_id}],
+                    StartTime=start_time,
+                    EndTime=end_time,
+                    Period=60 if lookback_hours <= 3 else 300,
+                    Statistics=["Maximum"],
+                )
+                datapoints = response.get("Datapoints", [])
+                datapoints = sorted(datapoints, key=lambda point: point.get("Timestamp"))
+                series[metric_name] = [
+                    {"timestamp": point["Timestamp"].isoformat(), "value": point.get("Maximum")}
+                    for point in datapoints
+                    if point.get("Timestamp") is not None and point.get("Maximum") is not None
+                ]
+
+            return {
+                "service": "cloudwatch",
+                "status": "healthy",
+                "instance_id": instance_id,
+                "lookback_hours": lookback_hours,
+                "datapoints": series,
+            }
+        except (BotoCoreError, ClientError) as error:
+            return {
+                "service": "cloudwatch",
+                "status": "unhealthy",
+                "instance_id": instance_id,
+                "error": str(error),
+            }
+
     def get_ec2_metrics(self, instance_id, lookback_hours=1, region=None):
         try:
             regional = {"region": region} if region else {}
             cpu = self.get_ec2_cpu_utilization(instance_id, lookback_hours, **regional)
             network = self.get_ec2_network_utilization(instance_id, lookback_hours, **regional)
+            status_checks = self.get_ec2_status_check_metrics(instance_id, lookback_hours, **regional)
             status = self.get_ec2_instance_status(instance_id, **regional)
 
             if (
                 cpu["status"] == "unhealthy"
                 or network["status"] == "unhealthy"
+                or status_checks["status"] == "unhealthy"
                 or status["status"] == "unhealthy"
             ):
                 return {
@@ -1439,6 +1482,7 @@ class AWSService:
                     "instance_id": instance_id,
                     "cpu": cpu,
                     "network": network,
+                    "status_checks": status_checks,
                     "instance_status": status,
                 }
 
@@ -1448,6 +1492,7 @@ class AWSService:
                 "instance_id": instance_id,
                 "cpu": cpu,
                 "network": network,
+                "status_checks": status_checks,
                 "instance_status": status,
             }
 

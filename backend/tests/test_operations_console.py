@@ -173,6 +173,9 @@ def test_console_renders_ec2_metric_series_as_accessible_trend_charts():
     assert "function renderMetricCharts(metrics)" in response.text
     assert "metrics?.cpu?.datapoints" in response.text
     assert "metrics?.network?.datapoints?.[name]" in response.text
+    assert "metrics?.status_checks?.datapoints?.[name]" in response.text
+    assert "StatusCheckFailed_Instance" in response.text
+    assert "StatusCheckFailed_System" in response.text
     assert "No datapoints available for this time window." in response.text
     assert "svg.setAttribute('role','img')" in response.text
     assert "svg.setAttribute('aria-label',`${title} over time`)" in response.text
