@@ -50,6 +50,7 @@ def test_console_exposes_resumable_s3_bucket_inventory():
     assert 'id="moreBuckets"' in html
     assert "next_continuation_token" in html
     assert "continuation_token" in html
+    assert "x.creation_date?`Created ${x.creation_date}`:''" in html
 
 
 def test_console_exposes_tenant_scoped_ec2_fleet_insights():
@@ -112,6 +113,7 @@ def test_console_can_export_all_filtered_inventory_pages_without_partial_downloa
     assert "const visible=items.filter(item=>!search" in html
     assert "catch(e){message(e.message,true)}finally{button.disabled=false}" in html
     assert "matching resources exported as CSV" in html
+    assert "item.creation_date?`Created ${item.creation_date}`:''" in html
     assert "$('exportAllInventory').addEventListener('click',exportAllInventory)" in html
 
 
@@ -138,7 +140,7 @@ def test_full_inventory_export_paginates_filters_and_fails_closed():
     script = r"""
 const assert = require('node:assert/strict');
 const source = JSON.parse(process.argv[1]);
-const elements = {exportAllInventory:{disabled:false},kind:{value:'ec2'},inventorySearch:{value:'second'},instanceState:{value:'running'},instanceTag:{value:'Owner:ops'},instanceName:{value:'web'},instanceType:{value:'m7i.large'},instanceVpc:{value:'vpc-12345678'},instanceSubnet:{value:'subnet-12345678'},instanceRegion:{value:''}};
+const elements = {exportAllInventory:{disabled:false},kind:{value:'ec2'},inventorySearch:{value:'second'},instanceState:{value:'running'},instanceTag:{value:'Owner:ops'},instanceName:{value:'web'},instanceType:{value:'m7i.large'},instanceVpc:{value:'vpc-12345678'},instanceSubnet:{value:'subnet-12345678'},instanceRegion:{value:''},bucketPrefix:{value:''}};
 let downloads=[],messages=[],blobs=[],calls=[];
 const document={body:{append(link){downloads.push(link)}},createElement(){return {click(){},remove(){}}}};
 const URL={createObjectURL(blob){blobs.push(blob);return 'blob:test'},revokeObjectURL(){}};
@@ -152,6 +154,9 @@ async function scenario(apiImpl,count,errorText){downloads=[];messages=[];blobs=
  out=await scenario(()=>({instances:[],is_truncated:true,next_token:'same'}),0,'repeated a cursor');assert.equal(out.calls.length,2);
  out=await scenario(()=>({instances:[{instance_id:'i-x'}],is_truncated:true}),0,'no continuation cursor');assert.equal(out.calls.length,1);
  await scenario(()=>({instances:[],is_truncated:false}),0,'No inventory resources match');
+ elements.kind.value='s3';elements.inventorySearch.value='';
+ out=await scenario(()=>({buckets:[{name:'archive-data',region:'ap-south-1',creation_date:'2024-02-03T10:11:12Z'},{name:'legacy-data',region:'us-east-1'}],is_truncated:false}),1);
+ const s3csv=await out.blobs[0].text();assert(s3csv.includes('archive-data'));assert(s3csv.includes('ap-south-1 | Created 2024-02-03T10:11:12Z'));assert(s3csv.includes('legacy-data'));assert(s3csv.includes('us-east-1'));assert(!s3csv.includes('Created undefined'));
 })().catch(error=>{console.error(error);process.exitCode=1});
 """
     result = subprocess.run(["node", "-e", script, json.dumps(match.group(0))], capture_output=True, text=True, check=False)

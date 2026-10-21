@@ -185,6 +185,7 @@ EC2 instance detail, ownership checks, metrics, status, CPU/network trends, per-
 - Provider-neutral resource inventory returns a sanitized `503` when a provider throws or reports an unhealthy result, preventing internal diagnostics from leaking and outages from appearing as empty inventories.
 - Operators can export the complete S3 object version history for the selected prefix, including delete markers and version metadata; cursor cycles, missing cursors, and provider failures stop the export without producing a partial CSV.
 - Operators can export GitOps change proposals as spreadsheet-safe CSV using the current search and status filters; exports apply tenant visibility before filtering and include one row per proposed resource change.
+- S3 bucket inventory shows each bucket's AWS creation date with its region, and both loaded-page and complete paginated inventory CSV exports preserve that information when AWS reports it.
 
 ## Prioritized remaining work
 
