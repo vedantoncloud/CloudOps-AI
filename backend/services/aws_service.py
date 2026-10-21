@@ -708,6 +708,43 @@ class AWSService:
                 "error": str(error),
             }
 
+    def get_s3_bucket_encryption(self, bucket_name):
+        """Report default server-side encryption rules for an S3 bucket."""
+        try:
+            response = _aws_client("s3").get_bucket_encryption(Bucket=bucket_name)
+            if not isinstance(response, dict):
+                return {"service": "s3", "status": "unhealthy", "bucket": bucket_name}
+            configuration = response.get("ServerSideEncryptionConfiguration")
+            rules = configuration.get("Rules") if isinstance(configuration, dict) else None
+            if not isinstance(rules, list) or any(
+                not isinstance(rule, dict)
+                or not isinstance(rule.get("ApplyServerSideEncryptionByDefault"), dict)
+                or not isinstance(
+                    rule["ApplyServerSideEncryptionByDefault"].get("SSEAlgorithm"), str
+                )
+                for rule in rules
+            ):
+                return {"service": "s3", "status": "unhealthy", "bucket": bucket_name}
+            return {
+                "service": "s3", "status": "healthy", "bucket": bucket_name,
+                "configured": bool(rules), "rule_count": len(rules), "rules": rules,
+            }
+        except ClientError as error:
+            if error.response.get("Error", {}).get("Code") == "ServerSideEncryptionConfigurationNotFoundError":
+                return {
+                    "service": "s3", "status": "healthy", "bucket": bucket_name,
+                    "configured": False, "rule_count": 0, "rules": [],
+                }
+            return {
+                "service": "s3", "status": "unhealthy", "bucket": bucket_name,
+                "error": str(error),
+            }
+        except BotoCoreError as error:
+            return {
+                "service": "s3", "status": "unhealthy", "bucket": bucket_name,
+                "error": str(error),
+            }
+
     def get_s3_bucket_tags(self, bucket_name):
         """Return bucket tags for tenant ownership checks and operator review."""
         try:

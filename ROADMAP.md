@@ -58,6 +58,8 @@ EC2 instance detail, ownership checks, metrics, status, CPU/network trends, per-
 
 ## Completed work
 
+- Operators can inspect default S3 bucket server-side encryption configuration, including SSE algorithm, KMS key, and bucket-key settings, in bucket analysis and CSV exports; missing configuration is reported explicitly, malformed/provider responses fail closed, and tenant ownership is verified before reads. Deployments need `s3:GetEncryptionConfiguration`.
+
 - Operators can inspect S3 bucket tags in bucket analysis and CSV exports; tag reads validate provider responses, fail closed on unavailable or malformed data, and enforce tenant ownership before returning metadata. Deployments need `s3:GetBucketTagging`.
 - Operators reviewing a pending action plan can see its action, target, risk, approval and rollback requirements, reason, recommendation, and decision context in a readable summary; missing fields are labeled clearly, arbitrary provider text is rendered safely, and malformed or unavailable plan details surface an error.
 - Operators can inspect S3 replication configuration from the bucket analysis panel, including configured rules, enabled-rule count, a clear unconfigured state, and sanitized provider failures; token-mode reads verify bucket ownership first. Deployments need `s3:GetReplicationConfiguration` for this check.
