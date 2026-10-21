@@ -624,6 +624,60 @@ def test_s3_inventory_reports_ownership_verification_outage(monkeypatch):
     assert response.json() == {"detail": "S3 ownership verification is unavailable"}
 
 
+@pytest.mark.parametrize("failure_page", [1, 2])
+def test_s3_inventory_sanitizes_provider_exceptions_on_every_page(monkeypatch, failure_page):
+    client = tenant_client(monkeypatch)
+    service = main.aws_service
+    calls = []
+
+    def list_buckets(_limit, cursor=None, **_kwargs):
+        calls.append(cursor)
+        if len(calls) == failure_page:
+            raise RuntimeError("private AWS diagnostic for account 123456789012")
+        return {
+            "status": "healthy",
+            "buckets": [{"name": "foreign"}],
+            "is_truncated": True,
+            "next_continuation_token": "page-2",
+        }
+
+    monkeypatch.setattr(service, "get_s3_buckets", list_buckets)
+    response = client.get(
+        "/cloud/aws/s3/buckets?max_buckets=2",
+        headers={"Authorization": "Bearer token-a"},
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS resource data is unavailable"}
+    assert "123456789012" not in response.text
+    assert calls == ([None] if failure_page == 1 else [None, "page-2"])
+
+
+@pytest.mark.parametrize("ownership_result", [None, {"status": "healthy", "tags": []}])
+def test_s3_inventory_fails_closed_on_malformed_ownership_response(monkeypatch, ownership_result):
+    client = tenant_client(monkeypatch)
+    monkeypatch.setattr(main.aws_service, "get_s3_bucket_tags", lambda _bucket: ownership_result)
+
+    response = client.get("/cloud/aws/s3/buckets", headers={"Authorization": "Bearer token-a"})
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "S3 ownership verification is unavailable"}
+
+
+def test_s3_inventory_sanitizes_ownership_lookup_exception(monkeypatch):
+    client = tenant_client(monkeypatch)
+
+    def fail(_bucket):
+        raise RuntimeError("private AWS diagnostic for account 123456789012")
+
+    monkeypatch.setattr(main.aws_service, "get_s3_bucket_tags", fail)
+    response = client.get("/cloud/aws/s3/buckets", headers={"Authorization": "Bearer token-a"})
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "S3 ownership verification is unavailable"}
+    assert "123456789012" not in response.text
+
+
 @pytest.mark.parametrize("bucket", ["foreign", "untagged", "missing"])
 @pytest.mark.parametrize("suffix", ["", "/objects", "/security-insights"])
 def test_s3_routes_hide_foreign_untagged_and_missing_buckets(monkeypatch, bucket, suffix):

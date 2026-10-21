@@ -390,11 +390,22 @@ def aws_s3_buckets(
         raise HTTPException(status_code=400, detail="max_buckets must be between 1 and 10000")
     if prefix is not None and (not prefix.strip() or len(prefix) > 255):
         raise HTTPException(status_code=400, detail="prefix must contain 1 to 255 characters")
-    result = aws_service.get_s3_buckets(
-        max_buckets, continuation_token,
-        **({"prefix": prefix} if prefix is not None else {}),
-    )
-    if result.get("status") != "healthy":
+    def list_page(page_size, cursor):
+        try:
+            result = aws_service.get_s3_buckets(
+                page_size, cursor,
+                **({"prefix": prefix} if prefix is not None else {}),
+            )
+        except Exception:
+            raise HTTPException(
+                status_code=503, detail="AWS resource data is unavailable"
+            ) from None
+        return result
+
+    result = list_page(max_buckets, continuation_token)
+    if (not isinstance(result, dict) or result.get("status") != "healthy"
+            or not isinstance(result.get("buckets"), list)
+            or any(not isinstance(bucket, dict) for bucket in result["buckets"])):
         _raise_aws_resource_unavailable()
     if not getattr(request.state, "tenant_scoped", False):
         return result
@@ -405,8 +416,6 @@ def aws_s3_buckets(
     # Fill a tenant-visible page across a bounded number of AWS pages. The
     # continuation cursor always points to the next unexamined AWS page.
     for _ in range(10):
-        if result.get("status") != "healthy":
-            raise HTTPException(status_code=503, detail="S3 inventory is unavailable")
         visible_buckets.extend(
             bucket for bucket in result.get("buckets", [])
             if _tenant_owns_s3_bucket(request, bucket.get("name"))
@@ -417,10 +426,11 @@ def aws_s3_buckets(
         if not cursor or cursor in seen_cursors:
             raise HTTPException(status_code=503, detail="S3 inventory pagination is unavailable")
         seen_cursors.add(cursor)
-        result = aws_service.get_s3_buckets(
-            max_buckets - len(visible_buckets), cursor,
-            **({"prefix": prefix} if prefix is not None else {}),
-        )
+        result = list_page(max_buckets - len(visible_buckets), cursor)
+        if (not isinstance(result, dict) or result.get("status") != "healthy"
+                or not isinstance(result.get("buckets"), list)
+                or any(not isinstance(bucket, dict) for bucket in result["buckets"])):
+            raise HTTPException(status_code=503, detail="S3 inventory is unavailable")
     result["buckets"] = visible_buckets
     return result
 
@@ -430,11 +440,23 @@ def _tenant_owns_s3_bucket(request: Request, bucket_name: str | None) -> bool:
         return True
     if not bucket_name:
         return False
-    result = aws_service.get_s3_bucket_tags(bucket_name)
+    try:
+        result = aws_service.get_s3_bucket_tags(bucket_name)
+    except Exception:
+        raise HTTPException(
+            status_code=503, detail="S3 ownership verification is unavailable"
+        ) from None
+    if (not isinstance(result, dict)
+            or result.get("status") not in {"healthy", "unhealthy", "missing"}
+            or (result.get("status") == "healthy"
+                and not isinstance(result.get("tags", {}), dict))):
+        raise HTTPException(status_code=503, detail="S3 ownership verification is unavailable")
     if result.get("status") == "unhealthy":
         # A failed ownership check is not evidence that the bucket is foreign.
         # Fail the request so operators can distinguish outages from an empty scope.
         raise HTTPException(status_code=503, detail="S3 ownership verification is unavailable")
+    if result.get("status") == "missing":
+        return False
     return result.get("status") == "healthy" and _resource_tenant(
         {"tags": result.get("tags", {})}
     ) == request.state.tenant_id
