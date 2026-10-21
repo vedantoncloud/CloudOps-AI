@@ -85,6 +85,7 @@ class AutonomousLifecycleOrchestrator:
         idempotency_seen: bool = False,
         dry_run: bool = True,
         actor_id: str | None = None,
+        tenant_id: str | None = None,
     ) -> AutonomousLifecycleResult:
         self._validate_action(action)
 
@@ -99,6 +100,7 @@ class AutonomousLifecycleOrchestrator:
                 "idempotency_seen": idempotency_seen,
             },
             actor_id=actor_id,
+            tenant_id=tenant_id,
         )
 
         approval = self.approval_bridge.get(action.action_id)
@@ -144,6 +146,7 @@ class AutonomousLifecycleOrchestrator:
                 "safety_evidence": dict(safety.evidence),
             },
             actor_id=actor_id,
+            tenant_id=tenant_id,
         )
 
         if safety.decision is ExecutionSafetyDecision.DENY:
@@ -154,6 +157,7 @@ class AutonomousLifecycleOrchestrator:
                 event="autonomous_lifecycle_blocked",
                 details={"reason": "execution_safety_denied"},
                 actor_id=actor_id,
+                tenant_id=tenant_id,
             )
             return AutonomousLifecycleResult(
                 action_id=action.action_id,
@@ -185,6 +189,7 @@ class AutonomousLifecycleOrchestrator:
                     "approval_status": approval.status.value,
                 },
                 actor_id=actor_id,
+                tenant_id=tenant_id,
             )
             return AutonomousLifecycleResult(
                 action_id=action.action_id,
@@ -234,6 +239,7 @@ class AutonomousLifecycleOrchestrator:
                 "audit_event_count": verification.audit_event_count,
             },
             actor_id=actor_id,
+            tenant_id=tenant_id,
         )
 
         return AutonomousLifecycleResult(
@@ -274,6 +280,7 @@ class AutonomousLifecycleOrchestrator:
         idempotency_seen: bool = False,
         dry_run: bool = True,
         actor_id: str | None = None,
+        tenant_id: str | None = None,
     ) -> AutonomousLifecycleResult:
         return self.run(
             action,
@@ -284,6 +291,7 @@ class AutonomousLifecycleOrchestrator:
             idempotency_seen=idempotency_seen,
             dry_run=dry_run,
             actor_id=actor_id,
+            tenant_id=tenant_id,
         )
 
     def reject(
@@ -294,6 +302,7 @@ class AutonomousLifecycleOrchestrator:
         reason: str,
         dry_run: bool = True,
         actor_id: str | None = None,
+        tenant_id: str | None = None,
     ) -> AutonomousLifecycleResult:
         return self.run(
             action,
@@ -301,6 +310,7 @@ class AutonomousLifecycleOrchestrator:
             rejection_reason=reason,
             dry_run=dry_run,
             actor_id=actor_id,
+            tenant_id=tenant_id,
         )
 
     def audit_events(self, action_id: str) -> list[Any]:
@@ -329,6 +339,7 @@ class AutonomousLifecycleOrchestrator:
         event: str,
         details: dict[str, Any],
         actor_id: str | None = None,
+        tenant_id: str | None = None,
     ) -> None:
         self.audit_trail.record(
             action_id=action.action_id,
@@ -338,7 +349,7 @@ class AutonomousLifecycleOrchestrator:
             old_status=old_status,
             new_status=new_status,
             event=event,
-            details=details,
+            details={**details, **({"tenant_id": tenant_id} if tenant_id is not None else {})},
             actor_id=actor_id,
         )
 

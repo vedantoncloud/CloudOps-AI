@@ -53,12 +53,16 @@ def list_autonomous_runs(
 
     principal = getattr(request.state, "principal", None)
     actor_id = getattr(principal, "subject", None)
+    tenant_scoped = getattr(request.state, "tenant_scoped", False)
+    tenant_id = getattr(request.state, "tenant_id", None)
     if not actor_id:
         raise HTTPException(status_code=401, detail="Authenticated principal required")
 
     grouped: dict[str, list[Any]] = {}
     for event in audit_trail.get_events():
         if event.actor_id != actor_id or not event.event.startswith("autonomous_"):
+            continue
+        if tenant_scoped and event.details.get("tenant_id") != tenant_id:
             continue
         grouped.setdefault(event.action_id, []).append(event)
 
@@ -113,12 +117,15 @@ def get_autonomous_run(action_id: str, request: Request) -> dict[str, Any]:
     """Return lifecycle events for one run owned by the authenticated actor."""
     principal = getattr(request.state, "principal", None)
     actor_id = getattr(principal, "subject", None)
+    tenant_scoped = getattr(request.state, "tenant_scoped", False)
+    tenant_id = getattr(request.state, "tenant_id", None)
     if not actor_id:
         raise HTTPException(status_code=401, detail="Authenticated principal required")
 
     events = [
         event for event in audit_trail.get_events(action_id=action_id)
         if event.actor_id == actor_id and event.event.startswith("autonomous_")
+        and (not tenant_scoped or event.details.get("tenant_id") == tenant_id)
     ]
     if not events:
         raise HTTPException(status_code=404, detail="Autonomous run not found")
@@ -215,6 +222,11 @@ def run_autonomous(payload: AutonomousRunRequest, request: Request) -> dict[str,
             idempotency_seen=payload.idempotency_seen,
             dry_run=payload.dry_run,
             actor_id=actor_id,
+            tenant_id=(
+                request.state.tenant_id
+                if getattr(request.state, "tenant_scoped", False)
+                else None
+            ),
         )
         return _result(result)
     except (ValueError, PermissionError, RuntimeError) as exc:

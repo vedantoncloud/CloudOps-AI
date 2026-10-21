@@ -77,6 +77,7 @@ class GovernedAutonomousRun:
         dry_run: bool = True,
         run_id: str | None = None,
         actor_id: str | None = None,
+        tenant_id: str | None = None,
     ) -> GovernedAutonomousRunResult:
         trace_id = (run_id or "").strip() or str(uuid4())
 
@@ -159,6 +160,7 @@ class GovernedAutonomousRun:
                 idempotency_seen=idempotency_seen,
                 dry_run=dry_run,
                 actor_id=actor_id,
+                tenant_id=tenant_id,
             )
         except Exception as exc:
             # The run has crossed the lifecycle boundary, so an exception must

@@ -155,7 +155,7 @@ def test_main_app_forwards_approval_and_idempotency(monkeypatch):
 
     assert response.status_code == 200
     call = fake.calls[0]
-    assert call["approved_by"] == "operator"
+    assert call["approved_by"] == "local-development"
     assert call["idempotency_key"] == "e2e-idem-1"
     assert call["idempotency_seen"] is False
 

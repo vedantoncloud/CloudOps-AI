@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from auth import AccessControlMiddleware
+from auth import Principal
 from autonomy.audit import AuditTrail
 import autonomy.autonomous_run_api as api
 from autonomy.persistent_audit_trail import PersistentAuditTrail
@@ -76,6 +77,18 @@ class FakeRunner:
 def make_client(fake_runner):
     app = FastAPI()
     app.add_middleware(AccessControlMiddleware, mode="development", tokens={})
+    app.include_router(api.router)
+    api.runner = fake_runner
+    return TestClient(app)
+
+
+def make_tenant_client(fake_runner, tenant_id="tenant-a"):
+    app = FastAPI()
+    app.add_middleware(
+        AccessControlMiddleware,
+        mode="token",
+        tokens={"tenant-token": Principal("shared-subject", "operator", tenant_id)},
+    )
     app.include_router(api.router)
     api.runner = fake_runner
     return TestClient(app)
@@ -250,6 +263,43 @@ def test_run_history_filters_updated_time_before_pagination(monkeypatch):
         "/autonomy/runs?start_time=2026-01-03T00:00:00Z&end_time=2026-01-02T00:00:00Z"
     ).status_code == 422
     assert client.get("/autonomy/runs?start_time=not-a-date").status_code == 422
+
+
+def test_run_history_and_detail_isolate_same_subject_across_tenants(monkeypatch):
+    trail = AuditTrail()
+    monkeypatch.setattr(api, "audit_trail", trail)
+    for action_id, tenant in (("tenant-a-run", "tenant-a"), ("tenant-b-run", "tenant-b"), ("legacy-run", None)):
+        trail.record(
+            action_id=action_id,
+            action_type="resize_instance",
+            resource_type="ec2_instance",
+            resource_id="i-123",
+            old_status="pending_approval",
+            new_status="completed",
+            event="autonomous_lifecycle_completed",
+            details={"tenant_id": tenant} if tenant else {},
+            actor_id="shared-subject",
+        )
+
+    client = make_tenant_client(FakeRunner("completed"))
+    headers = {"Authorization": "Bearer tenant-token"}
+    history = client.get("/autonomy/runs", headers=headers)
+    assert history.status_code == 200
+    assert [run["action_id"] for run in history.json()["runs"]] == ["tenant-a-run"]
+    assert client.get("/autonomy/runs/tenant-a-run", headers=headers).status_code == 200
+    assert client.get("/autonomy/runs/tenant-b-run", headers=headers).status_code == 404
+    assert client.get("/autonomy/runs/legacy-run", headers=headers).status_code == 404
+
+
+def test_token_mode_attributes_new_lifecycle_events_to_tenant(monkeypatch):
+    fake = FakeRunner("completed")
+    client = make_tenant_client(fake)
+    response = client.post(
+        "/autonomy/run", json=payload("tenant-attributed-run"),
+        headers={"Authorization": "Bearer tenant-token"},
+    )
+    assert response.status_code == 200
+    assert fake.calls[0]["tenant_id"] == "tenant-a"
 
 
 def test_deny_stops_before_lifecycle():

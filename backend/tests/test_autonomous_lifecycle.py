@@ -97,6 +97,26 @@ def test_approved_action_completes_end_to_end():
     assert len(audit.get_events(action.action_id)) == 4
 
 
+def test_lifecycle_audit_events_retain_tenant_attribution():
+    orchestrator, _, audit = make_orchestrator()
+    action = make_action("tenant-life-1")
+    result = orchestrator.approve_and_run(
+        action,
+        approved_by="operator",
+        actor_id="shared-subject",
+        tenant_id="tenant-a",
+        dry_run=True,
+    )
+
+    assert result.outcome == LifecycleOutcome.COMPLETED
+    autonomous_events = [
+        event for event in audit.get_events("tenant-life-1")
+        if event.event.startswith("autonomous_")
+    ]
+    assert autonomous_events
+    assert all(event.details["tenant_id"] == "tenant-a" for event in autonomous_events)
+
+
 def test_rejected_action_never_reaches_executor():
     orchestrator, executor, audit = make_orchestrator()
     action = make_action()
