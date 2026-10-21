@@ -1,3 +1,4 @@
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -166,3 +167,67 @@ def test_inventory_empty_result_is_valid():
     assert response.status_code == 200
     assert response.json()["count"] == 0
     assert response.json()["resources"] == []
+
+
+def test_inventory_search_and_pagination_return_total_and_next_offset():
+    class ManyResources(FakeProvider):
+        def get_ec2_instances(self):
+            return {"resources": [
+                {"instance_id": "i-web-1", "name": "web-prod"},
+                {"instance_id": "i-db-1", "name": "database"},
+                {"instance_id": "i-web-2", "name": "web-stage"},
+            ]}
+
+    if provider_registry.has("aws"):
+        provider_registry.unregister("aws")
+    provider_registry.register(ManyResources())
+    app = FastAPI()
+    app.include_router(router)
+    response = TestClient(app).get(
+        "/autonomy/resources?resource_type=ec2&search=WEB&limit=1&offset=1"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["total"] == 2
+    assert response.json()["count"] == 1
+    assert response.json()["limit"] == 1
+    assert response.json()["offset"] == 1
+    assert response.json()["next_offset"] is None
+    assert [item["resource_id"] for item in response.json()["resources"]] == ["i-web-2"]
+
+
+def test_inventory_tenant_filter_is_applied_before_search_and_pagination():
+    class TenantResources(FakeProvider):
+        def get_ec2_instances(self):
+            return {"resources": [
+                {"instance_id": "i-match-foreign", "name": "web", "tags": {"CloudOpsTenantId": "account-b"}},
+                {"instance_id": "i-owned-1", "name": "web", "tags": {"CloudOpsTenantId": "account-a"}},
+                {"instance_id": "i-owned-2", "name": "web", "tags": {"CloudOpsTenantId": "account-a"}},
+            ]}
+
+    if provider_registry.has("aws"):
+        provider_registry.unregister("aws")
+    provider_registry.register(TenantResources())
+    app = FastAPI()
+    app.add_middleware(
+        AccessControlMiddleware,
+        mode="token",
+        tokens={"tenant-a": Principal("alice", "reader", "account-a")},
+    )
+    app.include_router(router)
+    response = TestClient(app).get(
+        "/autonomy/resources?search=web&limit=1&offset=1",
+        headers={"Authorization": "Bearer tenant-a"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["total"] == 2
+    assert [item["resource_id"] for item in response.json()["resources"]] == ["i-owned-2"]
+
+
+@pytest.mark.parametrize("query", ["limit=0", "limit=501", "offset=-1", "search=" + "x" * 201])
+def test_inventory_rejects_invalid_page_and_search_parameters(query):
+    app = FastAPI()
+    app.include_router(router)
+    response = TestClient(app).get(f"/autonomy/resources?{query}")
+    assert response.status_code == 422

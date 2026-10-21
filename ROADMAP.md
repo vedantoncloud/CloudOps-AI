@@ -25,6 +25,9 @@ Operators can filter their actor-scoped autonomous run history by inclusive upda
 Operators can filter the tenant-scoped pending approval queue by risk and resource type, and search action IDs, action types, resource IDs, and reasons. Filters are applied before pagination so totals and queue pages match the active criteria.
 
 Operators can prioritize pending approvals by submission age or newest-first order. Plans carry durable UTC creation timestamps, the oldest-first default surfaces the longest-waiting requests, and plans created before timestamp tracking remain clearly marked as having no recorded submission time.
+
+Operators can search provider-neutral EC2 and S3 resource inventory and page through matching tenant-visible results. The API applies tenant ownership filtering before search and pagination, reports the filtered total and next offset, and bounds page size.
+
 Operators can inspect the full current action plan directly from the pending approval queue before approving or rejecting it; details load in a dedicated panel, encode action IDs safely, and surface lookup failures without hiding the queue.
 
 Operators can search tenant-visible GitOps change sets by change ID, source action, resource, field, or reason, filter by lifecycle status, and page through newest changes first. Results are tenant-scoped before filtering and pagination, with matching totals for the console.

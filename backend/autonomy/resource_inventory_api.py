@@ -40,8 +40,11 @@ def list_resources(
     request: Request,
     provider: str = Query(default="aws"),
     resource_type: str = Query(default="ec2"),
+    search: str | None = Query(default=None, max_length=200),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
 ) -> dict[str, Any]:
-    """Return discovered infrastructure resources without mutating them."""
+    """Return a searchable page of discovered resources without mutating them."""
     try:
         resources = discovery.list_resources(
             provider=provider,
@@ -62,11 +65,27 @@ def list_resources(
             if _resource_tenant(item.attributes) == tenant_id
         ]
 
+    normalized_search = search.strip().casefold() if search else ""
+    if normalized_search:
+        resources = [
+            item for item in resources
+            if normalized_search in item.resource_id.casefold()
+            or normalized_search in str(item.attributes).casefold()
+        ]
+
+    total = len(resources)
+    page = resources[offset:offset + limit]
+
     return {
         "provider": provider.strip().lower(),
         "resource_type": resource_type.strip().lower(),
         "read_only": True,
-        "count": len(resources),
+        "count": len(page),
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "next_offset": offset + limit if offset + limit < total else None,
+        "search": search.strip() if search else "",
         "resources": [
             {
                 "provider": item.provider,
@@ -75,7 +94,7 @@ def list_resources(
                 "attributes": dict(item.attributes),
                 "read_only": item.read_only,
             }
-            for item in resources
+            for item in page
         ],
     }
 
