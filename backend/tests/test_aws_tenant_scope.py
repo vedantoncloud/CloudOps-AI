@@ -726,6 +726,71 @@ def test_s3_plan_generation_reports_ownership_verification_outage(monkeypatch):
     assert response.json() == {"detail": "S3 ownership verification is unavailable"}
 
 
+@pytest.mark.parametrize(
+    ("path", "method", "detail"),
+    [
+        (
+            "/autonomy/ec2/instances/i-aaaaaaaa/plans",
+            "get_ec2_instance",
+            "AWS resource data is unavailable",
+        ),
+        (
+            "/autonomy/s3/buckets/owned/plans",
+            "get_s3_bucket_tags",
+            "S3 ownership verification is unavailable",
+        ),
+    ],
+)
+def test_plan_generation_sanitizes_ownership_lookup_exceptions(
+    monkeypatch, path, method, detail
+):
+    client = tenant_client(monkeypatch)
+    service = FakeAWSService()
+
+    def fail(*_args, **_kwargs):
+        raise RuntimeError("private AWS diagnostic for account 123456789012")
+
+    monkeypatch.setattr("autonomy.api.aws_service", service)
+    monkeypatch.setattr(service, method, fail)
+
+    response = client.post(path, headers={"Authorization": "Bearer operator-a"})
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": detail}
+    assert "123456789012" not in response.text
+
+
+@pytest.mark.parametrize(
+    ("path", "method", "result", "detail"),
+    [
+        (
+            "/autonomy/ec2/instances/i-aaaaaaaa/plans",
+            "get_ec2_instance",
+            None,
+            "EC2 inventory is unavailable",
+        ),
+        (
+            "/autonomy/s3/buckets/owned/plans",
+            "get_s3_bucket_tags",
+            None,
+            "S3 ownership verification is unavailable",
+        ),
+    ],
+)
+def test_plan_generation_fails_closed_on_malformed_ownership_response(
+    monkeypatch, path, method, result, detail
+):
+    client = tenant_client(monkeypatch)
+    service = FakeAWSService()
+    monkeypatch.setattr("autonomy.api.aws_service", service)
+    monkeypatch.setattr(service, method, lambda *_args, **_kwargs: result)
+
+    response = client.post(path, headers={"Authorization": "Bearer operator-a"})
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": detail}
+
+
 def test_ec2_plan_generation_finds_owned_instance_beyond_inventory_page(monkeypatch):
     client = tenant_client(monkeypatch)
     service = FakeAWSService()

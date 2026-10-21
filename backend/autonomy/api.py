@@ -139,8 +139,15 @@ def _require_tenant_ec2_instance(request: Request, instance_id: str, region: str
     """Keep plan generation inside the same ownership boundary as EC2 reads."""
     if not getattr(request.state, "tenant_scoped", False):
         return
-    result = aws_service.get_ec2_instance(instance_id, **({"region": region} if region else {}))
-    if result.get("status") != "healthy":
+    try:
+        result = aws_service.get_ec2_instance(
+            instance_id, **({"region": region} if region else {})
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=503, detail="AWS resource data is unavailable"
+        ) from None
+    if not isinstance(result, dict) or result.get("status") != "healthy":
         raise HTTPException(status_code=503, detail="EC2 inventory is unavailable")
     instance = result.get("instance")
     if (instance is None
@@ -152,8 +159,13 @@ def _require_tenant_s3_bucket(request: Request, bucket_name: str) -> None:
     """Fail closed when bucket ownership cannot be established."""
     if not getattr(request.state, "tenant_scoped", False):
         return
-    ownership = aws_service.get_s3_bucket_tags(bucket_name)
-    if ownership.get("status") == "unhealthy":
+    try:
+        ownership = aws_service.get_s3_bucket_tags(bucket_name)
+    except Exception:
+        raise HTTPException(
+            status_code=503, detail="S3 ownership verification is unavailable"
+        ) from None
+    if not isinstance(ownership, dict) or ownership.get("status") == "unhealthy":
         raise HTTPException(status_code=503, detail="S3 ownership verification is unavailable")
     if (ownership.get("status") != "healthy"
             or _resource_tenant({"tags": ownership.get("tags", {})}) != request.state.tenant_id):
