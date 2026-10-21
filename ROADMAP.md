@@ -58,6 +58,7 @@ EC2 instance detail, ownership checks, metrics, status, CPU/network trends, per-
 
 ## Completed work
 
+- Operators can inspect S3 bucket tags in bucket analysis and CSV exports; tag reads validate provider responses, fail closed on unavailable or malformed data, and enforce tenant ownership before returning metadata. Deployments need `s3:GetBucketTagging`.
 - Operators reviewing a pending action plan can see its action, target, risk, approval and rollback requirements, reason, recommendation, and decision context in a readable summary; missing fields are labeled clearly, arbitrary provider text is rendered safely, and malformed or unavailable plan details surface an error.
 - Operators can inspect S3 replication configuration from the bucket analysis panel, including configured rules, enabled-rule count, a clear unconfigured state, and sanitized provider failures; token-mode reads verify bucket ownership first. Deployments need `s3:GetReplicationConfiguration` for this check.
 - Operators can inspect whether S3 server access logging is configured and review its destination bucket, prefix, and grants in bucket analysis and CSV exports; token-mode reads verify ownership first. Deployments need `s3:GetBucketLogging` for this check.

@@ -706,16 +706,21 @@ class AWSService:
             }
 
     def get_s3_bucket_tags(self, bucket_name):
-        """Return a bucket's tags for tenant ownership checks."""
+        """Return bucket tags for tenant ownership checks and operator review."""
         try:
             response = _aws_client("s3").get_bucket_tagging(Bucket=bucket_name)
+            tag_set = response.get("TagSet") if isinstance(response, dict) else None
+            if not isinstance(tag_set, list) or any(
+                not isinstance(item, dict)
+                or not isinstance(item.get("Key"), str)
+                or not isinstance(item.get("Value"), str)
+                for item in tag_set
+            ):
+                return {"status": "unhealthy", "error": "Malformed S3 bucket tags response"}
             return {
                 "status": "healthy",
-                "tags": {
-                    item.get("Key"): item.get("Value")
-                    for item in response.get("TagSet", [])
-                    if item.get("Key") is not None
-                },
+                "bucket": bucket_name,
+                "tags": {item["Key"]: item["Value"] for item in tag_set},
             }
         except ClientError as error:
             code = error.response.get("Error", {}).get("Code")
