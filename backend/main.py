@@ -813,6 +813,23 @@ def aws_ec2_alarms(
     ))
 
 
+@app.get("/cloud/aws/ec2/alarms")
+def aws_ec2_fleet_alarms(request: Request, region: str | None = None):
+    """List regional EC2 CPU alarms, scoped to the authenticated tenant."""
+    _validate_ec2_region(region)
+    result = _aws_resource_result(lambda: aws_service.get_ec2_fleet_alarms(
+        **({"region": region} if region else {})
+    ))
+    if getattr(request.state, "tenant_scoped", False):
+        inventory = _all_tenant_ec2_instances(request, region)
+        owned_ids = {item.get("instance_id") for item in inventory["instances"]}
+        result["alarms"] = [
+            alarm for alarm in result.get("alarms", [])
+            if set(alarm.get("instance_ids", [])) & owned_ids
+        ]
+    return result
+
+
 @app.get("/cloud/aws/ec2/instances/{instance_id}/metrics")
 def aws_ec2_metrics(instance_id: str, request: Request, lookback_hours: int = 1, region: str | None = None):
     _validate_ec2_instance_id(instance_id)

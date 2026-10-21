@@ -145,3 +145,65 @@ def test_console_shows_ec2_alarm_details():
     assert "No CPU utilization alarms are configured for this instance." in html
     assert "More alarms" in html
     assert "loadMoreInstanceAlarms(root,regional" in html
+    assert 'id="loadFleetAlarms"' in html
+    assert "api('/cloud/aws/ec2/alarms'+query)" in html
+
+
+def test_fleet_cpu_alarms_follow_pages_and_drop_unrelated_alarms():
+    payload = {"MetricAlarms": [{
+        "AlarmName": "fleet-cpu", "StateValue": "ALARM", "AlarmArn": "private",
+        "MetricName": "CPUUtilization", "Namespace": "AWS/EC2",
+        "Dimensions": [{"Name": "InstanceId", "Value": "i-12345678"}],
+    }], "NextToken": "next"}
+    with patch("services.aws_service.boto3.client") as create_client:
+        cw = create_client.return_value
+        cw.describe_alarms.side_effect = [payload, {"MetricAlarms": [{
+            "AlarmName": "other", "MetricName": "NetworkIn", "Namespace": "AWS/EC2",
+            "Dimensions": [{"Name": "InstanceId", "Value": "i-12345678"}],
+        }]}]
+        result = AWSService().get_ec2_fleet_alarms("eu-west-3")
+    assert result["status"] == "healthy"
+    assert len(result["alarms"]) == 1
+    assert result["alarms"][0]["AlarmName"] == "fleet-cpu"
+    assert result["alarms"][0]["instance_ids"] == ["i-12345678"]
+    assert "AlarmArn" not in result["alarms"][0]
+    assert cw.describe_alarms.call_count == 2
+    assert cw.describe_alarms.call_args_list[1].kwargs["NextToken"] == "next"
+
+
+def test_fleet_alarms_repeated_token_and_provider_failure_are_unhealthy():
+    with patch("services.aws_service.boto3.client") as create_client:
+        cw = create_client.return_value
+        cw.describe_alarms.side_effect = [
+            {"MetricAlarms": [], "NextToken": "repeat"},
+            {"MetricAlarms": [], "NextToken": "repeat"},
+        ]
+        assert AWSService().get_ec2_fleet_alarms()["status"] == "unhealthy"
+        cw.describe_alarms.side_effect = ClientError(
+            {"Error": {"Code": "AccessDenied", "Message": "secret"}}, "DescribeAlarms"
+        )
+        assert AWSService().get_ec2_fleet_alarms()["status"] == "unhealthy"
+
+
+def test_fleet_alarm_endpoint_limits_tenant_to_owned_instances(monkeypatch):
+    import main
+    scoped_app = FastAPI()
+    scoped_app.router.routes.extend(main.app.router.routes)
+    scoped_app.add_middleware(AccessControlMiddleware, mode="token", tokens={
+        "token-a": Principal("alice", "reader", "tenant-a"),
+    })
+    scoped = TestClient(scoped_app)
+    monkeypatch.setattr(main.aws_service, "get_ec2_fleet_alarms", lambda **kwargs: {
+        "status": "healthy", "alarms": [
+            {"AlarmName": "owned", "instance_ids": ["i-aaaaaaaa"]},
+            {"AlarmName": "foreign", "instance_ids": ["i-bbbbbbbb"]},
+        ],
+    })
+    monkeypatch.setattr(main, "_all_tenant_ec2_instances", lambda *_args: {
+        "instances": [{"instance_id": "i-aaaaaaaa"}],
+    })
+    response = scoped.get("/cloud/aws/ec2/alarms?region=eu-west-3", headers={
+        "Authorization": "Bearer token-a",
+    })
+    assert response.status_code == 200
+    assert response.json()["alarms"] == [{"AlarmName": "owned", "instance_ids": ["i-aaaaaaaa"]}]
