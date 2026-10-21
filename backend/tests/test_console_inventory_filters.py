@@ -170,7 +170,7 @@ def test_approval_plan_inspection_handles_success_failures_and_encoded_ids():
     if not shutil.which("node"):
         pytest.skip("Node.js is needed to run the console JavaScript behavior check")
     html = TestClient(app).get("/console").text
-    match = re.search(r"async function inspectApprovalPlan\(actionId\).*?(?=async function loadApprovals)", html, re.S)
+    match = re.search(r"function formatApprovalPlan\(action\).*?(?=async function loadApprovals)", html, re.S)
     assert match
     script = r"""
 const assert = require('node:assert/strict');
@@ -183,8 +183,15 @@ const inspect = new Function('$','api','message',source+';return inspectApproval
  await inspect(id=>elements[id],async path=>{calls.push(path);return {action:{action_id:'plan/one',status:'pending_approval',reason:'review me'}}},(text,error)=>messages.push([text,error]))('plan/one');
  assert.equal(calls[0],'/autonomy/plans/plan%2Fone');
  assert.equal(elements.approvalDetailsTitle.textContent,'Approval plan - plan/one');
- assert.deepEqual(JSON.parse(elements.approvalDetailsContent.textContent),{action_id:'plan/one',status:'pending_approval',reason:'review me'});
+ assert.equal(elements.approvalDetailsContent.textContent,'Action: Not reported\nTarget: Not reported · Not reported\nStatus: pending_approval\nRisk: Not reported\nApproval required: Not reported\nRollback available: Not reported\nReason: review me\nRecommendation: Not reported');
  assert.equal(elements.approvalDetailsContent.className,'');
+ const review=inspect(id=>elements[id],async()=>({action:{action_type:'review_cpu_utilization',target:{resource_type:'ec2_instance',resource_id:'<i-123>',metadata:{recommendation:'Check <CloudWatch>'}},status:'pending_approval',risk:'medium',requires_approval:true,rollback_available:false,reason:'CPU is high',decision_by:'operator',decision_reason:'approved after review'}}),(text,error)=>messages.push([text,error]));
+ await review('plan-two');
+ assert(elements.approvalDetailsContent.textContent.includes('Recommendation: Check <CloudWatch>'));
+ assert(elements.approvalDetailsContent.textContent.includes('Decision by: operator'));
+ await inspect(id=>elements[id],async()=>({}), (text,error)=>messages.push([text,error]))('malformed');
+ assert.equal(elements.approvalDetailsContent.textContent,'Unable to load plan details: Plan details are incomplete.');
+ assert.equal(elements.approvalDetailsContent.className,'error');
  await inspect(id=>elements[id],async()=>{throw new Error('plan not found')},(text,error)=>messages.push([text,error]))('missing');
  assert.equal(elements.approvalDetailsContent.textContent,'Unable to load plan details: plan not found');
  assert.equal(elements.approvalDetailsContent.className,'error');

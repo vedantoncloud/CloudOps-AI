@@ -51,6 +51,7 @@ EC2 instance detail, ownership checks, metrics, status, CPU/network trends, per-
 
 ## Completed work
 
+- Operators reviewing a pending action plan can see its action, target, risk, approval and rollback requirements, reason, recommendation, and decision context in a readable summary; missing fields are labeled clearly, arbitrary provider text is rendered safely, and malformed or unavailable plan details surface an error.
 - Operators can inspect S3 replication configuration from the bucket analysis panel, including configured rules, enabled-rule count, a clear unconfigured state, and sanitized provider failures; token-mode reads verify bucket ownership first. Deployments need `s3:GetReplicationConfiguration` for this check.
 - Operators can inspect S3 bucket versioning state (enabled, suspended, or disabled) and MFA Delete status in bucket analysis; the lookup enforces tenant ownership and reports provider failures without exposing diagnostics.
 - S3 bucket security analysis detects AWS-classified public bucket policies and public ACL grants, reports denied or malformed checks as unknown, and handles bucket-owner-enforced ACL-disabled buckets; analysis results flow into the existing console report and CSV export.
