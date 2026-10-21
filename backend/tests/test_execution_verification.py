@@ -100,6 +100,39 @@ def test_execute_and_verify_records_execution_and_verification_audit():
     assert events[1].new_status == ActionStatus.SUCCEEDED.value
 
 
+def test_execute_and_verify_attributes_both_audit_events_to_operator():
+    audit = AuditTrail()
+    bridge = ExecutionVerificationBridge(executor=FakeExecutor(), audit_trail=audit)
+
+    bridge.execute_and_verify(make_action(), actor_id="operator-17")
+
+    events = audit.get_events("act-verify-1")
+    assert [event.actor_id for event in events] == ["operator-17", "operator-17"]
+
+
+def test_failed_verification_preserves_actor_attribution():
+    audit = AuditTrail()
+    failed_execution = ExecutionResult(
+        action_id="act-verify-1",
+        status=ActionStatus.EXECUTING,
+        dry_run=True,
+        executed=False,
+        successful=False,
+        message="execution failed",
+        details={},
+    )
+    bridge = ExecutionVerificationBridge(
+        executor=FakeExecutor(result=failed_execution), audit_trail=audit
+    )
+
+    result = bridge.execute_and_verify(make_action(), actor_id="operator-17")
+
+    assert result.verified is False
+    events = audit.get_events("act-verify-1")
+    assert [event.actor_id for event in events] == ["operator-17", "operator-17"]
+    assert events[-1].new_status == ActionStatus.ROLLBACK_REQUIRED.value
+
+
 def test_failed_execution_result_requires_rollback():
     audit = AuditTrail()
     failed = ExecutionResult(

@@ -57,6 +57,7 @@ class ExecutionVerificationBridge:
         dry_run: bool = True,
         execution_hook: Callable[[ActionPlan, ExecutionResult], None] | None = None,
         verification_details: dict[str, Any] | None = None,
+        actor_id: str | None = None,
     ) -> ExecutionVerificationResult:
         self._validate_action(action)
 
@@ -86,6 +87,7 @@ class ExecutionVerificationBridge:
             old_status=old_status,
             new_status=executing_status,
             event="action_execution_completed",
+            actor_id=actor_id,
             details={
                 "dry_run": execution_result.dry_run,
                 "executed": execution_result.executed,
@@ -130,6 +132,7 @@ class ExecutionVerificationBridge:
             new_status=new_status,
             event="action_verification_completed",
             details=details,
+            actor_id=actor_id,
         )
 
         events = self.audit_trail.get_events(action.action_id)
