@@ -681,6 +681,30 @@ class AWSService:
                 "error": str(error),
             }
 
+    def get_s3_bucket_logging(self, bucket_name):
+        """Report whether S3 server access logging is configured for a bucket."""
+        try:
+            response = _aws_client("s3").get_bucket_logging(Bucket=bucket_name)
+            configuration = response.get("LoggingEnabled")
+            if configuration is not None and not isinstance(configuration, dict):
+                return {"service": "s3", "status": "unhealthy", "bucket": bucket_name}
+            return {
+                "service": "s3",
+                "status": "healthy",
+                "bucket": bucket_name,
+                "configured": isinstance(configuration, dict),
+                "destination_bucket": configuration.get("TargetBucket") if configuration else None,
+                "destination_prefix": configuration.get("TargetPrefix", "") if configuration else "",
+                "target_grants": configuration.get("TargetGrants", []) if configuration else [],
+            }
+        except (BotoCoreError, ClientError) as error:
+            return {
+                "service": "s3",
+                "status": "unhealthy",
+                "bucket": bucket_name,
+                "error": str(error),
+            }
+
     def get_s3_bucket_tags(self, bucket_name):
         """Return a bucket's tags for tenant ownership checks."""
         try:
