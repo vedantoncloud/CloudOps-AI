@@ -278,9 +278,9 @@ class AWSService:
             "message": "Service health check is not supported yet",
         }
 
-    def get_ec2_summary(self):
+    def get_ec2_summary(self, region=None):
         try:
-            ec2 = _aws_client("ec2")
+            ec2 = _aws_client("ec2", **({"region_name": region} if region else {}))
             total_instances = 0
             running_instances = 0
             stopped_instances = 0

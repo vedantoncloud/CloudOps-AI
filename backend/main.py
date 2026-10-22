@@ -219,13 +219,16 @@ def aws_account_costs(request: Request, days: int = 30):
 
 
 @app.get("/cloud/aws/ec2/summary")
-def aws_ec2_summary(request: Request):
+def aws_ec2_summary(request: Request, region: str | None = None):
+    _validate_ec2_region(region)
     if not getattr(request.state, "tenant_scoped", False):
-        result = aws_service.get_ec2_summary()
+        result = aws_service.get_ec2_summary(**({"region": region} if region else {}))
         if result.get("status") != "healthy":
             _raise_aws_resource_unavailable()
+        if region:
+            result = {**result, "region": region}
         return result
-    inventory = _all_tenant_ec2_instances(request)
+    inventory = _all_tenant_ec2_instances(request, region)
     instances = inventory["instances"]
     return {
         "service": "ec2",
@@ -233,6 +236,7 @@ def aws_ec2_summary(request: Request):
         "total_instances": len(instances),
         "running_instances": sum(item.get("state") == "running" for item in instances),
         "stopped_instances": sum(item.get("state") == "stopped" for item in instances),
+        **({"region": region} if region else {}),
     }
 
 

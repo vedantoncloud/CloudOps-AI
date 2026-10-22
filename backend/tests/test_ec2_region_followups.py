@@ -21,6 +21,22 @@ def test_ec2_instance_details_uses_selected_region_and_surfaces_unavailable_regi
     assert failed.status_code == 503
 
 
+def test_ec2_summary_uses_selected_region_and_rejects_invalid_region_before_provider_access():
+    with patch("main.aws_service.get_ec2_summary", return_value={
+        "service": "ec2", "status": "healthy", "total_instances": 4,
+        "running_instances": 3, "stopped_instances": 1,
+    }) as summary:
+        response = client.get("/cloud/aws/ec2/summary?region=eu-west-3")
+    assert response.status_code == 200
+    assert response.json()["region"] == "eu-west-3"
+    summary.assert_called_once_with(region="eu-west-3")
+
+    with patch("main.aws_service.get_ec2_summary") as summary:
+        invalid = client.get("/cloud/aws/ec2/summary?region=not-a-region")
+    assert invalid.status_code == 400
+    summary.assert_not_called()
+
+
 def test_ec2_instance_details_exposes_platform_launch_and_iam_profile_context():
     details = {
         "instance_id": "i-12345678",
@@ -61,6 +77,18 @@ def test_ec2_service_uses_region_for_instance_and_cloudwatch_calls():
 
     assert create_client.call_args_list[0].kwargs["region_name"] == "eu-west-3"
     assert create_client.call_args_list[1].kwargs["region_name"] == "eu-west-3"
+
+
+def test_ec2_summary_service_uses_selected_region():
+    with patch("services.aws_service.boto3.client") as create_client:
+        ec2 = create_client.return_value
+        ec2.describe_instances.return_value = {"Reservations": []}
+        result = AWSService().get_ec2_summary(region="eu-west-3")
+
+    assert result["status"] == "healthy"
+    create_client.assert_called_once()
+    assert create_client.call_args.args == ("ec2",)
+    assert create_client.call_args.kwargs["region_name"] == "eu-west-3"
 
 
 def test_aggregate_insights_use_selected_region_for_inventory_and_analysis(monkeypatch):

@@ -215,8 +215,8 @@ def test_ec2_summary_counts_tenant_instances_across_all_pages(monkeypatch):
     service = FakeAWSService()
     calls = []
 
-    def page(state=None, tag=None, max_results=None, next_token=None, name=None):
-        calls.append(next_token)
+    def page(state=None, tag=None, max_results=None, next_token=None, name=None, **filters):
+        calls.append((next_token, filters.get("region")))
         if next_token is None:
             return {
                 "service": "ec2", "status": "healthy",
@@ -236,15 +236,16 @@ def test_ec2_summary_counts_tenant_instances_across_all_pages(monkeypatch):
     client = tenant_client(monkeypatch)
     monkeypatch.setattr(main, "aws_service", service)
     response = client.get(
-        "/cloud/aws/ec2/summary", headers={"Authorization": "Bearer token-a"}
+        "/cloud/aws/ec2/summary?region=eu-west-3", headers={"Authorization": "Bearer token-a"}
     )
 
     assert response.status_code == 200
     assert response.json() == {
         "service": "ec2", "status": "healthy", "total_instances": 2,
         "running_instances": 1, "stopped_instances": 1,
+        "region": "eu-west-3",
     }
-    assert calls == [None, "page-2"]
+    assert calls == [(None, "eu-west-3"), ("page-2", "eu-west-3")]
 
 
 @pytest.mark.parametrize("path,method", [
