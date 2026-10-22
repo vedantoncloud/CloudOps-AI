@@ -21,6 +21,22 @@ def test_ec2_instance_details_uses_selected_region_and_surfaces_unavailable_regi
     assert failed.status_code == 503
 
 
+def test_ec2_instance_details_exposes_platform_launch_and_iam_profile_context():
+    details = {
+        "instance_id": "i-12345678",
+        "platform": "Ubuntu Pro",
+        "architecture": "arm64",
+        "launch_time": "2025-04-03T12:30:00+00:00",
+        "iam_instance_profile_arn": "arn:aws:iam::123456789012:instance-profile/app",
+        "tags": {},
+    }
+    with patch("main.aws_service.get_ec2_instance", return_value={"status": "healthy", "instance": details}):
+        response = client.get("/cloud/aws/ec2/instances/i-12345678")
+
+    assert response.status_code == 200
+    assert response.json()["instance"] == details
+
+
 def test_ec2_metrics_and_planning_keep_selected_region_and_reject_invalid_region():
     with patch("main.aws_service.get_ec2_metrics", return_value={"status": "healthy"}) as metrics:
         response = client.get("/cloud/aws/ec2/instances/i-12345678/metrics?region=ap-south-1&lookback_hours=6")

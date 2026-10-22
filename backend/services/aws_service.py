@@ -471,6 +471,14 @@ class AWSService:
                     "state": instance.get("State", {}).get("Name"),
                     "instance_type": instance.get("InstanceType"),
                     "availability_zone": instance.get("Placement", {}).get("AvailabilityZone"),
+                    "launch_time": (
+                        instance.get("LaunchTime").isoformat()
+                        if hasattr(instance.get("LaunchTime"), "isoformat")
+                        else instance.get("LaunchTime")
+                    ),
+                    "platform": instance.get("PlatformDetails") or instance.get("Platform") or "Linux/UNIX",
+                    "architecture": instance.get("Architecture"),
+                    "iam_instance_profile_arn": (instance.get("IamInstanceProfile") or {}).get("Arn"),
                     "private_ip": instance.get("PrivateIpAddress"),
                     "public_ip": instance.get("PublicIpAddress"),
                     "security_groups": [

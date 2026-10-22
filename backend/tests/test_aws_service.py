@@ -48,12 +48,37 @@ def test_get_ec2_instance_uses_direct_instance_id_lookup():
             "state": "running",
             "instance_type": None,
             "availability_zone": None,
+            "launch_time": None,
+            "platform": "Linux/UNIX",
+            "architecture": None,
+            "iam_instance_profile_arn": None,
             "private_ip": None,
             "public_ip": None,
             "security_groups": [],
             "tags": {"CloudOpsTenantId": "tenant-a"},
         },
     }
+
+
+def test_get_ec2_instance_includes_operational_platform_and_role_context():
+    launched = datetime(2025, 4, 3, 12, 30)
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_client.return_value.describe_instances.return_value = {
+            "Reservations": [{"Instances": [{
+                "InstanceId": "i-aaaaaaaa",
+                "PlatformDetails": "Red Hat Enterprise Linux",
+                "Architecture": "x86_64",
+                "LaunchTime": launched,
+                "IamInstanceProfile": {"Arn": "arn:aws:iam::123456789012:instance-profile/app"},
+            }]}]
+        }
+
+        result = AWSService().get_ec2_instance("i-aaaaaaaa")
+
+    assert result["instance"]["launch_time"] == launched.isoformat()
+    assert result["instance"]["platform"] == "Red Hat Enterprise Linux"
+    assert result["instance"]["architecture"] == "x86_64"
+    assert result["instance"]["iam_instance_profile_arn"] == "arn:aws:iam::123456789012:instance-profile/app"
 
 
 def test_get_status_when_aws_is_connected():
