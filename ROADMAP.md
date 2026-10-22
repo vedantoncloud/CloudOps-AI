@@ -64,6 +64,7 @@ EC2 instance detail, ownership checks, metrics, status, CPU/network trends, per-
 
 ## Completed work
 
+- Operators can review EC2 fleet totals in the operations console; totals follow the selected region, and provider or malformed responses appear as explicit errors.
 - Operators can review EC2 fleet totals in a selected AWS region; the summary honors region validation and tenant-scoped totals include only owned instances across all inventory pages.
 - Operators can inspect the parsed S3 bucket policy and its statements in bucket analysis; buckets without a policy show an explicit unconfigured result, malformed/provider responses fail closed, and tenant ownership is verified before reading the policy.
 - Operators can export all action plans matching the active filters with target metadata, risk and lifecycle state, approval and rollback requirements, submission time, and reviewer decision context; pagination failures or changing result sets stop the download rather than producing a partial CSV.

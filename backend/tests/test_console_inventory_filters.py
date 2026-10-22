@@ -73,6 +73,35 @@ def test_console_exposes_tenant_scoped_ec2_fleet_insights():
     assert "classList.toggle('hidden',!aws)" in html
 
 
+def test_console_loads_regional_fleet_totals_and_reports_failures():
+    if not shutil.which("node"):
+        pytest.skip("Node.js is needed to run the console JavaScript behavior check")
+    html = TestClient(app).get("/console").text
+    assert 'id="fleetSummary"' in html
+    assert "if(aws)loadFleetSummary()" in html
+    match = re.search(r"function renderFleetSummary\(.*?(?=async function loadInventory)", html, re.S)
+    assert match
+    script = r"""
+const assert = require('node:assert/strict');
+const source = JSON.parse(process.argv[1]);
+const box = {textContent:'',className:''};
+const region = {value:'eu-west-3'};
+const elements = id => id === 'fleetSummary' ? box : region;
+const make = new Function('$','api',source+';return loadFleetSummary');
+async function run(api){box.textContent='';box.className='';await make(elements,api)();return [box.textContent,box.className]}
+(async()=>{
+ let result=await run(async path=>{assert.equal(path,'/cloud/aws/ec2/summary?region=eu-west-3');return {service:'ec2',status:'healthy',region:'eu-west-3',total_instances:4,running_instances:3,stopped_instances:1}});
+ assert.deepEqual(result,['EC2 fleet in eu-west-3: 4 total | 3 running | 1 stopped','notice']);
+ result=await run(async()=>{throw new Error('AWS resource data is unavailable')});
+ assert.deepEqual(result,['AWS resource data is unavailable','notice error']);
+ result=await run(async()=>({service:'ec2',status:'healthy',total_instances:-1,running_instances:0,stopped_instances:0}));
+ assert.deepEqual(result,['Fleet summary response is incomplete.','notice error']);
+})().catch(error=>{console.error(error);process.exitCode=1});
+"""
+    result = subprocess.run(["node", "-e", script, json.dumps(match.group(0))], capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_console_can_download_s3_objects_from_the_object_browser():
     response = TestClient(app).get("/console")
 
