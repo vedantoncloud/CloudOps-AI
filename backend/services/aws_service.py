@@ -795,6 +795,39 @@ class AWSService:
         except BotoCoreError as error:
             return {"status": "unhealthy", "error": str(error)}
 
+    def get_s3_bucket_policy(self, bucket_name):
+        """Return the parsed bucket policy for operator security review."""
+        try:
+            response = _aws_client("s3").get_bucket_policy(Bucket=bucket_name)
+            raw_policy = response.get("Policy") if isinstance(response, dict) else None
+            if not isinstance(raw_policy, str):
+                return {"service": "s3", "status": "unhealthy", "bucket": bucket_name}
+            try:
+                policy = json.loads(raw_policy)
+            except (TypeError, ValueError):
+                return {"service": "s3", "status": "unhealthy", "bucket": bucket_name}
+            statements = policy.get("Statement") if isinstance(policy, dict) else None
+            if not (
+                isinstance(statements, dict)
+                or isinstance(statements, list)
+                and all(isinstance(statement, dict) for statement in statements)
+            ):
+                return {"service": "s3", "status": "unhealthy", "bucket": bucket_name}
+            return {
+                "service": "s3", "status": "healthy", "bucket": bucket_name,
+                "configured": True, "policy": policy,
+            }
+        except ClientError as error:
+            code = error.response.get("Error", {}).get("Code")
+            if code == "NoSuchBucketPolicy":
+                return {
+                    "service": "s3", "status": "healthy", "bucket": bucket_name,
+                    "configured": False, "policy": None,
+                }
+            return {"service": "s3", "status": "unhealthy", "error": str(error)}
+        except BotoCoreError as error:
+            return {"service": "s3", "status": "unhealthy", "error": str(error)}
+
     def get_s3_objects(self, bucket_name, prefix=None, max_keys=None, continuation_token=None, delimiter=None):
         try:
             s3 = _aws_client("s3")
