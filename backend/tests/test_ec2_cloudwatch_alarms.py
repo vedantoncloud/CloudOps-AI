@@ -1,6 +1,7 @@
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from auth import AccessControlMiddleware, Principal
@@ -114,7 +115,7 @@ def test_ec2_alarms_require_tenant_ownership_and_use_selected_region(monkeypatch
 
     def get_alarms(instance_id, **kwargs):
         calls.append((instance_id, kwargs))
-        return {"status": "healthy", "alarms": [], "next_token": None}
+        return {"service": "cloudwatch", "status": "healthy", "instance_id": instance_id, "alarms": [], "next_token": None}
 
     monkeypatch.setattr(service, "get_ec2_alarms", get_alarms)
     response = scoped_client.get(
@@ -194,7 +195,7 @@ def test_fleet_alarm_endpoint_limits_tenant_to_owned_instances(monkeypatch):
     })
     scoped = TestClient(scoped_app)
     monkeypatch.setattr(main.aws_service, "get_ec2_fleet_alarms", lambda **kwargs: {
-        "status": "healthy", "alarms": [
+        "service": "cloudwatch", "status": "healthy", "alarms": [
             {"AlarmName": "owned", "instance_ids": ["i-aaaaaaaa"]},
             {"AlarmName": "foreign", "instance_ids": ["i-bbbbbbbb"]},
         ],
@@ -207,6 +208,37 @@ def test_fleet_alarm_endpoint_limits_tenant_to_owned_instances(monkeypatch):
     })
     assert response.status_code == 200
     assert response.json()["alarms"] == [{"AlarmName": "owned", "instance_ids": ["i-aaaaaaaa"]}]
+
+
+@pytest.mark.parametrize(
+    "path,method_name,payload",
+    [
+        ("/cloud/aws/ec2/instances/i-12345678/alarms", "get_ec2_alarms", {
+            "service": "cloudwatch", "status": "healthy", "instance_id": "i-12345678",
+            "alarms": {}, "next_token": None,
+        }),
+        ("/cloud/aws/ec2/instances/i-12345678/alarms", "get_ec2_alarms", {
+            "service": "cloudwatch", "status": "healthy", "instance_id": "i-87654321",
+            "alarms": [], "next_token": None,
+        }),
+        ("/cloud/aws/ec2/instances/i-12345678/alarms", "get_ec2_alarms", {
+            "service": "cloudwatch", "status": "healthy", "instance_id": "i-12345678",
+            "alarms": [{"AlarmName": "bad", "Threshold": float("nan")}], "next_token": None,
+        }),
+        ("/cloud/aws/ec2/alarms", "get_ec2_fleet_alarms", {
+            "service": "cloudwatch", "status": "healthy",
+            "alarms": [{"AlarmName": "bad", "instance_ids": ["not-an-instance"]}],
+        }),
+    ],
+)
+def test_ec2_alarm_routes_reject_malformed_healthy_payloads(monkeypatch, path, method_name, payload):
+    import main
+
+    monkeypatch.setattr(main.aws_service, method_name, lambda *args, **kwargs: payload)
+    response = client.get(path)
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS resource data is unavailable"}
 
 def test_console_renders_filterable_fleet_alarm_summary_and_table():
     html = (Path(__file__).parents[1] / "static" / "console.html").read_text(encoding="utf-8")

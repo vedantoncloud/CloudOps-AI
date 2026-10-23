@@ -996,11 +996,47 @@ def aws_ec2_alarms(
     _validate_ec2_instance_id(instance_id)
     _validate_ec2_region(region)
     _require_tenant_ec2_instance(request, instance_id, region)
-    return _aws_resource_result(lambda: aws_service.get_ec2_alarms(
+    result = _aws_resource_result(lambda: aws_service.get_ec2_alarms(
         instance_id,
         next_token=next_token,
         **({"region": region} if region else {}),
     ))
+    alarms = result.get("alarms")
+    if (
+        result.get("service") != "cloudwatch"
+        or result.get("instance_id") != instance_id
+        or not isinstance(alarms, list)
+        or (result.get("next_token") is not None and not isinstance(result.get("next_token"), str))
+        or any(not _valid_ec2_alarm(alarm) for alarm in alarms)
+    ):
+        _raise_aws_resource_unavailable()
+    return result
+
+
+def _valid_ec2_alarm(alarm: object) -> bool:
+    if not isinstance(alarm, dict):
+        return False
+    if not isinstance(alarm.get("AlarmName"), str) or not alarm["AlarmName"].strip():
+        return False
+    string_fields = (
+        "AlarmName", "AlarmDescription", "StateValue", "StateReason", "MetricName",
+        "Namespace", "ComparisonOperator", "TreatMissingData",
+    )
+    if any(key in alarm and alarm[key] is not None and not isinstance(alarm[key], str) for key in string_fields):
+        return False
+    number_fields = ("Threshold",)
+    if any(
+        key in alarm and alarm[key] is not None
+        and (not isinstance(alarm[key], (int, float)) or isinstance(alarm[key], bool)
+             or not isfinite(alarm[key]))
+        for key in number_fields
+    ):
+        return False
+    return all(
+        key not in alarm or alarm[key] is None
+        or (isinstance(alarm[key], int) and not isinstance(alarm[key], bool) and alarm[key] > 0)
+        for key in ("Period", "EvaluationPeriods")
+    )
 
 
 @app.get("/cloud/aws/ec2/alarms")
@@ -1010,6 +1046,22 @@ def aws_ec2_fleet_alarms(request: Request, region: str | None = None):
     result = _aws_resource_result(lambda: aws_service.get_ec2_fleet_alarms(
         **({"region": region} if region else {})
     ))
+    alarms = result.get("alarms")
+    if (
+        result.get("service") != "cloudwatch"
+        or not isinstance(alarms, list)
+        or any(
+            not _valid_ec2_alarm(alarm)
+            or not isinstance(alarm.get("instance_ids"), list)
+            or any(
+                not isinstance(instance_id, str)
+                or not re.fullmatch(r"i-[0-9a-fA-F]{8,17}", instance_id)
+                for instance_id in alarm["instance_ids"]
+            )
+            for alarm in alarms
+        )
+    ):
+        _raise_aws_resource_unavailable()
     if getattr(request.state, "tenant_scoped", False):
         inventory = _all_tenant_ec2_instances(request, region)
         owned_ids = {item.get("instance_id") for item in inventory["instances"]}

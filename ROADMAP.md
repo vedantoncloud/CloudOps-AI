@@ -68,6 +68,8 @@ The admin account billing endpoint validates the complete healthy response contr
 
 The EC2 attached-volume endpoint validates the healthy response identity and volume/attachment schema before returning provider data; malformed success-shaped payloads fail closed with the sanitized `503`. Focused EC2 endpoint, volume-provider, and tenant-scope regression tests pass (115 tests).
 
+EC2 instance and fleet CloudWatch alarm endpoints validate healthy response identity, pagination, alarm fields, and fleet instance IDs; malformed success-shaped provider payloads fail closed with the sanitized `503`. Focused alarm, EC2 endpoint, volume-provider, and tenant-scope regression tests pass (130 tests).
+
 ## Completed work
 
 - EC2 region discovery maps provider exceptions and malformed region lists to the sanitized resource-unavailable `503` response.
