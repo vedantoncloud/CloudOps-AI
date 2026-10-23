@@ -399,6 +399,7 @@ def _require_tenant_ec2_instance(request: Request, instance_id: str, region: str
     )
     tenant_id = request.state.tenant_id
     instance = result.get("instance")
+    _validate_ec2_instance_result(instance, instance_id)
     owned = instance is not None and _resource_tenant({"tags": instance.get("tags", {})}) == tenant_id
     if not owned:
         # Use the same response for absent and foreign-owned resources.
@@ -409,6 +410,18 @@ def _validate_ec2_instance_id(instance_id: str) -> None:
     """Reject malformed identifiers before making provider calls."""
     if not re.fullmatch(r"i-[0-9a-fA-F]{8,17}", instance_id):
         raise HTTPException(status_code=400, detail="Invalid EC2 instance ID")
+
+
+def _validate_ec2_instance_result(instance, requested_instance_id: str) -> None:
+    """Reject malformed instance details before returning or using ownership metadata."""
+    if instance is None:
+        return
+    if (
+        not isinstance(instance, dict)
+        or instance.get("instance_id") != requested_instance_id
+        or ("tags" in instance and not isinstance(instance["tags"], dict))
+    ):
+        _raise_aws_resource_unavailable()
 
 
 def _validate_ec2_region(region: str | None) -> None:
@@ -853,6 +866,7 @@ def aws_ec2_instance_details(instance_id: str, request: Request, region: str | N
     ))
 
     instance = result.get("instance")
+    _validate_ec2_instance_result(instance, instance_id)
     if instance is None or (
         getattr(request.state, "tenant_scoped", False)
         and _resource_tenant({"tags": instance.get("tags", {})}) != request.state.tenant_id

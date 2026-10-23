@@ -65,6 +65,41 @@ def test_ec2_instance_lookup_exception_is_sanitized_before_tenant_check(monkeypa
     assert "credentials" not in response.text
 
 
+@pytest.mark.parametrize(
+    "instance",
+    [
+        [],
+        {"tags": {}},
+        {"instance_id": "i-87654321", "tags": {}},
+        {"instance_id": "i-12345678", "tags": []},
+    ],
+)
+def test_ec2_instance_detail_rejects_malformed_healthy_provider_records(monkeypatch, instance):
+    monkeypatch.setattr(
+        main.aws_service,
+        "get_ec2_instance",
+        lambda *_args, **_kwargs: {"status": "healthy", "instance": instance},
+    )
+
+    response = TestClient(main.app).get("/cloud/aws/ec2/instances/i-12345678")
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS resource data is unavailable"}
+
+
+def test_ec2_instance_detail_keeps_missing_instance_as_not_found(monkeypatch):
+    monkeypatch.setattr(
+        main.aws_service,
+        "get_ec2_instance",
+        lambda *_args, **_kwargs: {"status": "healthy", "instance": None},
+    )
+
+    response = TestClient(main.app).get("/cloud/aws/ec2/instances/i-12345678")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "EC2 instance not found"}
+
+
 def test_ec2_volume_success_and_invalid_instance_id(monkeypatch):
     expected = {
         "service": "ec2", "status": "healthy", "instance_id": "i-12345678",
