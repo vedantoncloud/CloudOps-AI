@@ -66,6 +66,8 @@ The AWS status endpoint now maps provider exceptions and malformed status payloa
 
 The admin account billing endpoint validates the complete healthy response contract, including finite totals, date periods, and daily/service rows; malformed success-shaped provider payloads return the sanitized `503`. Focused billing and AWS status/readiness regression tests pass (116 tests).
 
+The EC2 instance inventory endpoint maps provider exceptions and malformed healthy payloads to the shared sanitized `503` before tenant filtering; valid empty inventory responses remain successful. Focused inventory and AWS service regression tests pass (137 tests).
+
 The EC2 attached-volume endpoint validates the healthy response identity and volume/attachment schema before returning provider data; malformed success-shaped payloads fail closed with the sanitized `503`. Focused EC2 endpoint, volume-provider, and tenant-scope regression tests pass (115 tests).
 
 EC2 instance and fleet CloudWatch alarm endpoints validate healthy response identity, pagination, alarm fields, and fleet instance IDs; malformed success-shaped provider payloads fail closed with the sanitized `503`. Focused alarm, EC2 endpoint, volume-provider, and tenant-scope regression tests pass (130 tests).

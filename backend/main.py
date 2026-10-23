@@ -366,10 +366,18 @@ def _tenant_ec2_instances(request: Request, state: str | None, tag: str | None, 
     if availability_zone:
         filters["availability_zone"] = availability_zone
     if max_results is None and next_token is None:
-        result = aws_service.get_ec2_instances(state, tag, **filters)
+        result = _aws_resource_result(lambda: aws_service.get_ec2_instances(state, tag, **filters))
     else:
-        result = aws_service.get_ec2_instances(state, tag, max_results, next_token, **filters)
-    if result.get("status") != "healthy" or not getattr(request.state, "tenant_scoped", False):
+        result = _aws_resource_result(
+            lambda: aws_service.get_ec2_instances(state, tag, max_results, next_token, **filters)
+        )
+    instances = result.get("instances")
+    if (
+        not isinstance(instances, list)
+        or any(not isinstance(instance, dict) for instance in instances)
+    ):
+        _raise_aws_resource_unavailable()
+    if not getattr(request.state, "tenant_scoped", False):
         return result
     tenant_id = request.state.tenant_id
     result = dict(result)
