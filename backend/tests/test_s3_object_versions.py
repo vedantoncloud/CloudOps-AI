@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from unittest.mock import patch
 
+import pytest
 from botocore.exceptions import ClientError
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -130,6 +131,31 @@ def test_s3_versions_endpoint_sanitizes_provider_failure(monkeypatch):
         "/cloud/aws/s3/buckets/owned/object-versions",
         headers={"Authorization": "Bearer a"},
     )
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS resource data is unavailable"}
+
+
+@pytest.mark.parametrize("payload", [
+    {"service": "s3", "status": "healthy", "bucket": "other",
+     "versions": [], "is_truncated": False},
+    {"service": "s3", "status": "healthy", "bucket": "owned",
+     "versions": {}, "is_truncated": False},
+    {"service": "s3", "status": "healthy", "bucket": "owned",
+     "versions": [{"key": "a", "version_id": "v1", "is_latest": 1,
+                   "delete_marker": False}], "is_truncated": False},
+    {"service": "s3", "status": "healthy", "bucket": "owned",
+     "versions": [{"key": "a", "version_id": "v1", "is_latest": False,
+                   "delete_marker": False, "size": True}], "is_truncated": False},
+    {"service": "s3", "status": "healthy", "bucket": "owned",
+     "versions": [], "is_truncated": True},
+])
+def test_s3_versions_endpoint_rejects_malformed_healthy_payloads(monkeypatch, payload):
+    monkeypatch.setattr(
+        main.aws_service, "get_s3_object_versions", lambda *_args, **_kwargs: payload
+    )
+
+    response = TestClient(main.app).get("/cloud/aws/s3/buckets/owned/object-versions")
+
     assert response.status_code == 503
     assert response.json() == {"detail": "AWS resource data is unavailable"}
 

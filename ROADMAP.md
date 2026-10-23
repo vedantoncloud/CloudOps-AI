@@ -70,6 +70,8 @@ The EC2 attached-volume endpoint validates the healthy response identity and vol
 
 EC2 instance and fleet CloudWatch alarm endpoints validate healthy response identity, pagination, alarm fields, and fleet instance IDs; malformed success-shaped provider payloads fail closed with the sanitized `503`. Focused alarm, EC2 endpoint, volume-provider, and tenant-scope regression tests pass (130 tests).
 
+S3 object-version listing validates response identity, version row fields, and truncated-page cursor state; malformed success-shaped provider payloads fail closed with the sanitized `503`. Focused object-version, S3 endpoint, scan-completeness, and tenant-scope regression tests pass (113 tests).
+
 ## Completed work
 
 - EC2 region discovery maps provider exceptions and malformed region lists to the sanitized resource-unavailable `503` response.

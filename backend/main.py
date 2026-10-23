@@ -669,10 +669,40 @@ def aws_s3_object_versions(
     _require_tenant_s3_bucket(request, bucket_name)
     if max_keys <= 0 or max_keys > 1000:
         raise HTTPException(status_code=400, detail="max_keys must be between 1 and 1000")
-    return _aws_resource_result(lambda: aws_service.get_s3_object_versions(
+    result = _aws_resource_result(lambda: aws_service.get_s3_object_versions(
         bucket_name, prefix=prefix, key_marker=key_marker,
         version_id_marker=version_id_marker, max_keys=max_keys,
     ))
+    versions = result.get("versions")
+    if (
+        result.get("service") != "s3"
+        or result.get("bucket") != bucket_name
+        or not isinstance(versions, list)
+        or not isinstance(result.get("is_truncated"), bool)
+        or any(
+            not isinstance(version, dict)
+            or not isinstance(version.get("key"), str)
+            or not version["key"]
+            or not isinstance(version.get("version_id"), str)
+            or not isinstance(version.get("is_latest"), bool)
+            or not isinstance(version.get("delete_marker"), bool)
+            or (version.get("last_modified") is not None
+                and not isinstance(version.get("last_modified"), str))
+            or (version.get("size") is not None
+                and (not isinstance(version.get("size"), int)
+                     or isinstance(version.get("size"), bool) or version["size"] < 0))
+            or any(version.get(field) is not None and not isinstance(version.get(field), str)
+                   for field in ("etag", "storage_class"))
+            for version in versions
+        )
+        or any(
+            result.get(field) is not None and not isinstance(result.get(field), str)
+            for field in ("next_key_marker", "next_version_id_marker")
+        )
+        or (result["is_truncated"] and not result.get("next_key_marker"))
+    ):
+        _raise_aws_resource_unavailable()
+    return result
 
 
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/objects/download")
