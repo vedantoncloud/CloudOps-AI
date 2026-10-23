@@ -172,7 +172,18 @@ def readiness_check():
 
 @app.get("/cloud/aws/status")
 def aws_status(request: Request):
-    result = aws_service.get_status()
+    try:
+        result = aws_service.get_status()
+    except Exception:
+        raise HTTPException(status_code=503, detail="AWS status is unavailable")
+    if (
+        not isinstance(result, dict)
+        or result.get("provider") != "AWS"
+        or result.get("status") not in {"connected", "disconnected"}
+        or not isinstance(result.get("message"), str)
+        or (result.get("status") == "connected" and not isinstance(result.get("services"), dict))
+    ):
+        raise HTTPException(status_code=503, detail="AWS status is unavailable")
     if (
         not getattr(request.state, "tenant_scoped", False)
         or getattr(getattr(request.state, "principal", None), "role", None) == "admin"
