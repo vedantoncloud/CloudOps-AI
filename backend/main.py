@@ -1,6 +1,8 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, PlainTextResponse
 from pathlib import Path
+from datetime import date
+from math import isfinite
 import re
 import sqlite3
 
@@ -236,7 +238,51 @@ def aws_account_costs(request: Request, days: int = 30):
         result = aws_service.get_account_costs(days=days)
     except Exception:
         raise HTTPException(status_code=503, detail="AWS billing data is unavailable")
-    if not isinstance(result, dict) or result.get("status") != "healthy":
+    def finite_number(value):
+        return isinstance(value, (int, float)) and not isinstance(value, bool) and isfinite(value)
+
+    def valid_period(value):
+        if not isinstance(value, dict) or set(value) != {"start", "end_exclusive"}:
+            return False
+        try:
+            return all(
+                isinstance(value[key], str)
+                and date.fromisoformat(value[key]).isoformat() == value[key]
+                for key in ("start", "end_exclusive")
+            ) and value["start"] < value["end_exclusive"]
+        except (TypeError, ValueError):
+            return False
+
+    def valid_daily_row(row):
+        if not isinstance(row, dict) or not isinstance(row.get("date"), str) or not finite_number(row.get("amount")):
+            return False
+        try:
+            return date.fromisoformat(row["date"]).isoformat() == row["date"]
+        except ValueError:
+            return False
+
+    valid_daily = isinstance(result, dict) and isinstance(result.get("daily"), list) and all(
+        valid_daily_row(row) for row in result["daily"]
+    )
+    valid_services = isinstance(result, dict) and isinstance(result.get("services"), list) and all(
+        isinstance(row, dict)
+        and isinstance(row.get("service"), str)
+        and finite_number(row.get("amount"))
+        for row in result["services"]
+    )
+    if (
+        not isinstance(result, dict)
+        or result.get("service") != "aws-cost-explorer"
+        or result.get("status") != "healthy"
+        or result.get("days") != days
+        or not valid_period(result.get("period"))
+        or not valid_period(result.get("comparison_period"))
+        or not (result.get("currency") is None or isinstance(result.get("currency"), str))
+        or not all(finite_number(result.get(field)) for field in ("total", "previous_total", "change"))
+        or not (result.get("change_percent") is None or finite_number(result.get("change_percent")))
+        or not valid_daily
+        or not valid_services
+    ):
         raise HTTPException(status_code=503, detail="AWS billing data is unavailable")
     return result
 

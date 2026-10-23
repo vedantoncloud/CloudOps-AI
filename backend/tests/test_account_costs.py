@@ -1,11 +1,24 @@
 from unittest.mock import patch
 from datetime import datetime, timezone, timedelta
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from botocore.exceptions import ClientError
 from auth import AccessControlMiddleware, Principal
 from main import aws_account_costs
 from services.aws_service import AWSService
+
+
+def _healthy_cost_result(days=30):
+    return {
+        "service": "aws-cost-explorer", "status": "healthy", "days": days,
+        "period": {"start": "2026-09-23", "end_exclusive": "2026-10-23"},
+        "comparison_period": {"start": "2026-08-24", "end_exclusive": "2026-09-23"},
+        "currency": "USD", "total": 4.2, "previous_total": 3.0,
+        "change": 1.2, "change_percent": 40.0,
+        "daily": [{"date": "2026-10-22", "amount": 4.2}],
+        "services": [{"service": "Amazon EC2", "amount": 4.2}],
+    }
 
 
 def test_account_costs_requests_daily_unblended_totals():
@@ -126,7 +139,7 @@ def test_account_costs_api_requires_admin_token():
         "admin": Principal("admin-1", "admin", "tenant-a"),
     })
     app.add_api_route("/cloud/aws/account-costs", aws_account_costs)
-    with patch("main.aws_service.get_account_costs", return_value={"status": "healthy", "total": 4.2}):
+    with patch("main.aws_service.get_account_costs", return_value=_healthy_cost_result()):
         client = TestClient(app)
         assert client.get("/cloud/aws/account-costs", headers={"Authorization": "Bearer reader"}).status_code == 403
         response = client.get("/cloud/aws/account-costs", headers={"Authorization": "Bearer admin"})
@@ -139,7 +152,7 @@ def test_account_costs_api_validates_and_forwards_selected_window():
         "admin": Principal("admin-1", "admin", "tenant-a"),
     })
     app.add_api_route("/cloud/aws/account-costs", aws_account_costs)
-    with patch("main.aws_service.get_account_costs", return_value={"status": "healthy", "days": 7}) as get_costs:
+    with patch("main.aws_service.get_account_costs", return_value=_healthy_cost_result(7)) as get_costs:
         client = TestClient(app)
         assert client.get("/cloud/aws/account-costs?days=6", headers={"Authorization": "Bearer admin"}).status_code == 400
         response = client.get("/cloud/aws/account-costs?days=7", headers={"Authorization": "Bearer admin"})
@@ -180,6 +193,26 @@ def test_account_costs_api_rejects_malformed_provider_response():
     })
     app.add_api_route("/cloud/aws/account-costs", aws_account_costs)
     with patch("main.aws_service.get_account_costs", return_value={"total": 5.0}):
+        response = TestClient(app).get("/cloud/aws/account-costs?days=30", headers={"Authorization": "Bearer admin"})
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS billing data is unavailable"}
+
+
+@pytest.mark.parametrize("field,value", [
+    ("total", float("nan")),
+    ("daily", [{"date": "not-a-date", "amount": 1.0}]),
+    ("services", [{"service": "Amazon EC2", "amount": "1.0"}]),
+    ("period", {"start": "2026-10-23", "end_exclusive": "2026-09-23"}),
+])
+def test_account_costs_api_rejects_malformed_healthy_payloads(field, value):
+    app = FastAPI()
+    app.add_middleware(AccessControlMiddleware, mode="token", tokens={
+        "admin": Principal("admin-1", "admin", "tenant-a"),
+    })
+    app.add_api_route("/cloud/aws/account-costs", aws_account_costs)
+    result = _healthy_cost_result()
+    result[field] = value
+    with patch("main.aws_service.get_account_costs", return_value=result):
         response = TestClient(app).get("/cloud/aws/account-costs?days=30", headers={"Authorization": "Bearer admin"})
     assert response.status_code == 503
     assert response.json() == {"detail": "AWS billing data is unavailable"}
