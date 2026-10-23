@@ -37,6 +37,35 @@ def test_ec2_summary_uses_selected_region_and_rejects_invalid_region_before_prov
     summary.assert_not_called()
 
 
+def test_ec2_summary_sanitizes_provider_exceptions_and_malformed_results():
+    invalid_results = [
+        None,
+        {"service": "ec2", "status": "healthy"},
+        {
+            "service": "ec2", "status": "healthy", "total_instances": True,
+            "running_instances": 1, "stopped_instances": 0,
+        },
+        {
+            "service": "ec2", "status": "healthy", "total_instances": 1,
+            "running_instances": 1, "stopped_instances": 1,
+        },
+    ]
+    for result in invalid_results:
+        with patch("main.aws_service.get_ec2_summary", return_value=result):
+            response = client.get("/cloud/aws/ec2/summary")
+        assert response.status_code == 503
+        assert response.json() == {"detail": "AWS resource data is unavailable"}
+
+    with patch(
+        "main.aws_service.get_ec2_summary",
+        side_effect=RuntimeError("private account diagnostics"),
+    ):
+        response = client.get("/cloud/aws/ec2/summary")
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS resource data is unavailable"}
+    assert "private" not in response.text
+
+
 def test_ec2_instance_details_exposes_platform_launch_and_iam_profile_context():
     details = {
         "instance_id": "i-12345678",

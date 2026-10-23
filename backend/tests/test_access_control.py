@@ -78,6 +78,7 @@ def test_reader_cannot_perform_approval_operation():
         "/autonomy/audit/reconciliation",
         "/autonomy/audit/integrity",
         "/autonomy/control-plane/summary",
+        "/metrics",
     ],
 )
 def test_operational_audit_diagnostics_require_admin(path):
@@ -101,6 +102,24 @@ def test_admin_can_access_operational_audit_diagnostics():
     )
 
     assert response.status_code == 200
+
+
+def test_process_metrics_require_admin():
+    app = FastAPI()
+    app.add_middleware(AccessControlMiddleware, mode="token", tokens=TOKENS)
+
+    @app.get("/metrics")
+    def metrics():
+        return {"requests": 1}
+
+    client = TestClient(app)
+    assert client.get("/metrics").status_code == 401
+    assert client.get("/metrics", headers={"Authorization": "Bearer reader-a"}).status_code == 403
+    assert client.get("/metrics", headers={"Authorization": "Bearer operator-a"}).status_code == 403
+    assert client.get("/metrics/", headers={"Authorization": "Bearer reader-a"}).status_code == 403
+    response = client.get("/metrics", headers={"Authorization": "Bearer admin-a"})
+    assert response.status_code == 200
+    assert response.json() == {"requests": 1}
 
 
 @pytest.mark.parametrize(

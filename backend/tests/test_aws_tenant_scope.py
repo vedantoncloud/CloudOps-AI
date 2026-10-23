@@ -185,6 +185,38 @@ def test_aws_service_health_retains_diagnostics_for_admin(monkeypatch):
     assert "123456789012" in response.json()["error"]
 
 
+@pytest.mark.parametrize(
+    "provider_result",
+    [None, {"service": "ec2", "status": "connected"}],
+)
+def test_aws_service_health_rejects_malformed_provider_results(monkeypatch, provider_result):
+    client = tenant_client(monkeypatch)
+    monkeypatch.setattr(main.aws_service, "get_service_health", lambda _name: provider_result)
+
+    response = client.get(
+        "/cloud/aws/services/ec2", headers={"Authorization": "Bearer token-a"}
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS service health is unavailable"}
+
+
+def test_aws_service_health_sanitizes_provider_exceptions(monkeypatch):
+    client = tenant_client(monkeypatch)
+
+    def fail(_name):
+        raise RuntimeError("secret account and request diagnostics")
+
+    monkeypatch.setattr(main.aws_service, "get_service_health", fail)
+    response = client.get(
+        "/cloud/aws/services/ec2", headers={"Authorization": "Bearer token-a"}
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS service health is unavailable"}
+    assert "secret" not in response.text
+
+
 def test_ec2_inventory_hides_other_tenants_and_untagged_instances(monkeypatch):
     response = tenant_client(monkeypatch).get(
         "/cloud/aws/ec2/instances",

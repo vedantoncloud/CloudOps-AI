@@ -68,6 +68,64 @@ positive integers to adjust it. Exceeded limits return HTTP 429 with a
 `Retry-After` header. Each application process tracks its own counters; use a
 shared gateway or limiter when a deployment needs a cluster-wide quota.
 
+## Health and telemetry
+
+Use `GET /health` as a liveness check. It confirms that the API process can
+serve a request; it does not check AWS or the local stores. Use `GET /ready`
+before routing traffic to a process. Readiness checks AWS and the configured
+persistent stores and returns a sanitized unavailable response when a required
+dependency is unhealthy. Both probes are public so deployment platforms can
+call them without an API token.
+
+In token mode, `GET /metrics` requires an `admin` bearer token. It exposes
+Prometheus text format with `cloudops_http_requests_total` and
+`cloudops_http_request_duration_seconds` counters/histograms. Labels contain
+the normalized HTTP method, FastAPI route template, and status code; they do
+not contain request paths with resource IDs, tenant IDs, or error text. The
+latency histogram uses fixed buckets from 5 ms through 5 seconds and includes
+the `+Inf` bucket. Metrics are held in process memory, are cumulative since
+process start, and reset on restart. Each replica has its own values.
+
+Configure Prometheus to read an admin token from a protected file:
+
+```yaml
+scrape_configs:
+  - job_name: cloudops-ai
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/cloudops-metrics-token
+    static_configs:
+      - targets: ["cloudops-ai:8000"]
+```
+
+Treat the scrape credential as a secret and grant it only to the monitoring
+system. For multi-replica deployments, scrape each process separately; this
+endpoint does not aggregate across replicas. A basic request failure ratio
+query over five minutes is:
+
+```promql
+sum(rate(cloudops_http_requests_total{status=~"5.."}[5m]))
+/ clamp_min(sum(rate(cloudops_http_requests_total[5m])), 1)
+```
+
+To estimate the 95th percentile request latency from the fixed buckets:
+
+```promql
+histogram_quantile(
+  0.95,
+  sum by (le) (rate(cloudops_http_request_duration_seconds_bucket[5m]))
+)
+```
+
+The authenticated Operations console shows cumulative server-side HTTP
+failures, AWS operation failures, and audit/idempotency SQLite operation
+outcomes. These summaries are process-local and reset on restart. They contain
+fixed operation/route labels and counts, not provider errors, SQL, database
+paths, or audit content. Request logs include a correlation ID, method, path,
+status, and duration; they omit headers and request/response bodies. Use the
+response `X-Request-ID` value to locate the matching log entry.
+
 GitOps change sets and their lifecycle state are stored in SQLite so proposals,
 approvals, dry-run applies, and verification results survive process restarts.
 The default file is `backend/gitops_changes.db`; set

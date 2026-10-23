@@ -45,13 +45,19 @@ def test_metrics_endpoint_uses_prometheus_content_type_and_requires_authenticati
     app.add_middleware(
         AccessControlMiddleware,
         mode="token",
-        tokens={"reader-token": Principal("operator", "reader", "tenant-a")},
+        tokens={
+            "reader-token": Principal("reader", "reader", "tenant-a"),
+            "admin-token": Principal("admin", "admin", "tenant-a"),
+        },
     )
     app.add_api_route("/metrics", main.metrics)
     client = TestClient(app)
 
     assert client.get("/metrics").status_code == 401
-    response = client.get("/metrics", headers={"Authorization": "Bearer reader-token"})
+    assert client.get(
+        "/metrics", headers={"Authorization": "Bearer reader-token"}
+    ).status_code == 403
+    response = client.get("/metrics", headers={"Authorization": "Bearer admin-token"})
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/plain; version=0.0.4")

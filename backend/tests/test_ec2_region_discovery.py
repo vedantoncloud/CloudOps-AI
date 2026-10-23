@@ -59,6 +59,29 @@ def test_regions_api_hides_provider_error_details():
     assert "sensitive" not in response.text
 
 
+def test_regions_api_sanitizes_provider_exceptions():
+    with patch(
+        "main.aws_service.get_ec2_regions",
+        side_effect=RuntimeError("private account diagnostics"),
+    ):
+        response = client.get("/cloud/aws/ec2/regions")
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS resource data is unavailable"}
+    assert "private" not in response.text
+
+
+def test_regions_api_rejects_malformed_region_lists():
+    for regions in (None, "eu-west-1", ["eu-west-1", "  "]):
+        with patch("main.aws_service.get_ec2_regions", return_value={
+            "service": "ec2", "status": "healthy", "regions": regions
+        }):
+            response = client.get("/cloud/aws/ec2/regions")
+
+        assert response.status_code == 503
+        assert response.json() == {"detail": "AWS resource data is unavailable"}
+
+
 def test_region_discovery_failure_is_stable_and_does_not_expose_sdk_details():
     with patch("services.aws_service.boto3.client") as create_client:
         create_client.return_value.describe_regions.side_effect = ClientError(

@@ -27,6 +27,7 @@ PUBLIC_PATHS = {"/", "/health", "/ready"}
 # reconciliation state, so they require an administrator even though they are
 # read-only. Approval decisions remain operator-level POST operations.
 ADMIN_ONLY_PATHS = {
+    "/metrics",
     "/cloud/aws/account-costs",
     "/operations/failures",
     "/operations/aws-failures",

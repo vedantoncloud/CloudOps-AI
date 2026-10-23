@@ -188,7 +188,16 @@ def aws_status(request: Request):
 
 @app.get("/cloud/aws/services/{service_name}")
 def aws_service_health(service_name: str, request: Request):
-    result = aws_service.get_service_health(service_name)
+    try:
+        result = aws_service.get_service_health(service_name)
+    except Exception:
+        raise HTTPException(status_code=503, detail="AWS service health is unavailable")
+    if (
+        not isinstance(result, dict)
+        or result.get("service") != service_name
+        or result.get("status") not in {"healthy", "unhealthy"}
+    ):
+        raise HTTPException(status_code=503, detail="AWS service health is unavailable")
     if (
         getattr(request.state, "tenant_scoped", False)
         and getattr(getattr(request.state, "principal", None), "role", None) != "admin"
@@ -222,8 +231,20 @@ def aws_account_costs(request: Request, days: int = 30):
 def aws_ec2_summary(request: Request, region: str | None = None):
     _validate_ec2_region(region)
     if not getattr(request.state, "tenant_scoped", False):
-        result = aws_service.get_ec2_summary(**({"region": region} if region else {}))
-        if result.get("status") != "healthy":
+        result = _aws_resource_result(
+            lambda: aws_service.get_ec2_summary(**({"region": region} if region else {}))
+        )
+        count_fields = ("total_instances", "running_instances", "stopped_instances")
+        if (
+            result.get("service") != "ec2"
+            or any(
+                not isinstance(result.get(field), int)
+                or isinstance(result.get(field), bool)
+                or result[field] < 0
+                for field in count_fields
+            )
+            or result["running_instances"] + result["stopped_instances"] > result["total_instances"]
+        ):
             _raise_aws_resource_unavailable()
         if region:
             result = {**result, "region": region}
@@ -242,8 +263,11 @@ def aws_ec2_summary(request: Request, region: str | None = None):
 
 @app.get("/cloud/aws/ec2/regions")
 def aws_ec2_regions():
-    result = aws_service.get_ec2_regions()
-    if result.get("status") != "healthy":
+    result = _aws_resource_result(aws_service.get_ec2_regions)
+    regions = result.get("regions")
+    if not isinstance(regions, list) or any(
+        not isinstance(region, str) or not region.strip() for region in regions
+    ):
         _raise_aws_resource_unavailable()
     return result
 
