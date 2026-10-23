@@ -78,6 +78,16 @@ def test_readiness_contains_unexpected_dependency_errors(monkeypatch):
     assert "internal detail" not in response.text
 
 
+def test_readiness_treats_malformed_aws_status_as_unavailable(monkeypatch):
+    monkeypatch.setattr(main.aws_service, "get_status", lambda: ["connected"])
+
+    response = TestClient(main.app).get("/ready")
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["status"] == "not_ready"
+    assert response.json()["detail"]["dependencies"]["aws"] == "unhealthy"
+
+
 def test_readiness_probe_is_available_without_api_credentials(monkeypatch):
     monkeypatch.setattr(
         main.aws_service,

@@ -135,7 +135,10 @@ def readiness_check():
     except Exception:
         result = {"status": "disconnected"}
 
-    aws_ready = result.get("status") == "connected"
+    # Readiness depends on a valid provider status contract. Treat malformed
+    # provider payloads as an unavailable dependency rather than letting the
+    # probe itself fail while reading arbitrary provider data.
+    aws_ready = isinstance(result, dict) and result.get("status") == "connected"
     persistence = {
         "audit_events": (
             "healthy" if _sqlite_store_ready(audit_trail.database_path) else "unhealthy"

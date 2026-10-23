@@ -66,6 +66,7 @@ EC2 instance detail, ownership checks, metrics, status, CPU/network trends, per-
 
 - EC2 region discovery maps provider exceptions and malformed region lists to the sanitized resource-unavailable `503` response.
 - AWS service-health routes map provider exceptions and malformed responses to a sanitized `503`, while preserving valid healthy and unhealthy service reports.
+- The readiness probe treats malformed AWS status payloads as an unavailable dependency and returns the standard sanitized `503` readiness response.
 - The unscoped EC2 fleet summary maps provider exceptions and malformed service/count data to the sanitized resource-unavailable `503` response.
 - Health and operations observability is documented: liveness and readiness semantics, admin-only Prometheus scraping, bounded metric labels, per-process limits, PromQL examples, console summaries, and request correlation.
 - Process-wide Prometheus request metrics are restricted to administrator tokens in token mode, with reader, operator, and admin authorization covered by regression tests.
