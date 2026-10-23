@@ -1,6 +1,6 @@
 # CloudOps AI Roadmap
 
-**Repository audit:** 2026-10-23, updated after health and operations observability was documented and AWS provider failure contracts were extended. This roadmap contains **8 remaining tasks**: the numbered incomplete outcomes below. Sub-bullets and acceptance criteria do not count separately. Recount only when a complete outcome ships or scope is explicitly changed.
+**Repository audit:** 2026-10-23, updated after health and operations observability was documented and AWS provider failure contracts were extended. This roadmap contains **9 remaining tasks**: the numbered incomplete outcomes below. Sub-bullets and acceptance criteria do not count separately. Recount only when a complete outcome ships or scope is explicitly changed.
 
 **Feature update:** 2026-10-22. EC2 instance details now include launch time, platform/OS, CPU architecture, and IAM instance profile ARN, with explicit Linux/UNIX fallback and nullable optional fields. Focused provider, endpoint, regional follow-up, and failure-contract tests pass.
 
@@ -65,6 +65,8 @@ EC2 instance detail, ownership checks, metrics, status, CPU/network trends, per-
 The AWS status endpoint now maps provider exceptions and malformed status payloads to a sanitized `503`, while preserving valid connected and disconnected responses and tenant redaction. Focused AWS status, tenant-scope, and readiness tests pass (99 tests).
 
 The admin account billing endpoint validates the complete healthy response contract, including finite totals, date periods, and daily/service rows; malformed success-shaped provider payloads return the sanitized `503`. Focused billing and AWS status/readiness regression tests pass (116 tests).
+
+The EC2 attached-volume endpoint validates the healthy response identity and volume/attachment schema before returning provider data; malformed success-shaped payloads fail closed with the sanitized `503`. Focused EC2 endpoint, volume-provider, and tenant-scope regression tests pass (115 tests).
 
 ## Completed work
 

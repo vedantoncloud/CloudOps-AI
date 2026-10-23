@@ -943,9 +943,46 @@ def aws_ec2_instance_volumes(instance_id: str, request: Request, region: str | N
     _validate_ec2_instance_id(instance_id)
     _validate_ec2_region(region)
     _require_tenant_ec2_instance(request, instance_id, region)
-    return _aws_resource_result(lambda: aws_service.get_ec2_instance_volumes(
+    result = _aws_resource_result(lambda: aws_service.get_ec2_instance_volumes(
         instance_id, **({"region": region} if region else {})
     ))
+    volumes = result.get("volumes")
+
+    def valid_volume(volume):
+        if not isinstance(volume, dict):
+            return False
+        if not isinstance(volume.get("volume_id"), str) or not volume["volume_id"].startswith("vol-"):
+            return False
+        if volume.get("encrypted") is not None and not isinstance(volume.get("encrypted"), bool):
+            return False
+        if volume.get("kms_key_id") is not None and not isinstance(volume.get("kms_key_id"), str):
+            return False
+        size = volume.get("size_gib")
+        if size is not None and (not isinstance(size, int) or isinstance(size, bool)):
+            return False
+        if any(
+            volume.get(key) is not None and not isinstance(volume.get(key), str)
+            for key in ("volume_type", "state")
+        ):
+            return False
+        attachments = volume.get("attachments", [])
+        return isinstance(attachments, list) and all(
+            isinstance(attachment, dict)
+            and all(
+                attachment.get(key) is None or isinstance(attachment.get(key), str)
+                for key in ("device", "state")
+            )
+            for attachment in attachments
+        )
+
+    if (
+        result.get("service") != "ec2"
+        or result.get("instance_id") != instance_id
+        or not isinstance(volumes, list)
+        or any(not valid_volume(volume) for volume in volumes)
+    ):
+        _raise_aws_resource_unavailable()
+    return result
 
 
 @app.get("/cloud/aws/ec2/instances/{instance_id}/alarms")

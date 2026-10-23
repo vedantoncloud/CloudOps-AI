@@ -82,6 +82,24 @@ def test_ec2_volume_success_and_invalid_instance_id(monkeypatch):
 
 
 @pytest.mark.parametrize(
+    "payload",
+    [
+        {"service": "ec2", "status": "healthy", "instance_id": "i-12345678", "volumes": {}},
+        {"service": "ec2", "status": "healthy", "instance_id": "i-87654321", "volumes": []},
+        {"service": "ec2", "status": "healthy", "instance_id": "i-12345678", "volumes": [{"volume_id": "vol-1", "encrypted": "yes"}]},
+        {"service": "ec2", "status": "healthy", "instance_id": "i-12345678", "volumes": [{"volume_id": "vol-1", "attachments": [None]}]},
+    ],
+)
+def test_ec2_volume_malformed_healthy_payload_is_sanitized(monkeypatch, payload):
+    monkeypatch.setattr(main.aws_service, "get_ec2_instance_volumes", lambda *a, **k: payload)
+
+    response = TestClient(main.app).get("/cloud/aws/ec2/instances/i-12345678/volumes")
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS resource data is unavailable"}
+
+
+@pytest.mark.parametrize(
     "path,method_name",
     [
         ("efficiency-insights", "get_ec2_efficiency_insights"),
