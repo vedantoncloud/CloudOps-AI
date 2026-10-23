@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, PlainTextResponse
 from pathlib import Path
-from datetime import date
+from datetime import date, datetime
 from math import isfinite
 import re
 import sqlite3
@@ -984,9 +984,31 @@ def aws_ec2_instance_status(instance_id: str, request: Request, region: str | No
     _validate_ec2_instance_id(instance_id)
     _validate_ec2_region(region)
     _require_tenant_ec2_instance(request, instance_id, region)
-    return _aws_resource_result(lambda: aws_service.get_ec2_instance_status(
+    result = _aws_resource_result(lambda: aws_service.get_ec2_instance_status(
         instance_id, **({"region": region} if region else {})
     ))
+    status_fields = ("instance_status", "system_status", "state")
+    events = result.get("events")
+    if (
+        result.get("service") != "ec2"
+        or result.get("instance_id") != instance_id
+        or any(
+            result.get(field) is not None and not isinstance(result.get(field), str)
+            for field in status_fields
+        )
+        or not isinstance(events, list)
+        or any(
+            not isinstance(event, dict)
+            or any(
+                key not in {"Code", "Description", "NotBefore", "NotAfter"}
+                or not isinstance(value, (str, datetime))
+                for key, value in event.items()
+            )
+            for event in events
+        )
+    ):
+        _raise_aws_resource_unavailable()
+    return result
 
 
 @app.get("/cloud/aws/ec2/instances/{instance_id}/volumes")

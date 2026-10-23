@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -63,6 +65,45 @@ def test_ec2_instance_lookup_exception_is_sanitized_before_tenant_check(monkeypa
     assert response.status_code == 503
     assert response.json() == {"detail": "AWS resource data is unavailable"}
     assert "credentials" not in response.text
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"service": "wrong", "status": "healthy", "instance_id": "i-12345678", "instance_status": None, "system_status": None, "state": None, "events": []},
+        {"service": "ec2", "status": "healthy", "instance_id": "i-87654321", "instance_status": "ok", "system_status": "ok", "state": "running", "events": []},
+        {"service": "ec2", "status": "healthy", "instance_id": "i-12345678", "instance_status": [], "system_status": "ok", "state": "running", "events": []},
+        {"service": "ec2", "status": "healthy", "instance_id": "i-12345678", "instance_status": None, "system_status": None, "state": None, "events": [None]},
+        {"service": "ec2", "status": "healthy", "instance_id": "i-12345678", "instance_status": None, "system_status": None, "state": None, "events": [{"PrivateField": "leak"}]},
+    ],
+)
+def test_ec2_instance_status_rejects_malformed_healthy_payload(monkeypatch, payload):
+    monkeypatch.setattr(main.aws_service, "get_ec2_instance_status", lambda *a, **k: payload)
+
+    response = TestClient(main.app).get("/cloud/aws/ec2/instances/i-12345678/status")
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS resource data is unavailable"}
+
+
+def test_ec2_instance_status_preserves_valid_payload(monkeypatch):
+    expected = {
+        "service": "ec2", "status": "healthy", "instance_id": "i-12345678",
+        "instance_status": "ok", "system_status": "ok", "state": "running",
+        "events": [{
+            "Code": "instance-stop", "Description": "Scheduled stop",
+            "NotBefore": datetime(2026, 10, 24, 12, 0, tzinfo=timezone.utc),
+        }],
+    }
+    monkeypatch.setattr(main.aws_service, "get_ec2_instance_status", lambda *a, **k: expected)
+
+    response = TestClient(main.app).get("/cloud/aws/ec2/instances/i-12345678/status")
+
+    assert response.status_code == 200
+    assert response.json()["events"] == [{
+        "Code": "instance-stop", "Description": "Scheduled stop",
+        "NotBefore": "2026-10-24T12:00:00+00:00",
+    }]
 
 
 @pytest.mark.parametrize(
