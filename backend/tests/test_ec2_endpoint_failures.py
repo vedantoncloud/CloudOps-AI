@@ -53,6 +53,25 @@ def test_ec2_follow_up_success_payload_and_validation_are_preserved(monkeypatch)
     assert invalid.status_code == 400
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"service": "wrong", "status": "healthy", "instance_id": "i-12345678", "cpu": {}, "network": {}, "instance_status": {}},
+        {"service": "ec2", "status": "healthy", "instance_id": "i-87654321", "cpu": {}, "network": {}, "instance_status": {}},
+        {"service": "ec2", "status": "healthy", "instance_id": "i-12345678", "cpu": [], "network": {}, "instance_status": {}},
+        {"service": "ec2", "status": "healthy", "instance_id": "i-12345678", "cpu": {}, "network": {}, "instance_status": None},
+        {"service": "ec2", "status": "healthy", "instance_id": "i-12345678", "cpu": {}, "network": {}, "instance_status": {}, "status_checks": []},
+    ],
+)
+def test_ec2_metrics_rejects_malformed_healthy_payload(monkeypatch, payload):
+    monkeypatch.setattr(main.aws_service, "get_ec2_metrics", lambda *a, **k: payload)
+
+    response = TestClient(main.app).get("/cloud/aws/ec2/instances/i-12345678/metrics")
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS resource data is unavailable"}
+
+
 def test_ec2_instance_lookup_exception_is_sanitized_before_tenant_check(monkeypatch):
     def fail(*args, **kwargs):
         raise RuntimeError("private AWS credentials")

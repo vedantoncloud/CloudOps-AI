@@ -72,6 +72,8 @@ The EC2 instance detail endpoint validates healthy provider records before retur
 
 The EC2 instance status endpoint validates response identity, nullable status fields, and maintenance event structure; malformed success-shaped provider payloads fail closed with the sanitized `503`. Focused EC2 endpoint and AWS service regression tests pass (172 tests).
 
+The EC2 instance metrics endpoint validates healthy response identity and the CPU, network, status, and optional status-check section shapes; malformed success-shaped payloads fail closed with the sanitized `503`. Focused EC2 endpoint and AWS service regression tests pass (177 tests).
+
 The EC2 attached-volume endpoint validates the healthy response identity and volume/attachment schema before returning provider data; malformed success-shaped payloads fail closed with the sanitized `503`. Focused EC2 endpoint, volume-provider, and tenant-scope regression tests pass (115 tests).
 
 EC2 instance and fleet CloudWatch alarm endpoints validate healthy response identity, pagination, alarm fields, and fleet instance IDs; malformed success-shaped provider payloads fail closed with the sanitized `503`. Focused alarm, EC2 endpoint, volume-provider, and tenant-scope regression tests pass (130 tests).

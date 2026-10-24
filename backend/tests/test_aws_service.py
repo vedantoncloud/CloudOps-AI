@@ -1548,7 +1548,11 @@ def test_ec2_metrics_api_accepts_valid_instance_id():
 
 
 def test_ec2_metrics_api_forwards_selected_bounded_window():
-    with patch("main.aws_service.get_ec2_metrics", return_value={"status": "healthy"}) as metrics:
+    valid_metrics = {
+        "service": "ec2", "status": "healthy", "instance_id": "i-1234567890",
+        "cpu": {}, "network": {}, "instance_status": {},
+    }
+    with patch("main.aws_service.get_ec2_metrics", return_value=valid_metrics) as metrics:
         response = TestClient(app).get(
             "/cloud/aws/ec2/instances/i-1234567890/metrics?lookback_hours=6"
         )

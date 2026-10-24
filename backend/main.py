@@ -1153,9 +1153,17 @@ def aws_ec2_metrics(instance_id: str, request: Request, lookback_hours: int = 1,
     _require_tenant_ec2_instance(request, instance_id, region)
     if not 1 <= lookback_hours <= 24:
         raise HTTPException(status_code=400, detail="lookback_hours must be between 1 and 24")
-    return _aws_resource_result(lambda: aws_service.get_ec2_metrics(
+    result = _aws_resource_result(lambda: aws_service.get_ec2_metrics(
         instance_id, lookback_hours=lookback_hours,
         **({"region": region} if region else {}),
     ))
+    if (
+        result.get("service") != "ec2"
+        or result.get("instance_id") != instance_id
+        or any(not isinstance(result.get(field), dict) for field in ("cpu", "network", "instance_status"))
+        or ("status_checks" in result and not isinstance(result["status_checks"], dict))
+    ):
+        _raise_aws_resource_unavailable()
+    return result
 
 
