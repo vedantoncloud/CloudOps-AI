@@ -39,7 +39,10 @@ def test_ec2_follow_up_routes_return_sanitized_503(
 
 
 def test_ec2_follow_up_success_payload_and_validation_are_preserved(monkeypatch):
-    expected = {"service": "ec2", "status": "healthy", "datapoints": []}
+    expected = {
+        "service": "cloudwatch", "status": "healthy", "instance_id": "i-12345678",
+        "metric": "CPUUtilization", "value": None, "datapoints": [],
+    }
     monkeypatch.setattr(
         main.aws_service, "get_ec2_cpu_utilization", lambda *a, **k: expected
     )
@@ -51,6 +54,40 @@ def test_ec2_follow_up_success_payload_and_validation_are_preserved(monkeypatch)
     assert success.status_code == 200
     assert success.json() == expected
     assert invalid.status_code == 400
+
+
+@pytest.mark.parametrize(
+    "path,method_name,payload",
+    [
+        ("cpu", "get_ec2_cpu_utilization", {"service": "wrong", "status": "healthy", "instance_id": "i-12345678", "metric": "CPUUtilization", "value": None}),
+        ("cpu", "get_ec2_cpu_utilization", {"service": "cloudwatch", "status": "healthy", "instance_id": "i-87654321", "metric": "CPUUtilization", "value": 1}),
+        ("cpu", "get_ec2_cpu_utilization", {"service": "cloudwatch", "status": "healthy", "instance_id": "i-12345678", "metric": "CPUUtilization", "value": float("nan")}),
+        ("cpu", "get_ec2_cpu_utilization", {"service": "cloudwatch", "status": "healthy", "instance_id": "i-12345678", "metric": "CPUUtilization", "value": None, "datapoints": [{"timestamp": "now", "value": "bad"}]}),
+        ("network", "get_ec2_network_utilization", {"service": "cloudwatch", "status": "healthy", "instance_id": "i-12345678", "metrics": {"NetworkIn": 1}, "datapoints": {"NetworkIn": [], "NetworkOut": []}}),
+        ("network", "get_ec2_network_utilization", {"service": "cloudwatch", "status": "healthy", "instance_id": "i-12345678", "metrics": {"NetworkIn": 1, "NetworkOut": 2}, "datapoints": {"NetworkIn": [], "NetworkOut": [None]}}),
+    ],
+)
+def test_ec2_cpu_and_network_reject_malformed_healthy_payload(monkeypatch, path, method_name, payload):
+    monkeypatch.setattr(main.aws_service, method_name, lambda *a, **k: payload)
+
+    response = TestClient(main.app).get(f"/cloud/aws/ec2/instances/i-12345678/{path}")
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS resource data is unavailable"}
+
+
+def test_ec2_network_preserves_valid_payload(monkeypatch):
+    expected = {
+        "service": "cloudwatch", "status": "healthy", "instance_id": "i-12345678",
+        "metrics": {"NetworkIn": None, "NetworkOut": 12.5},
+        "datapoints": {"NetworkIn": [], "NetworkOut": [{"timestamp": "2026-10-24T12:00:00+00:00", "value": 12.5}]},
+    }
+    monkeypatch.setattr(main.aws_service, "get_ec2_network_utilization", lambda *a, **k: expected)
+
+    response = TestClient(main.app).get("/cloud/aws/ec2/instances/i-12345678/network")
+
+    assert response.status_code == 200
+    assert response.json() == expected
 
 
 @pytest.mark.parametrize(

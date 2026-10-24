@@ -83,7 +83,10 @@ def test_ec2_instance_details_exposes_platform_launch_and_iam_profile_context():
 
 
 def test_ec2_metrics_and_planning_keep_selected_region_and_reject_invalid_region():
-    with patch("main.aws_service.get_ec2_metrics", return_value={"status": "healthy"}) as metrics:
+    with patch("main.aws_service.get_ec2_metrics", return_value={
+        "service": "ec2", "status": "healthy", "instance_id": "i-12345678",
+        "cpu": {}, "network": {}, "instance_status": {},
+    }) as metrics:
         response = client.get("/cloud/aws/ec2/instances/i-12345678/metrics?region=ap-south-1&lookback_hours=6")
     assert response.status_code == 200
     metrics.assert_called_once_with("i-12345678", lookback_hours=6, region="ap-south-1")

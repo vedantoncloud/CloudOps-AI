@@ -14,6 +14,18 @@ class FakeAWSService:
             return lambda *args, **kwargs: {"status": "healthy", "service": "ec2"}
         raise AttributeError(name)
 
+    def get_ec2_metrics(self, instance_id, **kwargs):
+        return {
+            "service": "ec2", "status": "healthy", "instance_id": instance_id,
+            "cpu": {}, "network": {}, "instance_status": {},
+        }
+
+    def get_ec2_instance_status(self, instance_id, **kwargs):
+        return {
+            "service": "ec2", "status": "healthy", "instance_id": instance_id,
+            "instance_status": None, "system_status": None, "state": None, "events": [],
+        }
+
     def get_ec2_instances(self, state=None, tag=None, max_results=None, next_token=None, name=None, **filters):
         if next_token:
             return {"service": "ec2", "status": "healthy", "instances": [], "next_token": None}

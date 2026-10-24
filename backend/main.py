@@ -434,6 +434,14 @@ def _raise_aws_resource_unavailable() -> None:
     raise HTTPException(status_code=503, detail="AWS resource data is unavailable")
 
 
+def _valid_metric_value(value) -> bool:
+    return value is None or (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and isfinite(value)
+    )
+
+
 def _aws_resource_result(operation):
     """Map provider exceptions and unhealthy results to a stable dependency error."""
     try:
@@ -937,9 +945,28 @@ def aws_ec2_cpu(instance_id: str, request: Request, region: str | None = None):
     _validate_ec2_instance_id(instance_id)
     _validate_ec2_region(region)
     _require_tenant_ec2_instance(request, instance_id, region)
-    return _aws_resource_result(lambda: aws_service.get_ec2_cpu_utilization(
+    result = _aws_resource_result(lambda: aws_service.get_ec2_cpu_utilization(
         instance_id, **({"region": region} if region else {})
     ))
+    datapoints = result.get("datapoints", [])
+    if (
+        result.get("service") != "cloudwatch"
+        or result.get("instance_id") != instance_id
+        or result.get("metric") != "CPUUtilization"
+        or not _valid_metric_value(result.get("value"))
+        or not isinstance(datapoints, list)
+        or any(
+            not isinstance(point, dict)
+            or not isinstance(point.get("timestamp"), str)
+            or not point["timestamp"]
+            or not _valid_metric_value(point.get("value"))
+            for point in datapoints
+        )
+        or ("lookback_hours" in result and not _valid_metric_value(result["lookback_hours"]))
+        or ("timestamp" in result and result["timestamp"] is not None and not isinstance(result["timestamp"], str))
+    ):
+        _raise_aws_resource_unavailable()
+    return result
 
 
 @app.get("/cloud/aws/ec2/instances/{instance_id}/network")
@@ -947,9 +974,35 @@ def aws_ec2_network_utilization(instance_id: str, request: Request, region: str 
     _validate_ec2_instance_id(instance_id)
     _validate_ec2_region(region)
     _require_tenant_ec2_instance(request, instance_id, region)
-    return _aws_resource_result(lambda: aws_service.get_ec2_network_utilization(
+    result = _aws_resource_result(lambda: aws_service.get_ec2_network_utilization(
         instance_id, **({"region": region} if region else {})
     ))
+    metrics = result.get("metrics")
+    datapoints = result.get("datapoints")
+    metric_names = ("NetworkIn", "NetworkOut")
+    if (
+        result.get("service") != "cloudwatch"
+        or result.get("instance_id") != instance_id
+        or not isinstance(metrics, dict)
+        or set(metrics) != set(metric_names)
+        or any(not _valid_metric_value(metrics[name]) for name in metric_names)
+        or not isinstance(datapoints, dict)
+        or set(datapoints) != set(metric_names)
+        or any(
+            not isinstance(datapoints[name], list)
+            or any(
+                not isinstance(point, dict)
+                or not isinstance(point.get("timestamp"), str)
+                or not point["timestamp"]
+                or not _valid_metric_value(point.get("value"))
+                for point in datapoints[name]
+            )
+            for name in metric_names
+        )
+        or ("lookback_hours" in result and not _valid_metric_value(result["lookback_hours"]))
+    ):
+        _raise_aws_resource_unavailable()
+    return result
 
 
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/security-insights")
