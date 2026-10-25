@@ -49,6 +49,9 @@ Keep token values in a deployment secret store and use an identity provider or
 gateway to issue, rotate, and revoke them. The boundary attaches the principal
 and tenant to request state, and autonomous-run lifecycle and verification
 events record the authenticated subject as their actor. In token mode, the
+audit event feed and NDJSON export are restricted to the authenticated actor
+and tenant; events without tenant attribution remain hidden from tenant users,
+while administrators retain shared audit visibility. The
 provider-neutral `/autonomy/resources` inventory and governance routes only
 return resources tagged `CloudOpsTenantId` with the token's `tenant_id`; missing
 or mismatched ownership tags are hidden as not found for governance lookups.

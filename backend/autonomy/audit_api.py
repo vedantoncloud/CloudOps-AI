@@ -89,6 +89,7 @@ def _filter_audit_events(
     action_type: str | None = None,
     new_status: str | None = None,
     actor_id: str | None = None,
+    tenant_id: str | None = None,
     start_time: datetime | None = None,
     end_time: datetime | None = None,
 ) -> list[AuditEvent]:
@@ -117,6 +118,11 @@ def _filter_audit_events(
 
     if actor_id is not None:
         events = [item for item in events if item.actor_id == actor_id]
+
+    if tenant_id is not None:
+        # Legacy and unattributed events intentionally fail closed in tenant
+        # mode; actor identity alone is not a tenant boundary.
+        events = [item for item in events if item.details.get("tenant_id") == tenant_id]
 
     if start is not None or end is not None:
         def within_range(item: AuditEvent) -> bool:
@@ -160,6 +166,7 @@ def list_audit_events(
     offset: int = Query(default=0, ge=0),
 ) -> list[AuditEventResponse]:
     actor_id = _visible_actor_filter(request, actor_id)
+    tenant_id = _visible_tenant_filter(request)
     events = _filter_audit_events(
         action_id=action_id,
         resource_id=resource_id,
@@ -168,6 +175,7 @@ def list_audit_events(
         action_type=action_type,
         new_status=new_status,
         actor_id=actor_id,
+        tenant_id=tenant_id,
         start_time=start_time,
         end_time=end_time,
     )
@@ -199,6 +207,7 @@ def export_audit_events(
 ) -> Response:
     """Export matching audit events as newline-delimited JSON."""
     actor_id = _visible_actor_filter(request, actor_id)
+    tenant_id = _visible_tenant_filter(request)
     events = _filter_audit_events(
         action_id=action_id,
         resource_id=resource_id,
@@ -207,6 +216,7 @@ def export_audit_events(
         action_type=action_type,
         new_status=new_status,
         actor_id=actor_id,
+        tenant_id=tenant_id,
         start_time=start_time,
         end_time=end_time,
     )
@@ -237,3 +247,15 @@ def _visible_actor_filter(request: Request, requested_actor: str | None) -> str 
     if requested_actor is not None and requested_actor != principal.subject:
         raise HTTPException(status_code=403, detail="Audit events are limited to the authenticated actor")
     return principal.subject
+
+
+def _visible_tenant_filter(request: Request) -> str | None:
+    """Scope tenant users to attributed events; admins keep shared visibility."""
+    principal = getattr(request.state, "principal", None)
+    if (
+        principal is None
+        or principal.role == "admin"
+        or not getattr(request.state, "tenant_scoped", False)
+    ):
+        return None
+    return getattr(request.state, "tenant_id", None)
