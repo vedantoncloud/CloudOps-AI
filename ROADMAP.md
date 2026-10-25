@@ -78,6 +78,8 @@ The standalone EC2 CPU and network metric endpoints validate healthy CloudWatch 
 
 S3 bucket details, versioning, lifecycle, replication, logging, encryption, tags, and policy endpoints validate healthy response identity and their public payload shapes; malformed success-shaped results fail closed with a sanitized `503`, while valid unconfigured states remain successful. Focused S3 configuration, provider-failure, and tenant-scope regression tests pass (153 tests).
 
+S3 object metadata responses now validate bucket and object identity, requested version identity, size boundaries, optional metadata field types, and user metadata entries before reaching the console. Malformed healthy provider payloads fail closed with the sanitized `503`, and valid minimal/empty metadata remains compatible. The broader S3 and tenant-scope regression suite passes (203 tests).
+
 The EC2 attached-volume endpoint validates the healthy response identity and volume/attachment schema before returning provider data; malformed success-shaped payloads fail closed with the sanitized `503`. Focused EC2 endpoint, volume-provider, and tenant-scope regression tests pass (115 tests).
 
 EC2 instance and fleet CloudWatch alarm endpoints validate healthy response identity, pagination, alarm fields, and fleet instance IDs; malformed success-shaped provider payloads fail closed with the sanitized `503`. Focused alarm, EC2 endpoint, volume-provider, and tenant-scope regression tests pass (130 tests).

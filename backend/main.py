@@ -776,11 +776,39 @@ def aws_s3_object_metadata(
         raise HTTPException(status_code=400, detail="key must not be empty")
     if version_id is not None and not version_id:
         raise HTTPException(status_code=400, detail="version_id must not be empty")
-    return _aws_resource_result(lambda: (
+    result = _aws_resource_result(lambda: (
         aws_service.get_s3_object_metadata(bucket_name, key)
         if version_id is None
         else aws_service.get_s3_object_metadata(bucket_name, key, version_id)
     ))
+    obj = result.get("object")
+    if (
+        result.get("service") not in (None, "s3")
+        or result.get("bucket") != bucket_name
+        or not isinstance(obj, dict)
+        or obj.get("key") != key
+        or (obj.get("version_id") is not None and not isinstance(obj["version_id"], str))
+        or (version_id is not None and obj.get("version_id") != version_id)
+        or (obj.get("size") is not None and (
+            not isinstance(obj.get("size"), int)
+            or isinstance(obj.get("size"), bool)
+            or obj["size"] < 0
+        ))
+        or any(
+            obj.get(field) is not None and not isinstance(obj.get(field), str)
+            for field in (
+                "content_type", "etag", "last_modified", "storage_class",
+                "server_side_encryption",
+            )
+        )
+        or ("user_metadata" in obj and not isinstance(obj["user_metadata"], dict))
+        or any(
+            not isinstance(name, str) or not isinstance(value, str)
+            for name, value in obj.get("user_metadata", {}).items()
+        )
+    ):
+        _raise_aws_resource_unavailable()
+    return result
 
 
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/object-versions")
