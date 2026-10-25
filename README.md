@@ -21,6 +21,11 @@ Denied or malformed check results are reported as unknown; they are not treated
 as evidence that the bucket is private. Buckets using bucket-owner-enforced
 Object Ownership have ACL checks reported as disabled.
 
+Bucket analysis also reports S3 Object Lock enablement and any default
+governance or compliance retention rule. Grant `s3:GetBucketObjectLockConfiguration`
+to the AWS role for this read-only check. An enabled bucket without a default
+retention rule is shown distinctly from a bucket without Object Lock.
+
 ## API access control
 
 The assembled API supports two access modes. For local development, set

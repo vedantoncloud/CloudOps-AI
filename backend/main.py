@@ -658,6 +658,27 @@ def _validate_s3_bucket_contract(result: dict, bucket_name: str, contract: str) 
             and bool(rule["ApplyServerSideEncryptionByDefault"]["SSEAlgorithm"].strip())
             for rule in rules
         )
+    elif contract == "object-lock":
+        enabled = result.get("enabled")
+        retention = result.get("default_retention")
+        valid = result.get("bucket") == bucket_name and isinstance(enabled, bool) and (
+            retention is None
+            or (
+                enabled and isinstance(retention, dict)
+                and isinstance(retention.get("DefaultRetention"), dict)
+                and retention["DefaultRetention"].get("Mode") in {"GOVERNANCE", "COMPLIANCE"}
+                and (
+                    isinstance(retention["DefaultRetention"].get("Days"), int)
+                    and not isinstance(retention["DefaultRetention"].get("Days"), bool)
+                    and retention["DefaultRetention"]["Days"] > 0
+                    and "Years" not in retention["DefaultRetention"]
+                    or isinstance(retention["DefaultRetention"].get("Years"), int)
+                    and not isinstance(retention["DefaultRetention"].get("Years"), bool)
+                    and retention["DefaultRetention"]["Years"] > 0
+                    and "Days" not in retention["DefaultRetention"]
+                )
+            )
+        )
     elif contract == "tags":
         tags = result.get("tags")
         valid = isinstance(tags, dict) and all(
@@ -731,6 +752,14 @@ def aws_s3_bucket_tags(bucket_name: str, request: Request):
     _require_tenant_s3_bucket(request, bucket_name)
     result = _aws_resource_result(lambda: aws_service.get_s3_bucket_tags(bucket_name))
     return _validate_s3_bucket_contract(result, bucket_name, "tags")
+
+
+@app.get("/cloud/aws/s3/buckets/{bucket_name}/object-lock")
+def aws_s3_bucket_object_lock(bucket_name: str, request: Request):
+    """Inspect Object Lock retention after verifying tenant ownership."""
+    _require_tenant_s3_bucket(request, bucket_name)
+    result = _aws_resource_result(lambda: aws_service.get_s3_bucket_object_lock(bucket_name))
+    return _validate_s3_bucket_contract(result, bucket_name, "object-lock")
 
 
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/policy")

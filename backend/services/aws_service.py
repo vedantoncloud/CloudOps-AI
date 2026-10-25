@@ -768,6 +768,53 @@ class AWSService:
                 "error": str(error),
             }
 
+    def get_s3_bucket_object_lock(self, bucket_name):
+        """Report S3 Object Lock enablement and default retention configuration."""
+        try:
+            response = _aws_client("s3").get_object_lock_configuration(Bucket=bucket_name)
+            if not isinstance(response, dict):
+                return {"service": "s3", "status": "unhealthy", "bucket": bucket_name}
+            configuration = response.get("ObjectLockConfiguration")
+            if not isinstance(configuration, dict):
+                return {"service": "s3", "status": "unhealthy", "bucket": bucket_name}
+            enabled = configuration.get("ObjectLockEnabled")
+            if enabled != "Enabled":
+                return {"service": "s3", "status": "unhealthy", "bucket": bucket_name}
+            retention = configuration.get("Rule")
+            if retention is not None:
+                if not isinstance(retention, dict):
+                    return {"service": "s3", "status": "unhealthy", "bucket": bucket_name}
+                default = retention.get("DefaultRetention")
+                if (
+                    not isinstance(default, dict)
+                    or default.get("Mode") not in {"GOVERNANCE", "COMPLIANCE"}
+                ):
+                    return {"service": "s3", "status": "unhealthy", "bucket": bucket_name}
+                days, years = default.get("Days"), default.get("Years")
+                if (days is None) == (years is None) or any(
+                    value is not None
+                    and (not isinstance(value, int) or isinstance(value, bool) or value <= 0)
+                    for value in (days, years)
+                ):
+                    return {"service": "s3", "status": "unhealthy", "bucket": bucket_name}
+            return {
+                "service": "s3", "status": "healthy", "bucket": bucket_name,
+                "enabled": enabled == "Enabled", "default_retention": retention,
+            }
+        except ClientError as error:
+            if error.response.get("Error", {}).get("Code") == "ObjectLockConfigurationNotFoundError":
+                return {"service": "s3", "status": "healthy", "bucket": bucket_name,
+                        "enabled": False, "default_retention": None}
+            return {
+                "service": "s3", "status": "unhealthy", "bucket": bucket_name,
+                "error": str(error),
+            }
+        except BotoCoreError as error:
+            return {
+                "service": "s3", "status": "unhealthy", "bucket": bucket_name,
+                "error": str(error),
+            }
+
     def get_s3_bucket_tags(self, bucket_name):
         """Return bucket tags for tenant ownership checks and operator review."""
         try:
