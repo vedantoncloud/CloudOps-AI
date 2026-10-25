@@ -94,6 +94,7 @@ class FakeAWSService:
 
     def create_s3_object_download_url(self, bucket_name, object_key):
         return {
+            "service": "s3",
             "status": "healthy",
             "bucket": bucket_name,
             "key": object_key,

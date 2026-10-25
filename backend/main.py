@@ -5,6 +5,7 @@ from datetime import date, datetime
 from math import isfinite
 import re
 import sqlite3
+from urllib.parse import urlsplit
 
 from auth import AccessControlMiddleware, require_role
 from observability import RequestObservabilityMiddleware, aws_operation_metrics, database_operation_metrics, request_metrics
@@ -899,11 +900,37 @@ def aws_s3_object_download_url(
         raise HTTPException(status_code=400, detail="key must not be empty")
     if version_id == "":
         raise HTTPException(status_code=400, detail="version_id must not be empty")
-    return _aws_resource_result(lambda: (
+    result = _aws_resource_result(lambda: (
         aws_service.create_s3_object_download_url(bucket_name, key, version_id)
         if version_id is not None
         else aws_service.create_s3_object_download_url(bucket_name, key)
     ))
+    url = result.get("url") if isinstance(result, dict) else None
+    try:
+        parsed_url = urlsplit(url) if isinstance(url, str) else None
+        valid_url = (
+            parsed_url is not None
+            and parsed_url.scheme in {"http", "https"}
+            and bool(parsed_url.netloc)
+            and parsed_url.hostname is not None
+            and parsed_url.username is None
+            and parsed_url.password is None
+        )
+    except ValueError:
+        valid_url = False
+    if (
+        not isinstance(result, dict)
+        or result.get("service") != "s3"
+        or result.get("status") != "healthy"
+        or result.get("bucket") != bucket_name
+        or result.get("key") != key
+        or result.get("expires_in") != 300
+        or not valid_url
+    ):
+        _raise_aws_resource_unavailable()
+    if version_id is not None and result.get("version_id") != version_id:
+        _raise_aws_resource_unavailable()
+    return result
 
 
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/statistics")

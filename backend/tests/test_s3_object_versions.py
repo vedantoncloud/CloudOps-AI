@@ -103,7 +103,11 @@ class VersionAWS:
     def create_s3_object_download_url(self, bucket_name, key, version_id=None):
         if self.unavailable:
             return {"status": "unhealthy", "error": "account diagnostic"}
-        return {"status": "healthy", "url": "https://signed.example", "version_id": version_id}
+        return {
+            "service": "s3", "status": "healthy", "bucket": bucket_name,
+            "key": key, "url": "https://signed.example/object",
+            "expires_in": 300, "version_id": version_id,
+        }
 
 
 def version_client(monkeypatch):
@@ -195,6 +199,31 @@ def test_s3_version_download_rejects_empty_version_id_before_provider_call(monke
     )
     assert response.status_code == 400
     assert response.json() == {"detail": "version_id must not be empty"}
+
+
+@pytest.mark.parametrize("payload", [
+    {"service": "s3", "status": "healthy", "bucket": "other", "key": "file",
+     "url": "https://signed.example/object", "expires_in": 300},
+    {"service": "s3", "status": "healthy", "bucket": "owned", "key": "other",
+     "url": "https://signed.example/object", "expires_in": 300},
+    {"service": "s3", "status": "healthy", "bucket": "owned", "key": "file",
+     "url": "javascript:alert(1)", "expires_in": 300},
+    {"service": "s3", "status": "healthy", "bucket": "owned", "key": "file",
+     "url": "https://user:secret@signed.example/object", "expires_in": 300},
+    {"service": "s3", "status": "healthy", "bucket": "owned", "key": "file",
+     "url": "https://signed.example/object", "expires_in": 3600},
+    {"service": "s3", "status": "healthy", "bucket": "owned", "key": "file",
+     "url": "https://signed.example/object", "expires_in": 300, "version_id": "other"},
+])
+def test_s3_download_rejects_malformed_healthy_payloads(monkeypatch, payload):
+    monkeypatch.setattr(main.aws_service, "create_s3_object_download_url", lambda *_a, **_k: payload)
+
+    response = TestClient(main.app).get(
+        "/cloud/aws/s3/buckets/owned/objects/download?key=file&version_id=v1"
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS resource data is unavailable"}
 
 
 def test_s3_version_metadata_is_tenant_scoped_and_preserves_encoded_identifiers(monkeypatch):

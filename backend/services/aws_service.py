@@ -1033,6 +1033,7 @@ class AWSService:
                 "key": object_key,
                 "url": url,
                 "expires_in": expires_in,
+                **({"version_id": version_id} if version_id is not None else {}),
             }
         except (BotoCoreError, ClientError) as error:
             return {"service": "s3", "status": "unhealthy", "bucket": bucket_name, "error": str(error)}
