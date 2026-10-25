@@ -588,59 +588,157 @@ def _require_tenant_s3_bucket(request: Request, bucket_name: str) -> None:
         raise HTTPException(status_code=404, detail="S3 bucket not found")
 
 
+def _validate_s3_bucket_contract(result: dict, bucket_name: str, contract: str) -> dict:
+    """Fail closed when a healthy S3 configuration result violates its API shape."""
+    if (
+        not isinstance(result, dict)
+        or result.get("status") != "healthy"
+        or result.get("service", "s3") != "s3"
+        or ("bucket" in result and result["bucket"] != bucket_name)
+    ):
+        _raise_aws_resource_unavailable()
+
+    def count_fields(rules_key="rules"):
+        rules = result.get(rules_key)
+        if (
+            not isinstance(rules, list)
+            or any(not isinstance(rule, dict) for rule in rules)
+            or not isinstance(result.get("configured"), bool)
+            or result["configured"] != bool(rules)
+            or not isinstance(result.get("rule_count"), int)
+            or isinstance(result.get("rule_count"), bool)
+            or result["rule_count"] != len(rules)
+        ):
+            _raise_aws_resource_unavailable()
+        return rules
+
+    if contract == "details":
+        region = result.get("region")
+        valid = (
+            isinstance(result.get("bucket"), str)
+            and isinstance(region, str)
+            and bool(region.strip())
+        )
+    elif contract == "versioning":
+        versioning = result.get("versioning")
+        mfa_delete = result.get("mfa_delete")
+        valid = (
+            isinstance(versioning, str)
+            and versioning in {"disabled", "enabled", "suspended"}
+            and isinstance(mfa_delete, str)
+            and mfa_delete in {"disabled", "enabled"}
+        )
+    elif contract in {"lifecycle", "replication"}:
+        rules = count_fields()
+        enabled = result.get("enabled_rule_count")
+        valid = (
+            isinstance(enabled, int)
+            and not isinstance(enabled, bool)
+            and enabled == sum(rule.get("Status") == "Enabled" for rule in rules)
+        )
+    elif contract == "logging":
+        destination = result.get("destination_bucket")
+        prefix = result.get("destination_prefix")
+        grants = result.get("target_grants")
+        valid = (
+            isinstance(result.get("configured"), bool)
+            and (destination is None or isinstance(destination, str))
+            and isinstance(prefix, str)
+            and isinstance(grants, list)
+            and all(isinstance(grant, dict) for grant in grants)
+            and result["configured"] == (destination is not None)
+        )
+    elif contract == "encryption":
+        rules = count_fields()
+        valid = all(
+            isinstance(rule.get("ApplyServerSideEncryptionByDefault"), dict)
+            and isinstance(
+                rule["ApplyServerSideEncryptionByDefault"].get("SSEAlgorithm"), str
+            )
+            and bool(rule["ApplyServerSideEncryptionByDefault"]["SSEAlgorithm"].strip())
+            for rule in rules
+        )
+    elif contract == "tags":
+        tags = result.get("tags")
+        valid = isinstance(tags, dict) and all(
+            isinstance(key, str) and isinstance(value, str)
+            for key, value in tags.items()
+        )
+    elif contract == "policy":
+        policy = result.get("policy")
+        configured = result.get("configured")
+        valid = isinstance(configured, bool) and (
+            (configured and isinstance(policy, dict))
+            or (not configured and policy is None)
+        )
+    else:
+        valid = False
+    if not valid:
+        _raise_aws_resource_unavailable()
+    return result
+
+
 @app.get("/cloud/aws/s3/buckets/{bucket_name}")
 def aws_s3_bucket_details(bucket_name: str, request: Request):
     _require_tenant_s3_bucket(request, bucket_name)
-    return _aws_resource_result(lambda: aws_service.get_s3_bucket_details(bucket_name))
+    result = _aws_resource_result(lambda: aws_service.get_s3_bucket_details(bucket_name))
+    return _validate_s3_bucket_contract(result, bucket_name, "details")
 
 
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/versioning")
 def aws_s3_bucket_versioning(bucket_name: str, request: Request):
     """Return bucket versioning state after verifying tenant ownership."""
     _require_tenant_s3_bucket(request, bucket_name)
-    return _aws_resource_result(lambda: aws_service.get_s3_bucket_versioning(bucket_name))
+    result = _aws_resource_result(lambda: aws_service.get_s3_bucket_versioning(bucket_name))
+    return _validate_s3_bucket_contract(result, bucket_name, "versioning")
 
 
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/lifecycle")
 def aws_s3_bucket_lifecycle(bucket_name: str, request: Request):
     """Inspect lifecycle rules after verifying tenant ownership."""
     _require_tenant_s3_bucket(request, bucket_name)
-    return _aws_resource_result(lambda: aws_service.get_s3_bucket_lifecycle(bucket_name))
+    result = _aws_resource_result(lambda: aws_service.get_s3_bucket_lifecycle(bucket_name))
+    return _validate_s3_bucket_contract(result, bucket_name, "lifecycle")
 
 
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/replication")
 def aws_s3_bucket_replication(bucket_name: str, request: Request):
     """Inspect replication rules after verifying tenant ownership."""
     _require_tenant_s3_bucket(request, bucket_name)
-    return _aws_resource_result(lambda: aws_service.get_s3_bucket_replication(bucket_name))
+    result = _aws_resource_result(lambda: aws_service.get_s3_bucket_replication(bucket_name))
+    return _validate_s3_bucket_contract(result, bucket_name, "replication")
 
 
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/logging")
 def aws_s3_bucket_logging(bucket_name: str, request: Request):
     """Inspect server access logging after verifying tenant ownership."""
     _require_tenant_s3_bucket(request, bucket_name)
-    return _aws_resource_result(lambda: aws_service.get_s3_bucket_logging(bucket_name))
+    result = _aws_resource_result(lambda: aws_service.get_s3_bucket_logging(bucket_name))
+    return _validate_s3_bucket_contract(result, bucket_name, "logging")
 
 
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/encryption")
 def aws_s3_bucket_encryption(bucket_name: str, request: Request):
     """Inspect default bucket encryption after verifying tenant ownership."""
     _require_tenant_s3_bucket(request, bucket_name)
-    return _aws_resource_result(lambda: aws_service.get_s3_bucket_encryption(bucket_name))
+    result = _aws_resource_result(lambda: aws_service.get_s3_bucket_encryption(bucket_name))
+    return _validate_s3_bucket_contract(result, bucket_name, "encryption")
 
 
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/tags")
 def aws_s3_bucket_tags(bucket_name: str, request: Request):
     """Review bucket metadata after verifying tenant ownership."""
     _require_tenant_s3_bucket(request, bucket_name)
-    return _aws_resource_result(lambda: aws_service.get_s3_bucket_tags(bucket_name))
+    result = _aws_resource_result(lambda: aws_service.get_s3_bucket_tags(bucket_name))
+    return _validate_s3_bucket_contract(result, bucket_name, "tags")
 
 
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/policy")
 def aws_s3_bucket_policy(bucket_name: str, request: Request):
     """Review a bucket policy after verifying tenant ownership."""
     _require_tenant_s3_bucket(request, bucket_name)
-    return _aws_resource_result(lambda: aws_service.get_s3_bucket_policy(bucket_name))
+    result = _aws_resource_result(lambda: aws_service.get_s3_bucket_policy(bucket_name))
+    return _validate_s3_bucket_contract(result, bucket_name, "policy")
 
 
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/objects")

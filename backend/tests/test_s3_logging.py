@@ -64,7 +64,8 @@ def test_logging_endpoint_checks_ownership_and_sanitizes_provider_failure(monkey
                 return {"status": "unhealthy", "error": "private provider detail"}
             return {
                 "status": "healthy", "configured": True,
-                "destination_bucket": "central-logs",
+                "destination_bucket": "central-logs", "destination_prefix": "archive/",
+                "target_grants": [],
             }
 
     stub = StubAWS()

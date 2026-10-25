@@ -149,13 +149,13 @@ def test_lifecycle_endpoint_checks_tenant_ownership_and_returns_configuration(mo
             return {"status": "healthy", "tags": {"CloudOpsTenantId": "local"}}
 
         def get_s3_bucket_lifecycle(self, bucket_name):
-            return {"status": "healthy", "configured": True, "rule_count": 1, "rules": [{"ID": "expire"}]}
+            return {"status": "healthy", "configured": True, "rule_count": 1, "enabled_rule_count": 1, "rules": [{"ID": "expire", "Status": "Enabled"}]}
 
     monkeypatch.setattr(main, "aws_service", StubAWS())
     response = TestClient(main.app).get("/cloud/aws/s3/buckets/archive/lifecycle")
 
     assert response.status_code == 200
-    assert response.json()["rules"] == [{"ID": "expire"}]
+    assert response.json()["rules"] == [{"ID": "expire", "Status": "Enabled"}]
 
 
 def test_lifecycle_endpoint_hides_foreign_bucket_before_reading_configuration(monkeypatch):

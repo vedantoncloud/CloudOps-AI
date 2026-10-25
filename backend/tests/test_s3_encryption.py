@@ -69,7 +69,8 @@ def test_encryption_endpoint_scopes_tenant_and_sanitizes_provider_error(monkeypa
         def get_s3_bucket_encryption(self, bucket):
             if self.fail:
                 return {"status": "unhealthy", "error": "private provider detail"}
-            return {"status": "healthy", "configured": True, "rules": []}
+            return {"status": "healthy", "configured": True, "rule_count": 1,
+                    "rules": [{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]}
 
     stub = StubAWS()
     monkeypatch.setattr(main, "aws_service", stub)

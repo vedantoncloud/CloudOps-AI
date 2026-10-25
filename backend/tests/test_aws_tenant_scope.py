@@ -87,7 +87,7 @@ class FakeAWSService:
         return {"status": "healthy", "tags": {"CloudOpsTenantId": tenants[bucket_name]}}
 
     def get_s3_bucket_details(self, bucket_name):
-        return {"status": "healthy", "bucket": bucket_name}
+        return {"status": "healthy", "bucket": bucket_name, "region": "us-east-1"}
 
     def get_s3_object_metadata(self, bucket_name, object_key, version_id=None):
         return {"status": "healthy", "bucket": bucket_name, "object": {"key": object_key, "version_id": version_id}}

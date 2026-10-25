@@ -94,7 +94,7 @@ def test_replication_endpoint_and_console_report_expose_configuration(monkeypatc
             return {"status": "healthy", "tags": {"CloudOpsTenantId": "local"}}
 
         def get_s3_bucket_replication(self, bucket_name):
-            return {"status": "healthy", "configured": True, "rule_count": 1, "enabled_rule_count": 1, "rules": []}
+            return {"status": "healthy", "configured": True, "rule_count": 1, "enabled_rule_count": 1, "rules": [{"ID": "replicate", "Status": "Enabled"}]}
 
     monkeypatch.setattr(main, "aws_service", StubAWS())
     response = TestClient(main.app).get("/cloud/aws/s3/buckets/source/replication")
