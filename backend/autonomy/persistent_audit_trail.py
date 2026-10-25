@@ -92,6 +92,43 @@ class PersistentAuditTrail(AuditTrail):
             previous_hash = stored
         return AuditIntegrityResult(True, len(rows), None)
 
+    def get_verifiable_export(self) -> dict[str, Any]:
+        """Return a full ordered chain snapshot suitable for offline verification."""
+        with self._lock, observed_sqlite_connection(self._connect, "audit_events") as connection:
+            rows = connection.execute(
+                "SELECT sequence, event_json, event_hash FROM audit_events ORDER BY sequence"
+            ).fetchall()
+        events = []
+        previous_hash = ""
+        for index, row in enumerate(rows):
+            try:
+                event = self._event_from_json(row["event_json"])
+                event_json = self._canonical_event(event).decode("utf-8")
+                expected = self._calculate_hash(previous_hash, event)
+                stored_hash = row["event_hash"]
+                if (
+                    not isinstance(stored_hash, str)
+                    or len(stored_hash) != 64
+                    or not hmac.compare_digest(expected, stored_hash)
+                ):
+                    raise ValueError
+            except Exception as exc:
+                raise ValueError(f"Audit chain is invalid at index {index}") from exc
+            events.append({
+                "sequence": row["sequence"],
+                "event": json.loads(event_json),
+                "previous_hash": previous_hash,
+                "event_hash": stored_hash,
+            })
+            previous_hash = stored_hash
+        return {
+            "format": "cloudops-audit-chain-v1",
+            "algorithm": "sha256",
+            "genesis_hash": "",
+            "events": events,
+            "final_hash": previous_hash,
+        }
+
     def verify_integrity(self) -> bool:
         return self.get_integrity_diagnostics().valid
 

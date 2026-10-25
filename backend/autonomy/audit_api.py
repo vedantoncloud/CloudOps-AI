@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from autonomy.audit import AuditEvent
 from autonomy.persistent_audit_trail import PersistentAuditTrail
+from auth import require_role
 
 
 router = APIRouter(
@@ -65,6 +66,18 @@ def verify_audit_integrity() -> AuditIntegrityResponse:
         event_count=result.event_count,
         first_invalid_index=result.first_invalid_index,
     )
+
+
+@router.get("/chain/export")
+def export_verifiable_audit_chain(request: Request) -> dict[str, Any]:
+    """Export the complete audit chain with hashes for offline verification."""
+    require_role(request.state.principal, "admin")
+    try:
+        return audit_trail.get_verifiable_export()
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail="Audit chain integrity check failed") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Audit chain export unavailable") from exc
 
 
 def _filter_audit_events(

@@ -131,6 +131,59 @@ paths, or audit content. Request logs include a correlation ID, method, path,
 status, and duration; they omit headers and request/response bodies. Use the
 response `X-Request-ID` value to locate the matching log entry.
 
+## Audit chain export, verification, and recovery
+
+Administrators can download the complete persisted audit chain from the Audit
+tab or `GET /autonomy/audit/chain/export`. This endpoint is admin-only and
+returns one full-chain JSON snapshot; it does not apply the filters used by the
+matching-event NDJSON export. Keep the export and its final hash outside the
+application host. Verify a downloaded file with the standard-library tool:
+
+```powershell
+python backend/verify_audit_chain.py cloudops-audit-chain.json
+```
+
+The verifier checks the export format, ordered event sequence, previous-hash
+links, each event's canonical JSON SHA-256 hash, and the final hash. A valid
+result proves that the downloaded events match the chain represented by that
+file. Sequence numbers identify stored order; the hashes cover event content
+and chain order. It does not prove who created the file or when: anyone able
+to rewrite the SQLite database can change events and recompute the entire
+chain. For an independent checkpoint, record the final hash and event count
+in a separately controlled system after each export (for example, a signed
+release record or immutable storage account with separate credentials).
+Compare later exports against that checkpoint. Do not keep the only
+checkpoint beside the audit database.
+
+Audit events are retained in the configured local SQLite database; CloudOps AI
+does not automatically prune them. Set a retention period that meets the
+organization's obligations, archive complete verified exports before any
+approved deletion, and retain the associated external final-hash checkpoints.
+Restrict database and export access to the operations administrators who need
+it. The chain detects changes relative to a trusted checkpoint; it cannot
+restore deleted or rewritten records by itself.
+
+For a consistent live SQLite backup, use SQLite's online backup API rather
+than copying the database file while the service is running:
+
+```python
+import sqlite3
+import os
+
+source_path = os.environ.get("CLOUDOPS_AUDIT_EVENTS_DB", "cloudops_audit_events.db")
+with sqlite3.connect(source_path) as source:
+    with sqlite3.connect("audit-backup.db") as destination:
+        source.backup(destination)
+```
+
+Store backups separately with access controls and a tested restore window. To
+recover, stop the service, preserve the damaged database as evidence, restore
+the selected backup to the configured database path, restart, and verify
+readiness. Export and independently verify the restored chain, then compare
+its final hash and event count with the most recent external checkpoint. If
+they differ, preserve both copies and investigate before resuming normal audit
+operations; do not silently replace the checkpoint or rewrite the chain.
+
 GitOps change sets and their lifecycle state are stored in SQLite so proposals,
 approvals, dry-run applies, and verification results survive process restarts.
 The default file is `backend/gitops_changes.db`; set

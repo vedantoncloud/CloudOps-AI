@@ -18,7 +18,8 @@ def test_console_can_download_actor_scoped_audit_export_with_current_filter():
     assert 'id="auditEnd" type="datetime-local"' in html
     assert "function auditFilters()" in html
     assert "query.set(param,timestamp.toISOString())" in html
-    assert "query.set('start_time'" not in html  # filters are shared by list and export
+    audit_filter_logic = html.split("function auditFilters(){", 1)[1].split("\n", 1)[0]
+    assert "query.set('start_time'" not in audit_filter_logic
     assert "query=auditFilters();query.set('limit'" in html
     assert "const query=auditFilters();const response=await fetch" in html
     assert "Start time must be at or before end time." in html
@@ -76,6 +77,16 @@ def test_console_exposes_admin_audit_integrity_check():
     assert "Audit chain is valid across" in html
     assert "Audit chain verification failed at event" in html
     assert "addEventListener('click',()=>verifyAuditIntegrity())" in html
+
+
+def test_console_can_download_complete_verifiable_audit_chain():
+    html = TestClient(app).get("/console").text
+
+    assert 'id="exportVerifiableAudit"' in html
+    assert "addEventListener('click',exportVerifiableAudit)" in html
+    assert "'/autonomy/audit/chain/export'" in html
+    assert "link.download='cloudops-audit-chain.json'" in html
+    assert "Authorization:'Bearer '+bearer" in html
 
 
 def test_console_audit_rows_expose_safe_event_evidence_inspection():
