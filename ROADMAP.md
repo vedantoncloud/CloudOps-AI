@@ -56,6 +56,8 @@ Operators can export every S3 object version and delete marker for the currently
 
 Operators can export loaded EC2 fleet efficiency, cost, rightsizing, and security insights as a spreadsheet-safe CSV with category, region, and nested result fields; provider failures clear stale results and keep export disabled.
 
+S3 object downloads open in a separate tab to avoid losing the user gesture while the API issues a presigned URL. The tab is detached from the opener, blocked pop-ups receive a clear message without making an API request, and failed URL requests close the temporary tab and show the sanitized error.
+
 Approved dry-run action-plan execution now records the resulting lifecycle status and authenticated actor in the audit trail. Policy evaluation records its plan status transition with the authenticated actor and tenant, and restores in-memory policy state if audit or persistence fails. Requests blocked by the approval gate or by disabled real execution do not emit a success event.
 
 S3 object statistics, largest-object analysis, bucket health, insights, and optimization routes map both provider exceptions and unhealthy results to the same sanitized `503` response; focused tests preserve successful responses and input validation.

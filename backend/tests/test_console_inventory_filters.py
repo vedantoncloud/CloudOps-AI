@@ -112,6 +112,33 @@ def test_console_can_download_s3_objects_from_the_object_browser():
     assert "The link expires in ${data.expires_in} seconds." in html
 
 
+def test_s3_object_download_opens_separate_tab_and_handles_failures():
+    if not shutil.which("node"):
+        pytest.skip("Node.js is needed to run the console JavaScript behavior check")
+    html = TestClient(app).get("/console").text
+    match = re.search(r"async function downloadObject\(.*?(?=async function fetchObjects)", html, re.S)
+    assert match
+    script = r"""
+const assert = require('node:assert/strict');
+const source = JSON.parse(process.argv[1]);
+const status = {textContent:'',className:''};
+let popup = {opener:{},location:{href:''},closed:false,close(){this.closed=true}}, opened=[], calls=[];
+const window = {open(...args){opened.push(args);return popup}};
+const make = new Function('$','api','window',"let activeBucket='owned';"+source+';return downloadObject');
+const run = (api, popupValue=popup) => {popup=popupValue;status.textContent='';status.className='';return make(id=>id==='objectStatus'?status:null,api,window)('reports/a.csv','v/2')};
+(async()=>{
+ await run(async path=>{calls.push(path);return {url:'https://signed.example/object',expires_in:300}});
+ assert.equal(calls[0],'/cloud/aws/s3/buckets/owned/objects/download?key=reports%2Fa.csv&version_id=v%2F2');
+ assert.deepEqual(opened[0],['about:blank','_blank']);assert.equal(popup.opener,null);assert.equal(popup.location.href,'https://signed.example/object');assert.match(status.textContent,/new tab/);assert.equal(status.className,'notice');
+ const failed={opener:{},location:{href:''},closed:false,close(){this.closed=true}};
+ await run(async()=>{throw new Error('AWS resource data is unavailable')},failed);assert.equal(failed.closed,true);assert.equal(status.textContent,'AWS resource data is unavailable');assert.equal(status.className,'notice error');
+ await run(async()=>{throw new Error('must not fetch')},null);assert.equal(status.className,'notice error');assert.match(status.textContent,/Allow pop-ups/);
+})().catch(error=>{console.error(error);process.exitCode=1});
+"""
+    result = subprocess.run(["node", "-e", script, json.dumps(match.group(0))], capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_console_exports_loaded_inventory_as_search_aware_csv():
     response = TestClient(app).get("/console")
 
