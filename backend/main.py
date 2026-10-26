@@ -501,6 +501,50 @@ def aws_ec2_instances(request: Request, state: str = None, tag: str = None, max_
     return result
 
 
+@app.get("/cloud/aws/ec2/volumes")
+def aws_ec2_volumes(request: Request, region: str | None = None, max_results: int = 500, next_token: str | None = None, unattached_only: bool = False):
+    """Return paginated EBS inventory, scoped to owned volumes in token mode."""
+    _validate_ec2_region(region)
+    if not 5 <= max_results <= 500:
+        raise HTTPException(status_code=400, detail="max_results must be between 5 and 500")
+    if next_token is not None and (not next_token or len(next_token) > 4096):
+        raise HTTPException(status_code=400, detail="next_token must contain 1 to 4096 characters")
+    result = _aws_resource_result(lambda: aws_service.get_ec2_volumes(
+        max_results=max_results, next_token=next_token, unattached_only=unattached_only,
+        **({"region": region} if region else {})
+    ))
+    volumes = result.get("volumes")
+    if not isinstance(volumes, list):
+        _raise_aws_resource_unavailable()
+    if result.get("next_token") is not None and (not isinstance(result["next_token"], str) or not result["next_token"]):
+        _raise_aws_resource_unavailable()
+    for volume in volumes:
+        if (
+            not isinstance(volume, dict) or not isinstance(volume.get("volume_id"), str)
+            or not re.fullmatch(r"vol-[0-9a-fA-F]{8,17}", volume["volume_id"])
+            or not isinstance(volume.get("state"), str)
+            or not isinstance(volume.get("size_gib"), int) or isinstance(volume.get("size_gib"), bool)
+            or volume["size_gib"] < 0
+            or not isinstance(volume.get("encrypted"), bool)
+            or (volume.get("volume_type") is not None and not isinstance(volume["volume_type"], str))
+            or (volume.get("kms_key_id") is not None and not isinstance(volume["kms_key_id"], str))
+            or (volume.get("availability_zone") is not None and not isinstance(volume["availability_zone"], str))
+            or (volume.get("create_time") is not None and not isinstance(volume["create_time"], str))
+            or any(volume.get(field) is not None and (not isinstance(volume[field], int) or isinstance(volume[field], bool) or volume[field] < 0) for field in ("iops", "throughput"))
+            or not isinstance(volume.get("tags"), dict)
+            or any(not isinstance(k, str) or not isinstance(v, str) for k, v in volume["tags"].items())
+            or not isinstance(volume.get("attachments"), list)
+            or any(not isinstance(a, dict) or not isinstance(a.get("instance_id"), str) or any(a.get(k) is not None and not isinstance(a[k], str) for k in ("device", "state")) for a in volume["attachments"])
+        ):
+            _raise_aws_resource_unavailable()
+    if result.get("is_truncated") != bool(result.get("next_token")):
+        _raise_aws_resource_unavailable()
+    if getattr(request.state, "tenant_scoped", False):
+        result = dict(result)
+        result["volumes"] = [v for v in volumes if _resource_tenant({"tags": v["tags"]}) == request.state.tenant_id]
+    return result
+
+
 @app.get("/cloud/aws/s3/buckets")
 def aws_s3_buckets(
     request: Request,

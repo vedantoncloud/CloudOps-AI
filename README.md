@@ -27,6 +27,12 @@ Token-mode requests verify instance tenant ownership before reading those rules.
 The AWS role needs `ec2:DescribeInstances` and `ec2:DescribeSecurityGroups` for
 this read-only view.
 
+The console also lists regional EBS volumes, including unattached volumes, size,
+type, encryption and KMS key, performance settings, tags, and attachments. The
+unattached-only filter is applied by EC2 before pagination, and results can be
+exported as CSV. In token mode, only volumes tagged with the caller's
+`CloudOpsTenantId` are returned. Grant `ec2:DescribeVolumes` to the AWS role.
+
 Bucket analysis also reports S3 Object Lock enablement and any default
 governance or compliance retention rule. Grant `s3:GetBucketObjectLockConfiguration`
 to the AWS role for this read-only check. An enabled bucket without a default

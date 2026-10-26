@@ -618,6 +618,46 @@ class AWSService:
         except (BotoCoreError, ClientError) as error:
             return {"service": "ec2", "status": "unhealthy", "error": str(error)}
 
+    def get_ec2_volumes(self, max_results=500, next_token=None, region=None, unattached_only=False):
+        """List regional EBS volumes with encryption, ownership tags and attachments."""
+        try:
+            client = _aws_client("ec2", **({"region_name": region} if region else {}))
+            params = {"MaxResults": max_results}
+            if unattached_only:
+                params["Filters"] = [{"Name": "status", "Values": ["available"]}]
+            if next_token:
+                params["NextToken"] = next_token
+            response = client.describe_volumes(**params)
+            volumes = response.get("Volumes")
+            if not isinstance(volumes, list):
+                return {"service": "ec2", "status": "unhealthy", "error": "Malformed volume response"}
+            rows = []
+            for volume in volumes:
+                if not isinstance(volume, dict) or not isinstance(volume.get("VolumeId"), str):
+                    return {"service": "ec2", "status": "unhealthy", "error": "Malformed volume record"}
+                tags = volume.get("Tags", [])
+                attachments = volume.get("Attachments", [])
+                if not isinstance(tags, list) or not isinstance(attachments, list):
+                    return {"service": "ec2", "status": "unhealthy", "error": "Malformed volume metadata"}
+                if any(not isinstance(item, dict) or not isinstance(item.get("Key"), str) or not isinstance(item.get("Value"), str) for item in tags):
+                    return {"service": "ec2", "status": "unhealthy", "error": "Malformed volume tags"}
+                if any(not isinstance(item, dict) or not isinstance(item.get("InstanceId"), str) for item in attachments):
+                    return {"service": "ec2", "status": "unhealthy", "error": "Malformed volume attachments"}
+                rows.append({
+                    "volume_id": volume["VolumeId"], "state": volume.get("State"),
+                    "size_gib": volume.get("Size"), "volume_type": volume.get("VolumeType"),
+                    "encrypted": volume.get("Encrypted"), "kms_key_id": volume.get("KmsKeyId"),
+                    "availability_zone": volume.get("AvailabilityZone"),
+                    "iops": volume.get("Iops"), "throughput": volume.get("Throughput"),
+                    "create_time": volume.get("CreateTime").isoformat() if volume.get("CreateTime") else None,
+                    "tags": {item["Key"]: item["Value"] for item in tags},
+                    "attachments": [{"instance_id": item["InstanceId"], "device": item.get("Device"), "state": item.get("State")} for item in attachments],
+                })
+            return {"service": "ec2", "status": "healthy", "volumes": rows,
+                    "next_token": response.get("NextToken"), "is_truncated": bool(response.get("NextToken"))}
+        except (BotoCoreError, ClientError) as error:
+            return {"service": "ec2", "status": "unhealthy", "error": str(error)}
+
     def get_s3_buckets(self, max_buckets=1000, continuation_token=None, prefix=None):
         try:
             s3 = _aws_client("s3")
