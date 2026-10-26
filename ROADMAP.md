@@ -4,6 +4,8 @@
 
 **Feature update:** 2026-10-22. EC2 instance details now include launch time, platform/OS, CPU architecture, and IAM instance profile ARN, with explicit Linux/UNIX fallback and nullable optional fields. Focused provider, endpoint, regional follow-up, and failure-contract tests pass.
 
+**Feature update:** 2026-10-26. Operators can review paginated regional EBS snapshots owned by their AWS account, including size, source volume, creation time, encryption/KMS details, descriptions, and tags, with tenant-tag filtering and console CSV export. `ec2:DescribeSnapshots` is required; focused API, provider, authorization, failure, and console tests pass.
+
 **Feature update:** 2026-10-26. Operators can inspect regional EBS volumes, filter to unattached volumes before pagination, review encryption/KMS/performance/attachment details, and export loaded results as CSV. Token-mode results include only volumes tagged for the authenticated tenant. `ec2:DescribeVolumes` is required; focused API, provider, authorization, failure, and console tests pass.
 
 Operators can inspect each EC2 instance's attached security groups and ingress sources in the regional details panel, including IPv4/IPv6 CIDRs, prefix lists, and referenced security groups. Tenant ownership is checked before rule lookup; malformed or unavailable AWS responses fail closed, and unattached groups/rules have explicit empty states.

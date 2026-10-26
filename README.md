@@ -33,6 +33,8 @@ unattached-only filter is applied by EC2 before pagination, and results can be
 exported as CSV. In token mode, only volumes tagged with the caller's
 `CloudOpsTenantId` are returned. Grant `ec2:DescribeVolumes` to the AWS role.
 
+Operators can also review account-owned EBS snapshots by region, including source volume, creation time, size, encryption and KMS key, description, and tags, with pagination and CSV export. In token mode, only snapshots tagged with the caller's `CloudOpsTenantId` are returned. Grant `ec2:DescribeSnapshots` to the AWS role. This is an inventory view; it does not create or delete snapshots.
+
 Bucket analysis also reports S3 Object Lock enablement and any default
 governance or compliance retention rule. Grant `s3:GetBucketObjectLockConfiguration`
 to the AWS role for this read-only check. An enabled bucket without a default

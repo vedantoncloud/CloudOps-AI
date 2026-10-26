@@ -545,6 +545,43 @@ def aws_ec2_volumes(request: Request, region: str | None = None, max_results: in
     return result
 
 
+@app.get("/cloud/aws/ec2/snapshots")
+def aws_ec2_snapshots(request: Request, region: str | None = None, max_results: int = 100, next_token: str | None = None):
+    """Return paginated, account-owned EBS snapshots; token users see owned tenant tags only."""
+    _validate_ec2_region(region)
+    if not 5 <= max_results <= 1000:
+        raise HTTPException(status_code=400, detail="max_results must be between 5 and 1000")
+    if next_token is not None and (not next_token or len(next_token) > 4096):
+        raise HTTPException(status_code=400, detail="next_token must contain 1 to 4096 characters")
+    result = _aws_resource_result(lambda: aws_service.get_ec2_snapshots(
+        max_results=max_results, next_token=next_token, **({"region": region} if region else {})
+    ))
+    snapshots = result.get("snapshots")
+    if not isinstance(snapshots, list):
+        _raise_aws_resource_unavailable()
+    if result.get("next_token") is not None and (not isinstance(result["next_token"], str) or not result["next_token"]):
+        _raise_aws_resource_unavailable()
+    for snapshot in snapshots:
+        if (
+            not isinstance(snapshot, dict)
+            or not isinstance(snapshot.get("snapshot_id"), str)
+            or not re.fullmatch(r"snap-[0-9a-fA-F]{8,17}", snapshot["snapshot_id"])
+            or not isinstance(snapshot.get("state"), str)
+            or not isinstance(snapshot.get("size_gib"), int) or isinstance(snapshot.get("size_gib"), bool) or snapshot["size_gib"] < 0
+            or not isinstance(snapshot.get("encrypted"), bool)
+            or any(snapshot.get(field) is not None and not isinstance(snapshot[field], str) for field in ("volume_id", "kms_key_id", "description", "start_time"))
+            or not isinstance(snapshot.get("tags"), dict)
+            or any(not isinstance(key, str) or not isinstance(value, str) for key, value in snapshot["tags"].items())
+        ):
+            _raise_aws_resource_unavailable()
+    if result.get("is_truncated") != bool(result.get("next_token")):
+        _raise_aws_resource_unavailable()
+    if getattr(request.state, "tenant_scoped", False):
+        result = dict(result)
+        result["snapshots"] = [item for item in snapshots if _resource_tenant({"tags": item["tags"]}) == request.state.tenant_id]
+    return result
+
+
 @app.get("/cloud/aws/s3/buckets")
 def aws_s3_buckets(
     request: Request,

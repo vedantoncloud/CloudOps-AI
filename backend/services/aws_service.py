@@ -658,6 +658,41 @@ class AWSService:
         except (BotoCoreError, ClientError) as error:
             return {"service": "ec2", "status": "unhealthy", "error": str(error)}
 
+    def get_ec2_snapshots(self, max_results=100, next_token=None, region=None):
+        """List snapshots owned by this account, with metadata needed for cost and recovery review."""
+        try:
+            client = _aws_client("ec2", **({"region_name": region} if region else {}))
+            params = {"OwnerIds": ["self"], "MaxResults": max_results}
+            if next_token:
+                params["NextToken"] = next_token
+            response = client.describe_snapshots(**params)
+            snapshots = response.get("Snapshots")
+            if not isinstance(snapshots, list):
+                return {"service": "ec2", "status": "unhealthy", "error": "Malformed snapshot response"}
+            rows = []
+            for snapshot in snapshots:
+                if not isinstance(snapshot, dict) or not isinstance(snapshot.get("SnapshotId"), str):
+                    return {"service": "ec2", "status": "unhealthy", "error": "Malformed snapshot record"}
+                start_time = snapshot.get("StartTime")
+                if start_time is not None and not isinstance(start_time, datetime):
+                    return {"service": "ec2", "status": "unhealthy", "error": "Malformed snapshot creation time"}
+                tags = snapshot.get("Tags", [])
+                if not isinstance(tags, list) or any(not isinstance(tag, dict) or not isinstance(tag.get("Key"), str) or not isinstance(tag.get("Value"), str) for tag in tags):
+                    return {"service": "ec2", "status": "unhealthy", "error": "Malformed snapshot tags"}
+                rows.append({
+                    "snapshot_id": snapshot["SnapshotId"], "volume_id": snapshot.get("VolumeId"),
+                    "state": snapshot.get("State"), "size_gib": snapshot.get("VolumeSize"),
+                    "encrypted": snapshot.get("Encrypted"), "kms_key_id": snapshot.get("KmsKeyId"),
+                    "description": snapshot.get("Description"), "start_time": start_time.isoformat() if start_time else None,
+                    "tags": {tag["Key"]: tag["Value"] for tag in tags},
+                })
+            token = response.get("NextToken")
+            if token is not None and (not isinstance(token, str) or not token):
+                return {"service": "ec2", "status": "unhealthy", "error": "Malformed snapshot page cursor"}
+            return {"service": "ec2", "status": "healthy", "snapshots": rows, "next_token": token, "is_truncated": bool(token)}
+        except (BotoCoreError, ClientError) as error:
+            return {"service": "ec2", "status": "unhealthy", "error": str(error)}
+
     def get_s3_buckets(self, max_buckets=1000, continuation_token=None, prefix=None):
         try:
             s3 = _aws_client("s3")
