@@ -536,6 +536,79 @@ class AWSService:
         except (BotoCoreError, ClientError) as error:
             return {"service": "ec2", "status": "unhealthy", "error": str(error)}
 
+    def get_ec2_instance_security_groups(self, instance_id, region=None):
+        """Return attached EC2 security groups and their ingress rules."""
+        try:
+            client = _aws_client("ec2", **({"region_name": region} if region else {}))
+            response = client.describe_instances(InstanceIds=[instance_id])
+            instances = [
+                instance
+                for reservation in response.get("Reservations", [])
+                for instance in reservation.get("Instances", [])
+            ]
+            if not instances:
+                return {"service": "ec2", "status": "healthy", "instance_id": instance_id, "security_groups": []}
+            attached_groups = instances[0].get("SecurityGroups", [])
+            if not isinstance(attached_groups, list) or any(
+                not isinstance(group, dict) or not isinstance(group.get("GroupId"), str)
+                for group in attached_groups
+            ):
+                return {"service": "ec2", "status": "unhealthy", "error": "Malformed instance security groups"}
+            group_ids = sorted({
+                group["GroupId"]
+                for group in attached_groups
+            })
+            if not group_ids:
+                return {"service": "ec2", "status": "healthy", "instance_id": instance_id, "security_groups": []}
+            result = client.describe_security_groups(GroupIds=group_ids)
+            response_groups = result.get("SecurityGroups")
+            if not isinstance(response_groups, list):
+                return {"service": "ec2", "status": "unhealthy", "error": "Malformed security group response"}
+            returned_ids = [group.get("GroupId") for group in response_groups if isinstance(group, dict)]
+            if len(returned_ids) != len(response_groups) or set(returned_ids) != set(group_ids):
+                return {"service": "ec2", "status": "unhealthy", "error": "Incomplete security group response"}
+            groups = []
+            for group in response_groups:
+                if not isinstance(group, dict) or not isinstance(group.get("GroupId"), str):
+                    return {"service": "ec2", "status": "unhealthy", "error": "Malformed security group"}
+                source_rules = group.get("IpPermissions", [])
+                if not isinstance(source_rules, list) or any(not isinstance(rule, dict) for rule in source_rules):
+                    return {"service": "ec2", "status": "unhealthy", "error": "Malformed ingress rules"}
+                permissions = []
+                for rule in source_rules:
+                    ranges = {key: rule.get(key, []) for key in ("IpRanges", "Ipv6Ranges", "PrefixListIds", "UserIdGroupPairs")}
+                    if any(not isinstance(value, list) for value in ranges.values()) or any(
+                        not isinstance(item, dict)
+                        for value in ranges.values() for item in value
+                    ):
+                        return {"service": "ec2", "status": "unhealthy", "error": "Malformed ingress sources"}
+                    permissions.append({
+                        "protocol": rule.get("IpProtocol"),
+                        "from_port": rule.get("FromPort"),
+                        "to_port": rule.get("ToPort"),
+                        "ipv4_ranges": [
+                            {"cidr": item.get("CidrIp"), "description": item.get("Description")}
+                            for item in ranges["IpRanges"]
+                        ],
+                        "ipv6_ranges": [
+                            {"cidr": item.get("CidrIpv6"), "description": item.get("Description")}
+                            for item in ranges["Ipv6Ranges"]
+                        ],
+                        "prefix_list_ids": [item.get("PrefixListId") for item in ranges["PrefixListIds"]],
+                        "source_security_groups": [
+                            {"group_id": item.get("GroupId"), "owner_id": item.get("UserId"), "vpc_id": item.get("VpcId")}
+                            for item in ranges["UserIdGroupPairs"]
+                        ],
+                    })
+                groups.append({
+                    "group_id": group["GroupId"], "group_name": group.get("GroupName"),
+                    "description": group.get("Description"), "vpc_id": group.get("VpcId"),
+                    "ingress_rules": permissions,
+                })
+            return {"service": "ec2", "status": "healthy", "instance_id": instance_id, "security_groups": groups}
+        except (BotoCoreError, ClientError) as error:
+            return {"service": "ec2", "status": "unhealthy", "error": str(error)}
+
     def get_s3_buckets(self, max_buckets=1000, continuation_token=None, prefix=None):
         try:
             s3 = _aws_client("s3")

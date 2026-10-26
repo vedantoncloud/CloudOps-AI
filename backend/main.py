@@ -1294,6 +1294,52 @@ def aws_ec2_instance_volumes(instance_id: str, request: Request, region: str | N
     return result
 
 
+@app.get("/cloud/aws/ec2/instances/{instance_id}/security-groups")
+def aws_ec2_instance_security_groups(instance_id: str, request: Request, region: str | None = None):
+    """Inspect ingress rules only after verifying instance ownership."""
+    _validate_ec2_instance_id(instance_id)
+    _validate_ec2_region(region)
+    _require_tenant_ec2_instance(request, instance_id, region)
+    result = _aws_resource_result(lambda: aws_service.get_ec2_instance_security_groups(
+        instance_id, **({"region": region} if region else {})
+    ))
+    groups = result.get("security_groups")
+    def valid_rule(rule):
+        if not isinstance(rule, dict):
+            return False
+        if rule.get("protocol") is not None and not isinstance(rule["protocol"], str):
+            return False
+        if any(rule.get(key) is not None and (not isinstance(rule[key], int) or isinstance(rule[key], bool)) for key in ("from_port", "to_port")):
+            return False
+        for key in ("ipv4_ranges", "ipv6_ranges"):
+            if not isinstance(rule.get(key), list) or any(
+                not isinstance(item, dict) or not isinstance(item.get("cidr"), str)
+                or (item.get("description") is not None and not isinstance(item.get("description"), str))
+                for item in rule[key]
+            ):
+                return False
+        if not isinstance(rule.get("prefix_list_ids"), list) or any(not isinstance(value, str) for value in rule["prefix_list_ids"]):
+            return False
+        pairs = rule.get("source_security_groups")
+        return isinstance(pairs, list) and all(
+            isinstance(item, dict) and isinstance(item.get("group_id"), str)
+            and all(item.get(key) is None or isinstance(item[key], str) for key in ("owner_id", "vpc_id"))
+            for item in pairs
+        )
+    if (
+        result.get("service") != "ec2" or result.get("instance_id") != instance_id
+        or not isinstance(groups, list) or any(
+            not isinstance(group, dict) or not isinstance(group.get("group_id"), str)
+            or any(group.get(key) is not None and not isinstance(group[key], str) for key in ("group_name", "description", "vpc_id"))
+            or not isinstance(group.get("ingress_rules"), list)
+            or any(not valid_rule(rule) for rule in group["ingress_rules"])
+            for group in groups
+        )
+    ):
+        _raise_aws_resource_unavailable()
+    return result
+
+
 @app.get("/cloud/aws/ec2/instances/{instance_id}/alarms")
 def aws_ec2_alarms(
     instance_id: str,
