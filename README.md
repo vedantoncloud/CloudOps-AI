@@ -21,10 +21,11 @@ Denied or malformed check results are reported as unknown; they are not treated
 as evidence that the bucket is private. Buckets using bucket-owner-enforced
 Object Ownership have ACL checks reported as disabled.
 
-EC2 instance details include attached security-group ingress rules and their
-IPv4/IPv6 CIDR, prefix-list, and security-group sources. Token-mode requests
-verify instance tenant ownership before reading those rules. The AWS role needs
-`ec2:DescribeInstances` and `ec2:DescribeSecurityGroups` for this view.
+EC2 instance details include attached security-group ingress and egress rules
+and their IPv4/IPv6 CIDR, prefix-list, and security-group sources or destinations.
+Token-mode requests verify instance tenant ownership before reading those rules.
+The AWS role needs `ec2:DescribeInstances` and `ec2:DescribeSecurityGroups` for
+this read-only view.
 
 Bucket analysis also reports S3 Object Lock enablement and any default
 governance or compliance retention rule. Grant `s3:GetBucketObjectLockConfiguration`

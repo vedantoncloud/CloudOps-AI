@@ -1296,7 +1296,7 @@ def aws_ec2_instance_volumes(instance_id: str, request: Request, region: str | N
 
 @app.get("/cloud/aws/ec2/instances/{instance_id}/security-groups")
 def aws_ec2_instance_security_groups(instance_id: str, request: Request, region: str | None = None):
-    """Inspect ingress rules only after verifying instance ownership."""
+    """Inspect security group rules only after verifying instance ownership."""
     _validate_ec2_instance_id(instance_id)
     _validate_ec2_region(region)
     _require_tenant_ec2_instance(request, instance_id, region)
@@ -1304,7 +1304,7 @@ def aws_ec2_instance_security_groups(instance_id: str, request: Request, region:
         instance_id, **({"region": region} if region else {})
     ))
     groups = result.get("security_groups")
-    def valid_rule(rule):
+    def valid_rule(rule, direction):
         if not isinstance(rule, dict):
             return False
         if rule.get("protocol") is not None and not isinstance(rule["protocol"], str):
@@ -1320,7 +1320,8 @@ def aws_ec2_instance_security_groups(instance_id: str, request: Request, region:
                 return False
         if not isinstance(rule.get("prefix_list_ids"), list) or any(not isinstance(value, str) for value in rule["prefix_list_ids"]):
             return False
-        pairs = rule.get("source_security_groups")
+        peer_groups_key = "source_security_groups" if direction == "ingress" else "destination_security_groups"
+        pairs = rule.get(peer_groups_key)
         return isinstance(pairs, list) and all(
             isinstance(item, dict) and isinstance(item.get("group_id"), str)
             and all(item.get(key) is None or isinstance(item[key], str) for key in ("owner_id", "vpc_id"))
@@ -1332,7 +1333,9 @@ def aws_ec2_instance_security_groups(instance_id: str, request: Request, region:
             not isinstance(group, dict) or not isinstance(group.get("group_id"), str)
             or any(group.get(key) is not None and not isinstance(group[key], str) for key in ("group_name", "description", "vpc_id"))
             or not isinstance(group.get("ingress_rules"), list)
-            or any(not valid_rule(rule) for rule in group["ingress_rules"])
+            or any(not valid_rule(rule, "ingress") for rule in group["ingress_rules"])
+            or not isinstance(group.get("egress_rules"), list)
+            or any(not valid_rule(rule, "egress") for rule in group["egress_rules"])
             for group in groups
         )
     ):

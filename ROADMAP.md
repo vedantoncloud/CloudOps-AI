@@ -6,6 +6,8 @@
 
 Operators can inspect each EC2 instance's attached security groups and ingress sources in the regional details panel, including IPv4/IPv6 CIDRs, prefix lists, and referenced security groups. Tenant ownership is checked before rule lookup; malformed or unavailable AWS responses fail closed, and unattached groups/rules have explicit empty states.
 
+EC2 instance security-group inspection also shows outbound rules and their destinations alongside inbound rules. Tenant ownership is checked before lookup; malformed or unavailable provider data fails closed, and empty inbound/outbound rule sets are labeled explicitly in the console.
+
 EC2 and S3 action-plan generation now validates AWS insight responses and maps thrown provider errors and malformed or unhealthy payloads to a sanitized `503`; regression coverage confirms the planner does not run on invalid provider data (75 focused planning and AWS endpoint tests pass).
 
 Tenant AWS role routing now uses `CLOUDOPS_TENANT_AWS_ROLES` (JSON tenant ID to IAM role ARN map). Authenticated tenant AWS calls assume the configured role, cache short-lived credentials until near expiry, and propagate role-assumption failures without falling back to shared credentials. Unmapped tenants continue using the process AWS identity for compatibility unless `CLOUDOPS_REQUIRE_TENANT_AWS_ROLE=true`, which rejects AWS calls for tenants without a mapping. Readiness remains process-wide; admin-only account-cost reports use the admin principal's configured role when present.

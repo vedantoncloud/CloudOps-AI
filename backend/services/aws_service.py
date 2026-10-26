@@ -537,7 +537,7 @@ class AWSService:
             return {"service": "ec2", "status": "unhealthy", "error": str(error)}
 
     def get_ec2_instance_security_groups(self, instance_id, region=None):
-        """Return attached EC2 security groups and their ingress rules."""
+        """Return attached EC2 security groups and their ingress and egress rules."""
         try:
             client = _aws_client("ec2", **({"region_name": region} if region else {}))
             response = client.describe_instances(InstanceIds=[instance_id])
@@ -571,39 +571,48 @@ class AWSService:
             for group in response_groups:
                 if not isinstance(group, dict) or not isinstance(group.get("GroupId"), str):
                     return {"service": "ec2", "status": "unhealthy", "error": "Malformed security group"}
-                source_rules = group.get("IpPermissions", [])
-                if not isinstance(source_rules, list) or any(not isinstance(rule, dict) for rule in source_rules):
-                    return {"service": "ec2", "status": "unhealthy", "error": "Malformed ingress rules"}
-                permissions = []
-                for rule in source_rules:
-                    ranges = {key: rule.get(key, []) for key in ("IpRanges", "Ipv6Ranges", "PrefixListIds", "UserIdGroupPairs")}
-                    if any(not isinstance(value, list) for value in ranges.values()) or any(
-                        not isinstance(item, dict)
-                        for value in ranges.values() for item in value
-                    ):
-                        return {"service": "ec2", "status": "unhealthy", "error": "Malformed ingress sources"}
-                    permissions.append({
-                        "protocol": rule.get("IpProtocol"),
-                        "from_port": rule.get("FromPort"),
-                        "to_port": rule.get("ToPort"),
-                        "ipv4_ranges": [
-                            {"cidr": item.get("CidrIp"), "description": item.get("Description")}
-                            for item in ranges["IpRanges"]
-                        ],
-                        "ipv6_ranges": [
-                            {"cidr": item.get("CidrIpv6"), "description": item.get("Description")}
-                            for item in ranges["Ipv6Ranges"]
-                        ],
-                        "prefix_list_ids": [item.get("PrefixListId") for item in ranges["PrefixListIds"]],
-                        "source_security_groups": [
-                            {"group_id": item.get("GroupId"), "owner_id": item.get("UserId"), "vpc_id": item.get("VpcId")}
-                            for item in ranges["UserIdGroupPairs"]
-                        ],
-                    })
+                def map_permissions(field, direction):
+                    source_rules = group.get(field)
+                    if not isinstance(source_rules, list) or any(not isinstance(rule, dict) for rule in source_rules):
+                        raise ValueError(f"Malformed {direction} rules")
+                    permissions = []
+                    for rule in source_rules:
+                        ranges = {key: rule.get(key, []) for key in ("IpRanges", "Ipv6Ranges", "PrefixListIds", "UserIdGroupPairs")}
+                        if any(not isinstance(value, list) for value in ranges.values()) or any(
+                            not isinstance(item, dict)
+                            for value in ranges.values() for item in value
+                        ):
+                            raise ValueError(f"Malformed {direction} sources")
+                        permissions.append({
+                            "protocol": rule.get("IpProtocol"),
+                            "from_port": rule.get("FromPort"),
+                            "to_port": rule.get("ToPort"),
+                            "ipv4_ranges": [
+                                {"cidr": item.get("CidrIp"), "description": item.get("Description")}
+                                for item in ranges["IpRanges"]
+                            ],
+                            "ipv6_ranges": [
+                                {"cidr": item.get("CidrIpv6"), "description": item.get("Description")}
+                                for item in ranges["Ipv6Ranges"]
+                            ],
+                            "prefix_list_ids": [item.get("PrefixListId") for item in ranges["PrefixListIds"]],
+                            ("source_security_groups" if direction == "ingress" else "destination_security_groups"): [
+                                {"group_id": item.get("GroupId"), "owner_id": item.get("UserId"), "vpc_id": item.get("VpcId")}
+                                for item in ranges["UserIdGroupPairs"]
+                            ],
+                        })
+                    return permissions
+
+                try:
+                    ingress_rules = map_permissions("IpPermissions", "ingress")
+                    egress_rules = map_permissions("IpPermissionsEgress", "egress")
+                except ValueError as error:
+                    return {"service": "ec2", "status": "unhealthy", "error": str(error)}
                 groups.append({
                     "group_id": group["GroupId"], "group_name": group.get("GroupName"),
                     "description": group.get("Description"), "vpc_id": group.get("VpcId"),
-                    "ingress_rules": permissions,
+                    "ingress_rules": ingress_rules,
+                    "egress_rules": egress_rules,
                 })
             return {"service": "ec2", "status": "healthy", "instance_id": instance_id, "security_groups": groups}
         except (BotoCoreError, ClientError) as error:
