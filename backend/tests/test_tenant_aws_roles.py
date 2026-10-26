@@ -51,6 +51,8 @@ def test_tenant_role_configuration_rejects_malformed_or_untrusted_values(monkeyp
 
 def test_unmapped_tenant_keeps_default_aws_identity(monkeypatch):
     sentinel = object()
+    monkeypatch.setenv("CLOUDOPS_ENV", "development")
+    monkeypatch.delenv("CLOUDOPS_REQUIRE_TENANT_AWS_ROLE", raising=False)
     monkeypatch.setenv("CLOUDOPS_TENANT_AWS_ROLES", "{}")
     monkeypatch.setattr(aws_service.boto3, "client", lambda *args, **kwargs: sentinel)
     token = aws_service.set_aws_tenant("tenant-without-role")
@@ -58,6 +60,21 @@ def test_unmapped_tenant_keeps_default_aws_identity(monkeypatch):
         assert aws_service._aws_client("ec2") is sentinel
     finally:
         aws_service.reset_aws_tenant(token)
+
+
+def test_production_requires_tenant_role_by_default(monkeypatch):
+    monkeypatch.setenv("CLOUDOPS_ENV", "production")
+    monkeypatch.delenv("CLOUDOPS_REQUIRE_TENANT_AWS_ROLE", raising=False)
+    assert aws_service._tenant_roles_required()
+
+
+def test_explicit_tenant_role_setting_overrides_environment_default(monkeypatch):
+    monkeypatch.setenv("CLOUDOPS_ENV", "production")
+    monkeypatch.setenv("CLOUDOPS_REQUIRE_TENANT_AWS_ROLE", "false")
+    assert not aws_service._tenant_roles_required()
+    monkeypatch.setenv("CLOUDOPS_ENV", "development")
+    monkeypatch.setenv("CLOUDOPS_REQUIRE_TENANT_AWS_ROLE", "true")
+    assert aws_service._tenant_roles_required()
 
 
 def test_required_tenant_role_fails_closed_without_using_process_identity(monkeypatch):

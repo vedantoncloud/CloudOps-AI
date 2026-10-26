@@ -76,7 +76,10 @@ calls through its own account role. Assumed credentials are cached until near
 expiry, and a failed role assumption never falls back to the process identity.
 For compatibility, tenants without a mapping use the process AWS identity by
 default. Set `CLOUDOPS_REQUIRE_TENANT_AWS_ROLE=true` to fail closed when any
-authenticated tenant has no configured role; the setting defaults to `false`.
+authenticated tenant has no configured role. The setting defaults to `true`
+when `CLOUDOPS_ENV=production` and `false` otherwise; an explicit
+`CLOUDOPS_REQUIRE_TENANT_AWS_ROLE` value overrides that default. Configure a
+role for every tenant before routing tenant AWS requests in production.
 
 ## Runtime
 

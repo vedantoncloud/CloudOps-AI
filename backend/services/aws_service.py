@@ -49,7 +49,8 @@ def _tenant_role_arn(tenant_id: str) -> str | None:
 
 def _tenant_roles_required() -> bool:
     """Whether authenticated tenant calls must use a tenant-specific role."""
-    setting = os.getenv("CLOUDOPS_REQUIRE_TENANT_AWS_ROLE", "false").strip().lower()
+    default = "true" if os.getenv("CLOUDOPS_ENV", "development").strip().lower() == "production" else "false"
+    setting = os.getenv("CLOUDOPS_REQUIRE_TENANT_AWS_ROLE", default).strip().lower()
     if setting not in {"true", "false"}:
         raise RuntimeError("CLOUDOPS_REQUIRE_TENANT_AWS_ROLE must be true or false")
     return setting == "true"
