@@ -1,12 +1,114 @@
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 from main import app
+from autonomy import api as autonomy_api
 
 
 client = TestClient(app)
+
+
+def _tenant_request(tenant_id="tenant-a"):
+    return SimpleNamespace(state=SimpleNamespace(tenant_scoped=True, tenant_id=tenant_id))
+
+
+def test_tenant_ec2_plan_ownership_accepts_matching_well_formed_resource():
+    with patch("autonomy.api.aws_service.get_ec2_instance", return_value={
+        "status": "healthy",
+        "instance": {"instance_id": "i-123456789", "tags": {"CloudOpsTenantId": "tenant-a"}},
+    }) as lookup:
+        autonomy_api._require_tenant_ec2_instance(_tenant_request(), "i-123456789")
+
+    lookup.assert_called_once_with("i-123456789")
+
+
+@pytest.mark.parametrize("instance", [
+    "malformed",
+    {},
+    {"instance_id": "i-987654321", "tags": {}},
+    {"instance_id": "i-123456789", "tags": []},
+    {"instance_id": "i-123456789", "tags": {"CloudOpsTenantId": object()}},
+])
+def test_tenant_ec2_plan_ownership_rejects_malformed_provider_records(instance):
+    with patch("autonomy.api.aws_service.get_ec2_instance", return_value={
+        "status": "healthy", "instance": instance,
+    }), pytest.raises(autonomy_api.HTTPException) as error:
+        autonomy_api._require_tenant_ec2_instance(_tenant_request(), "i-123456789")
+
+    assert error.value.status_code == 503
+    assert error.value.detail == "EC2 inventory is unavailable"
+
+
+def test_tenant_ec2_plan_ownership_keeps_missing_and_foreign_resources_hidden():
+    for result in (
+        {"status": "healthy", "instance": None},
+        {"status": "healthy", "instance": {
+            "instance_id": "i-123456789", "tags": {"CloudOpsTenantId": "tenant-b"},
+        }},
+    ):
+        with patch("autonomy.api.aws_service.get_ec2_instance", return_value=result):
+            with pytest.raises(autonomy_api.HTTPException) as error:
+                autonomy_api._require_tenant_ec2_instance(_tenant_request(), "i-123456789")
+        assert error.value.status_code == 404
+
+
+def test_tenant_ec2_plan_ownership_sanitizes_provider_exceptions():
+    with patch("autonomy.api.aws_service.get_ec2_instance", side_effect=RuntimeError("private AWS detail")):
+        with pytest.raises(autonomy_api.HTTPException) as error:
+            autonomy_api._require_tenant_ec2_instance(_tenant_request(), "i-123456789")
+
+    assert error.value.status_code == 503
+    assert "private AWS detail" not in error.value.detail
+
+
+def test_tenant_s3_plan_ownership_accepts_matching_well_formed_resource():
+    with patch("autonomy.api.aws_service.get_s3_bucket_tags", return_value={
+        "status": "healthy", "bucket": "example-bucket",
+        "tags": {"CloudOpsTenantId": "tenant-a"},
+    }) as lookup:
+        autonomy_api._require_tenant_s3_bucket(_tenant_request(), "example-bucket")
+
+    lookup.assert_called_once_with("example-bucket")
+
+
+@pytest.mark.parametrize("result", [
+    None,
+    {"status": "healthy", "tags": []},
+    {"status": "healthy", "tags": {"CloudOpsTenantId": object()}},
+    {"status": "healthy", "bucket": "other-bucket", "tags": {}},
+    {"status": "unexpected", "tags": {}},
+    {"status": "unhealthy", "error": "private provider detail"},
+])
+def test_tenant_s3_plan_ownership_fails_closed_on_malformed_or_unhealthy_results(result):
+    with patch("autonomy.api.aws_service.get_s3_bucket_tags", return_value=result):
+        with pytest.raises(autonomy_api.HTTPException) as error:
+            autonomy_api._require_tenant_s3_bucket(_tenant_request(), "example-bucket")
+
+    assert error.value.status_code == 503
+    assert "private provider detail" not in error.value.detail
+
+
+def test_tenant_s3_plan_ownership_keeps_missing_and_foreign_resources_hidden():
+    for result in (
+        {"status": "missing", "tags": {}},
+        {"status": "healthy", "tags": {"CloudOpsTenantId": "tenant-b"}},
+    ):
+        with patch("autonomy.api.aws_service.get_s3_bucket_tags", return_value=result):
+            with pytest.raises(autonomy_api.HTTPException) as error:
+                autonomy_api._require_tenant_s3_bucket(_tenant_request(), "example-bucket")
+        assert error.value.status_code == 404
+
+
+def test_tenant_s3_plan_ownership_sanitizes_provider_exceptions():
+    with patch("autonomy.api.aws_service.get_s3_bucket_tags", side_effect=RuntimeError("private AWS detail")):
+        with pytest.raises(autonomy_api.HTTPException) as error:
+            autonomy_api._require_tenant_s3_bucket(_tenant_request(), "example-bucket")
+
+    assert error.value.status_code == 503
+    assert "private AWS detail" not in error.value.detail
 
 
 @pytest.mark.parametrize(

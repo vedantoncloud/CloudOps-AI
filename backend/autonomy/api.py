@@ -167,8 +167,17 @@ def _require_tenant_ec2_instance(request: Request, instance_id: str, region: str
     if not isinstance(result, dict) or result.get("status") != "healthy":
         raise HTTPException(status_code=503, detail="EC2 inventory is unavailable")
     instance = result.get("instance")
-    if (instance is None
-            or _resource_tenant({"tags": instance.get("tags", {})}) != request.state.tenant_id):
+    if instance is None:
+        raise HTTPException(status_code=404, detail="EC2 instance not found")
+    tags = instance.get("tags") if isinstance(instance, dict) else None
+    if (
+        not isinstance(instance, dict)
+        or instance.get("instance_id") != instance_id
+        or not isinstance(tags, dict)
+        or any(not isinstance(key, str) or not isinstance(value, str) for key, value in tags.items())
+    ):
+        raise HTTPException(status_code=503, detail="EC2 inventory is unavailable")
+    if _resource_tenant({"tags": tags}) != request.state.tenant_id:
         raise HTTPException(status_code=404, detail="EC2 instance not found")
 
 
@@ -182,10 +191,19 @@ def _require_tenant_s3_bucket(request: Request, bucket_name: str) -> None:
         raise HTTPException(
             status_code=503, detail="S3 ownership verification is unavailable"
         ) from None
-    if not isinstance(ownership, dict) or ownership.get("status") == "unhealthy":
+    if not isinstance(ownership, dict):
         raise HTTPException(status_code=503, detail="S3 ownership verification is unavailable")
-    if (ownership.get("status") != "healthy"
-            or _resource_tenant({"tags": ownership.get("tags", {})}) != request.state.tenant_id):
+    if ownership.get("status") == "missing":
+        raise HTTPException(status_code=404, detail="S3 bucket not found")
+    tags = ownership.get("tags")
+    if (
+        ownership.get("status") != "healthy"
+        or (ownership.get("bucket") is not None and ownership.get("bucket") != bucket_name)
+        or not isinstance(tags, dict)
+        or any(not isinstance(key, str) or not isinstance(value, str) for key, value in tags.items())
+    ):
+        raise HTTPException(status_code=503, detail="S3 ownership verification is unavailable")
+    if _resource_tenant({"tags": tags}) != request.state.tenant_id:
         raise HTTPException(status_code=404, detail="S3 bucket not found")
 
 

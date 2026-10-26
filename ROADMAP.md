@@ -8,6 +8,8 @@
 
 **Feature update:** 2026-10-26. Operators can inspect regional EBS volumes, filter to unattached volumes before pagination, review encryption/KMS/performance/attachment details, and export loaded results as CSV. Token-mode results include only volumes tagged for the authenticated tenant. `ec2:DescribeVolumes` is required; focused API, provider, authorization, failure, and console tests pass.
 
+**Reliability update:** 2026-10-26. Tenant-scoped EC2 and S3 action-plan ownership checks now validate the complete provider identity and tag shape before planning. Malformed, mismatched, or unavailable ownership data fails closed with a sanitized `503`; confirmed missing or foreign resources remain hidden as `404`. Focused ownership, provider-failure, authorization, and EBS inventory regression tests pass.
+
 Operators can inspect each EC2 instance's attached security groups and ingress sources in the regional details panel, including IPv4/IPv6 CIDRs, prefix lists, and referenced security groups. Tenant ownership is checked before rule lookup; malformed or unavailable AWS responses fail closed, and unattached groups/rules have explicit empty states.
 
 EC2 instance security-group inspection also shows outbound rules and their destinations alongside inbound rules. Tenant ownership is checked before lookup; malformed or unavailable provider data fails closed, and empty inbound/outbound rule sets are labeled explicitly in the console.
