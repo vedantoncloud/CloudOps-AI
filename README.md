@@ -49,6 +49,16 @@ an optional `region`, `max_records` (20–100), and continuation `marker`. Grant
 the AWS role `rds:DescribeDBInstances` and `rds:ListTagsForResource`. This is a
 read-only inventory; it does not connect to databases or expose credentials.
 
+The Operations console also exposes regional RDS automated and manual recovery
+snapshots, including database, engine, status, type, creation time, size,
+encryption and KMS key, with marker pagination and CSV export. In token mode,
+snapshots are returned only when their `CloudOpsTenantId` tag matches the caller;
+tag lookup failures fail closed. The API is `GET /cloud/aws/rds/snapshots` and
+accepts the same optional `region`, `max_records` (20–100), and continuation
+`marker` parameters. Grant `rds:DescribeDBSnapshots` and
+`rds:ListTagsForResource` to the AWS role. This is read-only inventory and does
+not create or restore snapshots.
+
 Bucket analysis also reports S3 Object Lock enablement and any default
 governance or compliance retention rule. Grant `s3:GetBucketObjectLockConfiguration`
 to the AWS role for this read-only check. An enabled bucket without a default

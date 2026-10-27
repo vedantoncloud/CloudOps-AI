@@ -26,3 +26,11 @@ def test_console_exposes_regional_paginated_rds_inventory_and_csv_export():
     assert 'i.publicly_accessible==null?"Unknown"' in html
     assert 'no RDS instances found.' in html
     assert 'RDS inventory response is incomplete.' in html
+    assert 'id="loadRdsSnapshots"' in html
+    assert 'id="rdsSnapshotRows"' in html
+    assert 'id="moreRdsSnapshots"' in html
+    assert 'id="exportRdsSnapshots"' in html
+    assert 'api("/cloud/aws/rds/snapshots?"+params)' in html
+    assert 'RDS snapshot pagination returned an invalid or repeated marker' in html
+    assert 'rds-snapshots.csv' in html
+    assert 'no RDS snapshots found.' in html

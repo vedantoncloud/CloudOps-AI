@@ -750,6 +750,52 @@ class AWSService:
         except (BotoCoreError, ClientError) as error:
             return {"service": "rds", "status": "unhealthy", "error": str(error)}
 
+    def get_rds_snapshots(self, max_records=100, marker=None, region=None):
+        """List owned RDS snapshots with recovery metadata and ownership tags."""
+        try:
+            client = _aws_client("rds", **({"region_name": region} if region else {}))
+            params = {"MaxRecords": max_records}
+            if marker:
+                params["Marker"] = marker
+            response = client.describe_db_snapshots(**params)
+            snapshots = response.get("DBSnapshots")
+            if not isinstance(snapshots, list):
+                return {"service": "rds", "status": "unhealthy", "error": "Malformed RDS snapshot response"}
+            rows = []
+            for snapshot in snapshots:
+                if not isinstance(snapshot, dict):
+                    return {"service": "rds", "status": "unhealthy", "error": "Malformed RDS snapshot record"}
+                identifier, arn = snapshot.get("DBSnapshotIdentifier"), snapshot.get("DBSnapshotArn")
+                if not isinstance(identifier, str) or not identifier or not isinstance(arn, str) or not arn:
+                    return {"service": "rds", "status": "unhealthy", "error": "Malformed RDS snapshot identity"}
+                created = snapshot.get("SnapshotCreateTime")
+                if created is not None and not isinstance(created, datetime):
+                    return {"service": "rds", "status": "unhealthy", "error": "Malformed RDS snapshot time"}
+                tag_response = client.list_tags_for_resource(ResourceName=arn)
+                tag_list = tag_response.get("TagList")
+                if not isinstance(tag_list, list) or any(
+                    not isinstance(tag, dict) or not isinstance(tag.get("Key"), str)
+                    or not isinstance(tag.get("Value"), str) for tag in tag_list
+                ):
+                    return {"service": "rds", "status": "unhealthy", "error": "Malformed RDS snapshot tags"}
+                rows.append({
+                    "identifier": identifier, "arn": arn,
+                    "db_instance_identifier": snapshot.get("DBInstanceIdentifier"),
+                    "engine": snapshot.get("Engine"), "status": snapshot.get("Status"),
+                    "snapshot_type": snapshot.get("SnapshotType"),
+                    "storage_gib": snapshot.get("AllocatedStorage"),
+                    "encrypted": snapshot.get("Encrypted"), "kms_key_id": snapshot.get("KmsKeyId"),
+                    "snapshot_create_time": created.isoformat() if created else None,
+                    "tags": {tag["Key"]: tag["Value"] for tag in tag_list},
+                })
+            next_marker = response.get("Marker")
+            if next_marker is not None and (not isinstance(next_marker, str) or not next_marker):
+                return {"service": "rds", "status": "unhealthy", "error": "Malformed RDS snapshot cursor"}
+            return {"service": "rds", "status": "healthy", "snapshots": rows,
+                    "next_marker": next_marker, "is_truncated": bool(next_marker)}
+        except (BotoCoreError, ClientError) as error:
+            return {"service": "rds", "status": "unhealthy", "error": str(error)}
+
     def get_s3_buckets(self, max_buckets=1000, continuation_token=None, prefix=None):
         try:
             s3 = _aws_client("s3")

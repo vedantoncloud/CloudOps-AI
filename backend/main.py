@@ -633,6 +633,45 @@ def aws_rds_instances(request: Request, region: str | None = None, max_records: 
     return result
 
 
+@app.get("/cloud/aws/rds/snapshots")
+def aws_rds_snapshots(request: Request, region: str | None = None, max_records: int = 100, marker: str | None = None):
+    """Return a tenant-filtered, paginated view of RDS recovery snapshots."""
+    _validate_ec2_region(region)
+    if not 20 <= max_records <= 100:
+        raise HTTPException(status_code=400, detail="max_records must be between 20 and 100")
+    if marker is not None and (not marker or len(marker) > 4096):
+        raise HTTPException(status_code=400, detail="marker must contain 1 to 4096 characters")
+    result = _aws_resource_result(lambda: aws_service.get_rds_snapshots(
+        max_records=max_records, marker=marker, **({"region": region} if region else {})
+    ))
+    snapshots = result.get("snapshots")
+    if not isinstance(snapshots, list) or result.get("is_truncated") != bool(result.get("next_marker")):
+        _raise_aws_resource_unavailable()
+    next_marker = result.get("next_marker")
+    if next_marker is not None and (not isinstance(next_marker, str) or not next_marker):
+        _raise_aws_resource_unavailable()
+    for item in snapshots:
+        invalid = not isinstance(item, dict)
+        if not invalid:
+            invalid = (
+                not isinstance(item.get("identifier"), str) or not item["identifier"]
+                or not isinstance(item.get("arn"), str) or not item["arn"].startswith("arn:")
+                or any(item.get(key) is not None and not isinstance(item[key], str)
+                       for key in ("db_instance_identifier", "engine", "status", "snapshot_type", "kms_key_id", "snapshot_create_time"))
+                or (item.get("storage_gib") is not None and (not isinstance(item["storage_gib"], int)
+                    or isinstance(item["storage_gib"], bool) or item["storage_gib"] < 0))
+                or (item.get("encrypted") is not None and not isinstance(item["encrypted"], bool))
+                or not isinstance(item.get("tags"), dict)
+                or any(not isinstance(k, str) or not isinstance(v, str) for k, v in item["tags"].items())
+            )
+        if invalid:
+            _raise_aws_resource_unavailable()
+    if getattr(request.state, "tenant_scoped", False):
+        result = dict(result)
+        result["snapshots"] = [item for item in snapshots if _resource_tenant({"tags": item["tags"]}) == request.state.tenant_id]
+    return result
+
+
 @app.get("/cloud/aws/s3/buckets")
 def aws_s3_buckets(
     request: Request,

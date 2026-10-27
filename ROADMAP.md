@@ -24,6 +24,8 @@
 
 **RDS filtering update:** 2026-10-27. Operators can filter regional RDS DB instance inventory by engine and lifecycle status before AWS pagination. Filter inputs are validated, provider filters are applied with each paged request, tenant ownership filtering remains in force, and the console retains selected filters while paging. Focused provider, API validation/authorization/tenant, and console tests pass (8 tests).
 
+**RDS recovery update:** 2026-10-27. Operators can review paginated automated and manual RDS snapshots by region, including database, lifecycle status, type, creation time, size, encryption, and KMS key, with console CSV export. Token-mode results require matching per-snapshot `CloudOpsTenantId` tags; tag/provider failures fail closed with sanitized errors. Invalid page bounds, malformed provider contracts and repeated UI cursors are covered; focused RDS inventory, snapshot API/provider, and console regression tests pass (11 tests).
+
 Operators can inspect each EC2 instance's attached security groups and ingress sources in the regional details panel, including IPv4/IPv6 CIDRs, prefix lists, and referenced security groups. Tenant ownership is checked before rule lookup; malformed or unavailable AWS responses fail closed, and unattached groups/rules have explicit empty states.
 
 EC2 instance security-group inspection also shows outbound rules and their destinations alongside inbound rules. Tenant ownership is checked before lookup; malformed or unavailable provider data fails closed, and empty inbound/outbound rule sets are labeled explicitly in the console.
