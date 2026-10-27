@@ -69,3 +69,70 @@ def test_audit_database_backup_maps_unavailable_store_to_sanitized_503(monkeypat
     assert response.status_code == 503
     assert response.json() == {"detail": "Audit database backup unavailable"}
     assert "private.db" not in response.text
+
+
+def test_action_plan_database_backup_is_admin_only_and_integrity_checked(monkeypatch, tmp_path):
+    from autonomy import api
+
+    source = tmp_path / "plans.db"
+    with sqlite3.connect(source) as connection:
+        connection.execute("CREATE TABLE action_plans (action_id TEXT)")
+        connection.execute("INSERT INTO action_plans VALUES ('plan-1')")
+    monkeypatch.setattr(api, "action_plan_store", type("Store", (), {"database_path": source})())
+
+    denied = make_client("reader").get(
+        "/autonomy/audit/database/backup/action-plans", headers={"Authorization": "Bearer test-token"}
+    )
+    assert denied.status_code == 403
+
+    response = make_client().get(
+        "/autonomy/audit/database/backup/action-plans", headers={"Authorization": "Bearer test-token"}
+    )
+    assert response.status_code == 200
+    backup = tmp_path / "plans-backup.db"
+    backup.write_bytes(response.content)
+    with sqlite3.connect(backup) as connection:
+        assert connection.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+        assert connection.execute("SELECT action_id FROM action_plans").fetchone() == ("plan-1",)
+
+
+def test_gitops_database_backup_maps_unavailable_store_to_sanitized_503(monkeypatch):
+    from autonomy import gitops_api
+
+    monkeypatch.setattr(gitops_api, "registry", type("Registry", (), {"database_path": "/missing/private.db"})())
+    response = make_client().get(
+        "/autonomy/audit/database/backup/gitops", headers={"Authorization": "Bearer test-token"}
+    )
+    assert response.status_code == 503
+    assert response.json() == {"detail": "GitOps database backup unavailable"}
+    assert "private.db" not in response.text
+
+
+def test_gitops_database_backup_preserves_store_data(monkeypatch, tmp_path):
+    from autonomy import gitops_api
+
+    source = tmp_path / "gitops.db"
+    with sqlite3.connect(source) as connection:
+        connection.execute("CREATE TABLE gitops_change_sets (change_id TEXT)")
+        connection.execute("INSERT INTO gitops_change_sets VALUES ('change-1')")
+    monkeypatch.setattr(gitops_api, "registry", type("Registry", (), {"database_path": source})())
+    before = source.read_bytes()
+
+    response = make_client().get(
+        "/autonomy/audit/database/backup/gitops", headers={"Authorization": "Bearer test-token"}
+    )
+
+    assert response.status_code == 200
+    backup = tmp_path / "gitops-backup.db"
+    backup.write_bytes(response.content)
+    with sqlite3.connect(backup) as connection:
+        assert connection.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+        assert connection.execute("SELECT change_id FROM gitops_change_sets").fetchone() == ("change-1",)
+    assert source.read_bytes() == before
+
+
+def test_unknown_database_backup_store_is_rejected():
+    response = make_client().get(
+        "/autonomy/audit/database/backup/other", headers={"Authorization": "Bearer test-token"}
+    )
+    assert response.status_code == 404

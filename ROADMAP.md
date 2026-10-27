@@ -14,6 +14,8 @@
 
 **Recovery update:** 2026-10-27. Administrators can download a consistent live SQLite snapshot of the audit store through an admin-only endpoint. The source opens read-only, the online backup is integrity-checked before streaming, and failures return a sanitized `503`; focused backup, authorization, and audit-chain tests pass. Restore drills and backup workflows for the action-plan and GitOps stores remain outstanding.
 
+**Recovery update:** 2026-10-27. The same admin-only online SQLite backup API now supports the durable action-plan and GitOps stores, with per-store integrity checks and sanitized unavailable-store errors. Focused backup tests cover integrity, authorization, unknown stores, and unavailable databases. Restore drills remain outstanding.
+
 Operators can inspect each EC2 instance's attached security groups and ingress sources in the regional details panel, including IPv4/IPv6 CIDRs, prefix lists, and referenced security groups. Tenant ownership is checked before rule lookup; malformed or unavailable AWS responses fail closed, and unattached groups/rules have explicit empty states.
 
 EC2 instance security-group inspection also shows outbound rules and their destinations alongside inbound rules. Tenant ownership is checked before lookup; malformed or unavailable provider data fails closed, and empty inbound/outbound rule sets are labeled explicitly in the console.

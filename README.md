@@ -187,10 +187,12 @@ Administrators can download a consistent snapshot of the live audit database
 from `GET /autonomy/audit/database/backup`. The endpoint requires an admin
 bearer token, opens the configured database read-only, uses SQLite's online
 backup API, checks the snapshot with `PRAGMA integrity_check`, and streams the
-file without retaining a server-side copy. Store the download separately with
-access controls; the temporary snapshot is removed after streaming. This backs
-up the audit database only; action-plan and GitOps stores need their own backup
-procedure.
+file without retaining a server-side copy. The same admin-only API provides
+`GET /autonomy/audit/database/backup/action-plans` and
+`GET /autonomy/audit/database/backup/gitops` for the durable action-plan and
+GitOps stores. Each store is snapshotted independently; the API does not create
+a cross-database transaction. Store downloads separately with access controls;
+temporary snapshots are removed after streaming.
 
 Store backups separately with access controls and a tested restore window. To
 recover, stop the service, preserve the damaged database as evidence, restore

@@ -84,14 +84,13 @@ def export_verifiable_audit_chain(request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=503, detail="Audit chain export unavailable") from exc
 
 
-@router.get("/database/backup", response_class=StreamingResponse)
-def download_audit_database_backup(request: Request) -> StreamingResponse:
+def _download_sqlite_backup(request: Request, store_name: str, source_database: str | Path) -> StreamingResponse:
     """Download a consistent online SQLite snapshot for offline recovery."""
     require_role(request.state.principal, "admin")
     snapshot_path: str | None = None
     try:
-        source_path = Path(audit_trail.database_path).resolve(strict=True)
-        descriptor, snapshot_path = tempfile.mkstemp(prefix="cloudops-audit-", suffix=".db")
+        source_path = Path(source_database).resolve(strict=True)
+        descriptor, snapshot_path = tempfile.mkstemp(prefix=f"cloudops-{store_name}-", suffix=".db")
         os.close(descriptor)
         with sqlite3.connect(
             f"{source_path.as_uri()}?mode=ro", uri=True, timeout=5
@@ -100,7 +99,7 @@ def download_audit_database_backup(request: Request) -> StreamingResponse:
             result = destination.execute("PRAGMA integrity_check").fetchone()
             if not result or result[0] != "ok":
                 raise sqlite3.DatabaseError("snapshot integrity check failed")
-        filename = f"cloudops-audit-{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}.db"
+        filename = f"cloudops-{store_name}-{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}.db"
 
         def stream_snapshot():
             try:
@@ -124,7 +123,32 @@ def download_audit_database_backup(request: Request) -> StreamingResponse:
                 os.unlink(snapshot_path)
             except OSError:
                 pass
-        raise HTTPException(status_code=503, detail="Audit database backup unavailable") from exc
+        display_name = {"audit": "Audit", "action-plans": "Action plan", "gitops": "GitOps"}[store_name]
+        raise HTTPException(status_code=503, detail=f"{display_name} database backup unavailable") from exc
+
+
+@router.get("/database/backup", response_class=StreamingResponse)
+def download_audit_database_backup(request: Request) -> StreamingResponse:
+    return _download_sqlite_backup(request, "audit", audit_trail.database_path)
+
+
+@router.get("/database/backup/{store_name}", response_class=StreamingResponse)
+def download_operational_database_backup(store_name: str, request: Request) -> StreamingResponse:
+    """Back up one explicitly supported operational SQLite store."""
+    require_role(request.state.principal, "admin")
+    if store_name == "action-plans":
+        from autonomy.api import action_plan_store
+
+        source = action_plan_store.database_path
+    elif store_name == "gitops":
+        from autonomy.gitops_api import registry
+
+        source = registry.database_path
+        if source is None:
+            raise HTTPException(status_code=503, detail="GitOps database backup unavailable")
+    else:
+        raise HTTPException(status_code=404, detail="Unknown database backup store")
+    return _download_sqlite_backup(request, store_name, source)
 
 
 def _filter_audit_events(
