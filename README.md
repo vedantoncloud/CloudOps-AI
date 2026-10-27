@@ -202,6 +202,23 @@ its final hash and event count with the most recent external checkpoint. If
 they differ, preserve both copies and investigate before resuming normal audit
 operations; do not silently replace the checkpoint or rewrite the chain.
 
+Before an incident, run a non-destructive restore drill against each downloaded
+backup. The tool checks SQLite integrity, loads the store using the application's
+own persistence code in an isolated temporary copy, and verifies the audit hash
+chain. It never opens the supplied backup for writing:
+
+```powershell
+python backend/verify_database_backup.py audit path\to\cloudops-audit-backup.db
+python backend/verify_database_backup.py action-plans path\to\cloudops-action-plans-backup.db
+python backend/verify_database_backup.py gitops path\to\cloudops-gitops-backup.db
+```
+
+A successful drill prints JSON with `status: ok` and the number of records
+loaded. A failed integrity, schema, deserialization, or audit-chain check exits
+with status 1 and a concise diagnostic. A successful drill validates a backup
+copy; it does not replace a production restore rehearsal or verify external
+checkpoints and application readiness.
+
 GitOps change sets and their lifecycle state are stored in SQLite so proposals,
 approvals, dry-run applies, and verification results survive process restarts.
 The default file is `backend/gitops_changes.db`; set
