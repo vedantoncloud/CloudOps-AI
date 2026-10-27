@@ -1,0 +1,12 @@
+.git
+.pytest_cache
+**/__pycache__
+**/*.py[cod]
+**/*.db
+.env
+.env.*
+.venv
+venv
+node_modules
+dist
+TASK280_AUDIT_REPORT.txt

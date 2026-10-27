@@ -123,6 +123,41 @@ python -m pytest backend/tests
 
 GitHub Actions runs this suite on pushes and pull requests with Python 3.13.
 
+## Container deployment
+
+Build the production image from the repository root:
+
+```sh
+docker build -t cloudops-ai:latest .
+```
+
+The image runs as an unprivileged `cloudops` user, listens on port 8000, and
+defaults to `CLOUDOPS_ENV=production` and `CLOUDOPS_AUTH_MODE=token`. It exits
+at startup if token credentials are missing or invalid. Provide a protected
+runtime environment file outside the repository, then start it with a durable
+volume for audit, idempotency, action-plan, and GitOps state:
+
+```sh
+docker volume create cloudops-data
+docker run -d --name cloudops-ai --restart unless-stopped \
+  --env-file /secure/path/cloudops-ai.env \
+  -p 127.0.0.1:8000:8000 \
+  -v cloudops-data:/var/lib/cloudops \
+  cloudops-ai:latest
+```
+
+The environment file must define `CLOUDOPS_API_TOKENS` as the JSON token
+registry and `CLOUDOPS_TENANT_AWS_ROLES` as the tenant-to-role ARN map. Set
+`AWS_DEFAULT_REGION` for the deployment. In production, tenant AWS requests
+fail closed when a tenant has no role mapping. Supply AWS credentials through
+the host's workload identity mechanism (such as an ECS task role or EC2
+instance profile); avoid baking credentials into the image. The container
+stores its four SQLite databases in `/var/lib/cloudops`, so keep the named
+volume across upgrades and back it up using the documented admin backup APIs.
+Terminate TLS at a trusted reverse proxy and expose the container only on a
+private interface; the sample port binding is loopback-only. `GET /health` is
+the liveness probe and `GET /ready` checks AWS and persistent-store readiness.
+
 The API applies a per-process fixed-window request limit of 120 requests per
 authenticated subject (or client address before authentication) per 60 seconds.
 Set `CLOUDOPS_RATE_LIMIT_REQUESTS` and `CLOUDOPS_RATE_LIMIT_WINDOW_SECONDS` to
