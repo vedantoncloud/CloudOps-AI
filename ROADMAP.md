@@ -20,6 +20,8 @@
 
 **Console update:** 2026-10-27. Operators can browse the regional RDS inventory from the Operations console, continue through marker-based pages with repeated-cursor protection, review database configuration and endpoint metadata, and export loaded instances as spreadsheet-safe CSV. Empty inventory and provider/API failures have visible status messages. Focused console, RDS authorization/provider, and backup recovery regression tests pass (17 tests).
 
+**RDS posture update:** 2026-10-27. Regional RDS inventory now surfaces public accessibility, backup retention days, and deletion protection in the console and CSV. Missing provider values remain explicitly unknown; the API validates present values and rejects invalid backup-retention ranges. Focused RDS provider, API authorization/tenant, validation, and console tests pass.
+
 Operators can inspect each EC2 instance's attached security groups and ingress sources in the regional details panel, including IPv4/IPv6 CIDRs, prefix lists, and referenced security groups. Tenant ownership is checked before rule lookup; malformed or unavailable AWS responses fail closed, and unattached groups/rules have explicit empty states.
 
 EC2 instance security-group inspection also shows outbound rules and their destinations alongside inbound rules. Tenant ownership is checked before lookup; malformed or unavailable provider data fails closed, and empty inbound/outbound rule sets are labeled explicitly in the console.

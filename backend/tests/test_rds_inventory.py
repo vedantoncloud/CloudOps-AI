@@ -13,7 +13,8 @@ def record(identifier="orders-db", tenant="tenant-a"):
         "engine": "postgres", "engine_version": "16.1", "status": "available",
         "instance_class": "db.t4g.medium", "storage_gib": 100, "encrypted": True,
         "multi_az": False, "availability_zone": "us-east-1a", "endpoint": "db.example.test",
-        "port": 5432, "tags": {"CloudOpsTenantId": tenant},
+        "port": 5432, "publicly_accessible": False, "backup_retention_days": 7,
+        "deletion_protection": True, "tags": {"CloudOpsTenantId": tenant},
     }
 
 
@@ -21,7 +22,7 @@ def test_rds_service_maps_pagination_endpoint_and_tags(monkeypatch):
     class Client:
         def describe_db_instances(self, **kwargs):
             assert kwargs == {"MaxRecords": 20, "Marker": "cursor"}
-            return {"DBInstances": [{"DBInstanceIdentifier": "orders-db", "DBInstanceArn": "arn:aws:rds:us-east-1:123456789012:db:orders-db", "Endpoint": {"Address": "db.example.test", "Port": 5432}, "StorageEncrypted": True, "MultiAZ": False, "AllocatedStorage": 100}], "Marker": "next"}
+            return {"DBInstances": [{"DBInstanceIdentifier": "orders-db", "DBInstanceArn": "arn:aws:rds:us-east-1:123456789012:db:orders-db", "Endpoint": {"Address": "db.example.test", "Port": 5432}, "StorageEncrypted": True, "MultiAZ": False, "AllocatedStorage": 100, "PubliclyAccessible": False, "BackupRetentionPeriod": 7, "DeletionProtection": True}], "Marker": "next"}
         def list_tags_for_resource(self, **kwargs):
             assert kwargs["ResourceName"].endswith(":db:orders-db")
             return {"TagList": [{"Key": "CloudOpsTenantId", "Value": "tenant-a"}]}
@@ -30,6 +31,9 @@ def test_rds_service_maps_pagination_endpoint_and_tags(monkeypatch):
     assert result["status"] == "healthy" and result["is_truncated"]
     assert result["instances"][0]["endpoint"] == "db.example.test"
     assert result["instances"][0]["tags"]["CloudOpsTenantId"] == "tenant-a"
+    assert result["instances"][0]["publicly_accessible"] is False
+    assert result["instances"][0]["backup_retention_days"] == 7
+    assert result["instances"][0]["deletion_protection"] is True
 
 
 def test_rds_service_fails_closed_on_provider_or_malformed_tag_response(monkeypatch):
@@ -80,3 +84,31 @@ def test_rds_endpoint_sanitizes_unavailable_and_malformed_payloads(monkeypatch):
         "next_marker": None, "is_truncated": False,
     })
     assert client.get("/cloud/aws/rds/instances").status_code == 503
+
+
+def test_rds_endpoint_rejects_invalid_posture_fields_and_preserves_unknowns(monkeypatch):
+    client = TestClient(main.app)
+    payload = {"service": "rds", "status": "healthy", "instances": [record()],
+               "next_marker": None, "is_truncated": False}
+    monkeypatch.setattr(main.aws_service, "get_rds_instances", lambda **kwargs: payload)
+    assert client.get("/cloud/aws/rds/instances").status_code == 200
+
+    for field, value in (("publicly_accessible", "false"), ("deletion_protection", 0),
+                         ("backup_retention_days", -1), ("backup_retention_days", 36)):
+        malformed = record() | {field: value}
+        monkeypatch.setattr(main.aws_service, "get_rds_instances", lambda **kwargs: {
+            "service": "rds", "status": "healthy", "instances": [malformed],
+            "next_marker": None, "is_truncated": False,
+        })
+        response = client.get("/cloud/aws/rds/instances")
+        assert response.status_code == 503
+
+    unknown = record() | {"publicly_accessible": None, "deletion_protection": None,
+                          "backup_retention_days": None}
+    monkeypatch.setattr(main.aws_service, "get_rds_instances", lambda **kwargs: {
+        "service": "rds", "status": "healthy", "instances": [unknown],
+        "next_marker": None, "is_truncated": False,
+    })
+    response = client.get("/cloud/aws/rds/instances")
+    assert response.status_code == 200
+    assert response.json()["instances"][0]["backup_retention_days"] is None

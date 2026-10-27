@@ -7,6 +7,9 @@ def test_console_exposes_regional_paginated_rds_inventory_and_csv_export():
     html = TestClient(main.app).get("/console").text
     assert 'id="loadRdsInstances"' in html
     assert 'id="rdsRows"' in html
+    assert "Public access" in html
+    assert "Backup retention" in html
+    assert "Deletion protection" in html
     assert 'id="moreRdsInstances"' in html
     assert 'id="exportRdsInstances"' in html
     assert 'api("/cloud/aws/rds/instances?"+params)' in html
@@ -15,5 +18,7 @@ def test_console_exposes_regional_paginated_rds_inventory_and_csv_export():
     assert 'rdsSeenMarkers.has(next)' in html
     assert 'row.map(csvCell)' in html
     assert 'rds-instances.csv' in html
+    assert '"Publicly accessible","Backup retention days","Deletion protection"' in html
+    assert 'i.publicly_accessible==null?"Unknown"' in html
     assert 'no RDS instances found.' in html
     assert 'RDS inventory response is incomplete.' in html
