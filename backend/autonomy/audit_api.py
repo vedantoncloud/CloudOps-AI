@@ -1,9 +1,13 @@
 import json
 import os
+import sqlite3
+import tempfile
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from autonomy.audit import AuditEvent
@@ -78,6 +82,49 @@ def export_verifiable_audit_chain(request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=503, detail="Audit chain integrity check failed") from exc
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Audit chain export unavailable") from exc
+
+
+@router.get("/database/backup", response_class=StreamingResponse)
+def download_audit_database_backup(request: Request) -> StreamingResponse:
+    """Download a consistent online SQLite snapshot for offline recovery."""
+    require_role(request.state.principal, "admin")
+    snapshot_path: str | None = None
+    try:
+        source_path = Path(audit_trail.database_path).resolve(strict=True)
+        descriptor, snapshot_path = tempfile.mkstemp(prefix="cloudops-audit-", suffix=".db")
+        os.close(descriptor)
+        with sqlite3.connect(
+            f"{source_path.as_uri()}?mode=ro", uri=True, timeout=5
+        ) as source, sqlite3.connect(snapshot_path, timeout=5) as destination:
+            source.backup(destination)
+            result = destination.execute("PRAGMA integrity_check").fetchone()
+            if not result or result[0] != "ok":
+                raise sqlite3.DatabaseError("snapshot integrity check failed")
+        filename = f"cloudops-audit-{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}.db"
+
+        def stream_snapshot():
+            try:
+                with open(snapshot_path, "rb") as snapshot:
+                    while chunk := snapshot.read(64 * 1024):
+                        yield chunk
+            finally:
+                try:
+                    os.unlink(snapshot_path)
+                except OSError:
+                    pass
+
+        return StreamingResponse(
+            stream_snapshot(),
+            media_type="application/vnd.sqlite3",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except Exception as exc:
+        if snapshot_path:
+            try:
+                os.unlink(snapshot_path)
+            except OSError:
+                pass
+        raise HTTPException(status_code=503, detail="Audit database backup unavailable") from exc
 
 
 def _filter_audit_events(

@@ -183,18 +183,14 @@ Restrict database and export access to the operations administrators who need
 it. The chain detects changes relative to a trusted checkpoint; it cannot
 restore deleted or rewritten records by itself.
 
-For a consistent live SQLite backup, use SQLite's online backup API rather
-than copying the database file while the service is running:
-
-```python
-import sqlite3
-import os
-
-source_path = os.environ.get("CLOUDOPS_AUDIT_EVENTS_DB", "cloudops_audit_events.db")
-with sqlite3.connect(source_path) as source:
-    with sqlite3.connect("audit-backup.db") as destination:
-        source.backup(destination)
-```
+Administrators can download a consistent snapshot of the live audit database
+from `GET /autonomy/audit/database/backup`. The endpoint requires an admin
+bearer token, opens the configured database read-only, uses SQLite's online
+backup API, checks the snapshot with `PRAGMA integrity_check`, and streams the
+file without retaining a server-side copy. Store the download separately with
+access controls; the temporary snapshot is removed after streaming. This backs
+up the audit database only; action-plan and GitOps stores need their own backup
+procedure.
 
 Store backups separately with access controls and a tested restore window. To
 recover, stop the service, preserve the damaged database as evidence, restore
