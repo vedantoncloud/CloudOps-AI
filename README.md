@@ -39,7 +39,10 @@ Operators can inspect paginated RDS DB instance inventory with engine/version,
 status, instance class, allocated storage, encryption, Multi-AZ setting,
 availability zone, and connection endpoint. In token mode, each instance's
 `CloudOpsTenantId` tag is verified before it is returned; if tag access fails,
-the request fails closed. The API is `GET /cloud/aws/rds/instances` and accepts
+the request fails closed. In the Operations console, choose **Inspect RDS
+instances** to browse the selected region, continue through provider pages, and
+export loaded results as a spreadsheet-safe CSV. The API is
+`GET /cloud/aws/rds/instances` and accepts
 an optional `region`, `max_records` (20–100), and continuation `marker`. Grant
 the AWS role `rds:DescribeDBInstances` and `rds:ListTagsForResource`. This is a
 read-only inventory; it does not connect to databases or expose credentials.
