@@ -958,13 +958,47 @@ def aws_s3_objects(
             detail="max_keys must be between 1 and 1000",
         )
 
-    return _aws_resource_result(lambda: aws_service.get_s3_objects(
+    result = _aws_resource_result(lambda: aws_service.get_s3_objects(
         bucket_name,
         prefix=prefix,
         max_keys=max_keys,
         continuation_token=continuation_token,
         delimiter=delimiter,
     ))
+    objects = result.get("objects")
+    common_prefixes = result.get("common_prefixes")
+    truncated = result.get("is_truncated")
+    next_token = result.get("next_continuation_token")
+    if (
+        result.get("service") != "s3"
+        or result.get("bucket") != bucket_name
+        or result.get("prefix") != prefix
+        or not isinstance(objects, list)
+        or any(
+            not isinstance(item, dict)
+            or not isinstance(item.get("key"), str)
+            or not item["key"]
+            or not isinstance(item.get("size"), int)
+            or isinstance(item["size"], bool)
+            or item["size"] < 0
+            or (
+                item.get("last_modified") is not None
+                and not isinstance(item["last_modified"], str)
+            )
+            for item in objects
+        )
+        or not isinstance(common_prefixes, list)
+        or any(not isinstance(item, str) or not item for item in common_prefixes)
+        or not isinstance(truncated, bool)
+        or (
+            next_token is not None
+            and (not isinstance(next_token, str) or not next_token)
+        )
+        or (truncated and next_token is None)
+        or (not truncated and next_token is not None)
+    ):
+        _raise_aws_resource_unavailable()
+    return result
 
 
 @app.get("/cloud/aws/s3/buckets/{bucket_name}/objects/metadata")

@@ -670,6 +670,30 @@ def test_s3_inventory_reports_ownership_verification_outage(monkeypatch):
     assert response.json() == {"detail": "S3 ownership verification is unavailable"}
 
 
+def test_s3_object_listing_requires_authentication_and_hides_foreign_bucket(monkeypatch):
+    client = tenant_client(monkeypatch)
+    monkeypatch.setattr(main.aws_service, "get_s3_objects", lambda *_a, **_k: {
+        "service": "s3", "status": "healthy", "bucket": "owned", "prefix": None,
+        "objects": [], "common_prefixes": [], "is_truncated": False,
+        "next_continuation_token": None,
+    }, raising=False)
+
+    anonymous = client.get("/cloud/aws/s3/buckets/owned/objects")
+    foreign = client.get(
+        "/cloud/aws/s3/buckets/foreign/objects",
+        headers={"Authorization": "Bearer token-a"},
+    )
+    owned = client.get(
+        "/cloud/aws/s3/buckets/owned/objects",
+        headers={"Authorization": "Bearer token-a"},
+    )
+
+    assert anonymous.status_code == 401
+    assert foreign.status_code == 404
+    assert owned.status_code == 200
+    assert owned.json()["objects"] == []
+
+
 @pytest.mark.parametrize("failure_page", [1, 2])
 def test_s3_inventory_sanitizes_provider_exceptions_on_every_page(monkeypatch, failure_page):
     client = tenant_client(monkeypatch)
