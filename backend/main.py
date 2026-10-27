@@ -583,15 +583,21 @@ def aws_ec2_snapshots(request: Request, region: str | None = None, max_results: 
 
 
 @app.get("/cloud/aws/rds/instances")
-def aws_rds_instances(request: Request, region: str | None = None, max_records: int = 100, marker: str | None = None):
+def aws_rds_instances(request: Request, region: str | None = None, max_records: int = 100, marker: str | None = None,
+                      engine: str | None = None, status: str | None = None):
     """Return a tenant-filtered, paginated view of RDS database instances."""
     _validate_ec2_region(region)
     if not 20 <= max_records <= 100:
         raise HTTPException(status_code=400, detail="max_records must be between 20 and 100")
     if marker is not None and (not marker or len(marker) > 4096):
         raise HTTPException(status_code=400, detail="marker must contain 1 to 4096 characters")
+    if engine is not None and (not engine or len(engine) > 64 or not re.fullmatch(r"[a-z][a-z0-9-]*", engine)):
+        raise HTTPException(status_code=400, detail="engine must be a valid RDS engine name")
+    if status is not None and (not status or len(status) > 64 or not re.fullmatch(r"[a-z][a-z0-9-]*", status)):
+        raise HTTPException(status_code=400, detail="status must be a valid RDS instance status")
     result = _aws_resource_result(lambda: aws_service.get_rds_instances(
-        max_records=max_records, marker=marker, **({"region": region} if region else {})
+        max_records=max_records, marker=marker, engine=engine, status=status,
+        **({"region": region} if region else {})
     ))
     instances = result.get("instances")
     if not isinstance(instances, list) or result.get("is_truncated") != bool(result.get("next_marker")):

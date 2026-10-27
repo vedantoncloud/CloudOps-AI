@@ -694,11 +694,18 @@ class AWSService:
         except (BotoCoreError, ClientError) as error:
             return {"service": "ec2", "status": "unhealthy", "error": str(error)}
 
-    def get_rds_instances(self, max_records=100, marker=None, region=None):
+    def get_rds_instances(self, max_records=100, marker=None, region=None, engine=None, status=None):
         """List RDS instances with configuration and ownership tags."""
         try:
             client = _aws_client("rds", **({"region_name": region} if region else {}))
             params = {"MaxRecords": max_records}
+            filters = []
+            if engine:
+                filters.append({"Name": "engine", "Values": [engine]})
+            if status:
+                filters.append({"Name": "db-instance-status", "Values": [status]})
+            if filters:
+                params["Filters"] = filters
             if marker:
                 params["Marker"] = marker
             response = client.describe_db_instances(**params)

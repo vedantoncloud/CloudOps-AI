@@ -36,6 +36,27 @@ def test_rds_service_maps_pagination_endpoint_and_tags(monkeypatch):
     assert result["instances"][0]["deletion_protection"] is True
 
 
+def test_rds_service_applies_engine_and_status_filters_before_pagination(monkeypatch):
+    class Client:
+        def describe_db_instances(self, **kwargs):
+            assert kwargs == {
+                "MaxRecords": 20,
+                "Marker": "cursor",
+                "Filters": [
+                    {"Name": "engine", "Values": ["postgres"]},
+                    {"Name": "db-instance-status", "Values": ["available"]},
+                ],
+            }
+            return {"DBInstances": [], "Marker": "next"}
+
+    monkeypatch.setattr("services.aws_service._aws_client", lambda *a, **k: Client())
+    result = AWSService().get_rds_instances(
+        max_records=20, marker="cursor", engine="postgres", status="available"
+    )
+    assert result["status"] == "healthy"
+    assert result["instances"] == [] and result["next_marker"] == "next"
+
+
 def test_rds_service_fails_closed_on_provider_or_malformed_tag_response(monkeypatch):
     class Denied:
         def describe_db_instances(self, **kwargs):
@@ -71,6 +92,13 @@ def test_rds_endpoint_validation_authorization_and_tenant_filter(monkeypatch):
     response = client.get("/cloud/aws/rds/instances", headers={"Authorization": "Bearer reader"})
     assert response.status_code == 200
     assert [row["identifier"] for row in response.json()["instances"]] == ["orders-db"]
+    filtered = client.get(
+        "/cloud/aws/rds/instances?engine=postgres&status=available&marker=cursor",
+        headers={"Authorization": "Bearer reader"},
+    )
+    assert filtered.status_code == 200
+    assert calls[-1] == {"max_records": 100, "marker": "cursor", "engine": "postgres",
+                         "status": "available"}
     assert client.post("/cloud/aws/rds/instances", headers={"Authorization": "Bearer reader"}).status_code == 403
 
 
@@ -84,6 +112,16 @@ def test_rds_endpoint_sanitizes_unavailable_and_malformed_payloads(monkeypatch):
         "next_marker": None, "is_truncated": False,
     })
     assert client.get("/cloud/aws/rds/instances").status_code == 503
+
+
+def test_rds_endpoint_rejects_malformed_filters_before_provider_access(monkeypatch):
+    calls = []
+    monkeypatch.setattr(main.aws_service, "get_rds_instances", lambda **kwargs: calls.append(kwargs))
+    client = TestClient(main.app)
+    for query in ("engine=Postgres", "engine=", "engine=" + "a" * 65,
+                  "status=", "status=available%20or%20failed", "status=" + "a" * 65):
+        assert client.get("/cloud/aws/rds/instances?" + query).status_code == 400
+    assert calls == []
 
 
 def test_rds_endpoint_rejects_invalid_posture_fields_and_preserves_unknowns(monkeypatch):
