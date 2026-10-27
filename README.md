@@ -107,8 +107,21 @@ role for every tenant before routing tenant AWS requests in production.
 
 ## Runtime
 
+- Python 3.13
 - FastAPI
 - AWS
+
+## Development and tests
+
+From the repository root, install the pinned backend dependencies and run the
+backend suite:
+
+```sh
+python -m pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+python -m pytest backend/tests
+```
+
+GitHub Actions runs this suite on pushes and pull requests with Python 3.13.
 
 The API applies a per-process fixed-window request limit of 120 requests per
 authenticated subject (or client address before authentication) per 60 seconds.

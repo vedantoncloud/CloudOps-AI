@@ -26,6 +26,8 @@
 
 **RDS recovery update:** 2026-10-27. Operators can review paginated automated and manual RDS snapshots by region, including database, lifecycle status, type, creation time, size, encryption, and KMS key, with console CSV export. Token-mode results require matching per-snapshot `CloudOpsTenantId` tags; tag/provider failures fail closed with sanitized errors. Invalid page bounds, malformed provider contracts and repeated UI cursors are covered; focused RDS inventory, snapshot API/provider, and console regression tests pass (11 tests).
 
+**CI update:** 2026-10-27. Python 3.13 is the declared backend runtime. GitHub Actions installs the pinned runtime and development dependencies and runs the backend test suite on pushes and pull requests. The local targeted RDS and authorization suite passed (32 tests); a broad local run was interrupted after environment-sensitive failures while protected local SQLite files were present, so it is not recorded as a passing full-suite run.
+
 Operators can inspect each EC2 instance's attached security groups and ingress sources in the regional details panel, including IPv4/IPv6 CIDRs, prefix lists, and referenced security groups. Tenant ownership is checked before rule lookup; malformed or unavailable AWS responses fail closed, and unattached groups/rules have explicit empty states.
 
 EC2 instance security-group inspection also shows outbound rules and their destinations alongside inbound rules. Tenant ownership is checked before lookup; malformed or unavailable provider data fails closed, and empty inbound/outbound rule sets are labeled explicitly in the console.
