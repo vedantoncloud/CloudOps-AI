@@ -694,6 +694,52 @@ class AWSService:
         except (BotoCoreError, ClientError) as error:
             return {"service": "ec2", "status": "unhealthy", "error": str(error)}
 
+    def get_rds_instances(self, max_records=100, marker=None, region=None):
+        """List RDS instances with configuration and ownership tags."""
+        try:
+            client = _aws_client("rds", **({"region_name": region} if region else {}))
+            params = {"MaxRecords": max_records}
+            if marker:
+                params["Marker"] = marker
+            response = client.describe_db_instances(**params)
+            instances = response.get("DBInstances")
+            if not isinstance(instances, list):
+                return {"service": "rds", "status": "unhealthy", "error": "Malformed RDS response"}
+            rows = []
+            for instance in instances:
+                if not isinstance(instance, dict) or not isinstance(instance.get("DBInstanceIdentifier"), str):
+                    return {"service": "rds", "status": "unhealthy", "error": "Malformed RDS record"}
+                arn = instance.get("DBInstanceArn")
+                if not isinstance(arn, str) or not arn:
+                    return {"service": "rds", "status": "unhealthy", "error": "Malformed RDS ARN"}
+                tag_response = client.list_tags_for_resource(ResourceName=arn)
+                tag_list = tag_response.get("TagList")
+                if not isinstance(tag_list, list) or any(
+                    not isinstance(tag, dict) or not isinstance(tag.get("Key"), str)
+                    or not isinstance(tag.get("Value"), str) for tag in tag_list
+                ):
+                    return {"service": "rds", "status": "unhealthy", "error": "Malformed RDS tags"}
+                endpoint = instance.get("Endpoint")
+                if endpoint is not None and not isinstance(endpoint, dict):
+                    return {"service": "rds", "status": "unhealthy", "error": "Malformed RDS endpoint"}
+                rows.append({
+                    "identifier": instance["DBInstanceIdentifier"], "arn": arn,
+                    "engine": instance.get("Engine"), "engine_version": instance.get("EngineVersion"),
+                    "status": instance.get("DBInstanceStatus"), "instance_class": instance.get("DBInstanceClass"),
+                    "storage_gib": instance.get("AllocatedStorage"), "encrypted": instance.get("StorageEncrypted"),
+                    "multi_az": instance.get("MultiAZ"), "availability_zone": instance.get("AvailabilityZone"),
+                    "endpoint": endpoint.get("Address") if endpoint else None,
+                    "port": endpoint.get("Port") if endpoint else None,
+                    "tags": {tag["Key"]: tag["Value"] for tag in tag_list},
+                })
+            next_marker = response.get("Marker")
+            if next_marker is not None and (not isinstance(next_marker, str) or not next_marker):
+                return {"service": "rds", "status": "unhealthy", "error": "Malformed RDS page cursor"}
+            return {"service": "rds", "status": "healthy", "instances": rows,
+                    "next_marker": next_marker, "is_truncated": bool(next_marker)}
+        except (BotoCoreError, ClientError) as error:
+            return {"service": "rds", "status": "unhealthy", "error": str(error)}
+
     def get_s3_buckets(self, max_buckets=1000, continuation_token=None, prefix=None):
         try:
             s3 = _aws_client("s3")

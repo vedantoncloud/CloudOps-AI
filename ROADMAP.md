@@ -16,6 +16,8 @@
 
 **Recovery update:** 2026-10-27. Administrators can run `backend/verify_database_backup.py` against audit, action-plan, and GitOps backups. It checks SQLite integrity, loads application records using the store implementation in an isolated temporary copy, and verifies audit-chain integrity without writing to the supplied backup. Focused restore-drill, backup API, and audit-chain tests pass. Full incident restore procedures, external checkpoints, and retention policy work remain outstanding.
 
+**Inventory update:** 2026-10-27. Operators can inspect paginated RDS DB instance inventory by region, including engine, status, size, encryption, Multi-AZ placement, and endpoint metadata. Token-mode responses require successful per-instance tag lookup and include only instances tagged for the authenticated tenant. The route validates provider contracts and maps AWS failures to a sanitized `503`; focused authorization, tenant, validation, and provider-failure tests pass.
+
 Operators can inspect each EC2 instance's attached security groups and ingress sources in the regional details panel, including IPv4/IPv6 CIDRs, prefix lists, and referenced security groups. Tenant ownership is checked before rule lookup; malformed or unavailable AWS responses fail closed, and unattached groups/rules have explicit empty states.
 
 EC2 instance security-group inspection also shows outbound rules and their destinations alongside inbound rules. Tenant ownership is checked before lookup; malformed or unavailable provider data fails closed, and empty inbound/outbound rule sets are labeled explicitly in the console.
@@ -295,6 +297,7 @@ S3 object-version listing validates response identity, version row fields, and t
 - No supported Python runtime or automated dependency update/security workflow is documented.
 - EC2/S3 optimization insights remain qualitative and do not attribute Cost Explorer charges to tenants or individual resources; the admin-only account billing view reports daily shared-account totals.
 - EC2 inventory browsing, fleet-wide aggregate insights, and per-instance follow-up operations accept an explicit AWS region. Routes without a selected-region control use the configured default region.
+- Operators can inspect RDS DB instance inventory through a regional paginated API; tenant mode verifies `CloudOpsTenantId` per instance and fails closed when tag reads or provider responses are unavailable.
 - Operators can filter EC2 inventory by exact instance type at the AWS API before pagination; the console preserves the filter across pages and full CSV exports.
 - Operators can filter EC2 inventory by VPC, subnet, and Availability Zone at the AWS API before pagination; tenant scoping remains in effect, and the console preserves all three filters across pages and full CSV exports while showing placement IDs.
 - The checkout contains untracked SQLite database files. They were left untouched and are not part of this roadmap change.
