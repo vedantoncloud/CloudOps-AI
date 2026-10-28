@@ -23,7 +23,7 @@ class SecurityHeadersMiddleware:
                     (b"cross-origin-resource-policy", b"same-origin"),
                 ]
                 if scope.get("scheme") == "https":
-                    defaults.append((b"strict-transport-security", b"max-age=31536000; includeSubDomains"))
+                    defaults.append((b"strict-transport-security", b"max-age=31536000"))
                 headers.extend((name, value) for name, value in defaults if name not in present)
                 message = {**message, "headers": headers}
             await send(message)
