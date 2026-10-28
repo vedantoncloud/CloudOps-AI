@@ -29,6 +29,24 @@ def test_request_metrics_capture_success_failures_and_route_templates():
     assert "provider unavailable" not in output
 
 
+def test_request_logs_use_route_templates_instead_of_raw_resource_paths(caplog):
+    app = FastAPI()
+    app.add_middleware(RequestObservabilityMiddleware, metrics=RequestMetrics())
+
+    @app.get("/resources/{resource_id}")
+    def resource(resource_id: str):
+        return {"ok": True}
+
+    with caplog.at_level("INFO", logger="cloudops.http"):
+        response = TestClient(app).get("/resources/private-resource-123")
+
+    assert response.status_code == 200
+    records = [record for record in caplog.records if record.name == "cloudops.http"]
+    assert len(records) == 1
+    payload = __import__("json").loads(records[0].message)
+    assert payload["path"] == "/resources/{resource_id}"
+    assert "private-resource-123" not in records[0].message
+
 def test_metrics_text_escapes_label_values_and_empty_registry_is_valid():
     metrics = RequestMetrics()
     assert metrics.prometheus_text().endswith("\n")

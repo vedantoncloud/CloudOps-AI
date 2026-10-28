@@ -202,7 +202,8 @@ class RequestObservabilityMiddleware(BaseHTTPMiddleware):
                         "event": "http_request",
                         "request_id": request_id,
                         "method": request.method,
-                        "path": request.url.path,
+                        # Log the route template, not resource identifiers from the URL.
+                        "path": route,
                         "status_code": status_code,
                         "duration_ms": round((time.perf_counter() - started) * 1000, 2),
                     },
