@@ -50,14 +50,13 @@ class RequestSizeLimitMiddleware:
             await self._bad_request(scope, receive, send)
             return
         if content_lengths:
-            try:
-                declared_size = int(content_lengths[0])
-            except (TypeError, ValueError):
+            raw_length = content_lengths[0]
+            # Content-Length is a decimal DIGIT sequence; Python int() also
+            # accepts signs and underscores that are invalid in HTTP.
+            if not raw_length or any(byte < 48 or byte > 57 for byte in raw_length):
                 await self._bad_request(scope, receive, send)
                 return
-            if declared_size < 0:
-                await self._bad_request(scope, receive, send)
-                return
+            declared_size = int(raw_length)
             if declared_size > self.max_bytes:
                 await self._too_large(scope, receive, send)
                 return

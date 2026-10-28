@@ -113,6 +113,8 @@ def test_response_limit_configuration_must_be_positive(monkeypatch):
         [(b"content-length", b"4"), (b"content-length", b"8")],
         [(b"content-length", b"invalid")],
         [(b"content-length", b"-1")],
+        [(b"content-length", b"+1")],
+        [(b"content-length", b"1_0")],
         [(b"content-length", b"4"), (b"transfer-encoding", b"chunked")],
     ],
 )
