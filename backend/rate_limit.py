@@ -26,8 +26,15 @@ class RequestRateLimiter:
     MAX_CLIENTS = 10000
 
     def __init__(self, limit: int = 120, window_seconds: int = 60, clock=None):
-        if limit <= 0 or window_seconds <= 0:
-            raise ValueError("limit and window_seconds must be positive")
+        if (
+            not isinstance(limit, int)
+            or isinstance(limit, bool)
+            or not isinstance(window_seconds, int)
+            or isinstance(window_seconds, bool)
+            or limit <= 0
+            or window_seconds <= 0
+        ):
+            raise ValueError("limit and window_seconds must be positive integers")
         self.limit = limit
         self.window_seconds = window_seconds
         self.clock = clock or time.monotonic
