@@ -145,3 +145,37 @@ def test_multiple_findings_generate_multiple_plans():
         "enable_encryption",
         "enable_security_monitoring",
     ]
+
+
+def test_whitespace_only_resource_identifiers_are_rejected():
+    bad_finding = SecurityFinding(
+        resource_id="   ",
+        resource_type="s3",
+        finding_type=SecurityFindingType.PUBLIC_ACCESS,
+        severity=RiskLevel.HIGH,
+        description="Finding",
+    )
+
+    try:
+        SecurityRemediationEngine().create_plan(bad_finding)
+    except ValueError as exc:
+        assert str(exc) == "resource_id cannot be empty"
+    else:
+        raise AssertionError("Expected ValueError")
+
+
+def test_unknown_finding_type_is_rejected_with_a_clear_validation_error():
+    bad_finding = SecurityFinding(
+        resource_id="bucket-123",
+        resource_type="s3",
+        finding_type="unexpected",
+        severity=RiskLevel.HIGH,
+        description="Finding",
+    )
+
+    try:
+        SecurityRemediationEngine().create_plan(bad_finding)
+    except ValueError as exc:
+        assert str(exc) == "finding_type must be a SecurityFindingType"
+    else:
+        raise AssertionError("Expected ValueError")
