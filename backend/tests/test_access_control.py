@@ -60,6 +60,25 @@ def test_ambiguous_or_malformed_authorization_headers_are_rejected(headers):
     assert response.status_code == 401
     assert response.headers["www-authenticate"] == "Bearer"
 
+@pytest.mark.parametrize("control", ["\\t", "\\r", "\\n"])
+def test_bearer_tokens_reject_ascii_control_whitespace(control):
+    response = build_client().get(
+        "/resources",
+        headers={"Authorization": f"Bearer reader-a{control}"},
+    )
+
+    assert response.status_code == 401
+
+
+def test_valid_bearer_token_containing_letter_t_is_accepted():
+    client = build_client(tokens={"valid-token": Principal("alice", "reader", "account-a")})
+
+    response = client.get("/resources", headers={"Authorization": "Bearer valid-token"})
+
+    assert response.status_code == 200
+    assert response.json() == {"subject": "alice", "tenant_id": "account-a"}
+
+
 def test_authenticated_principal_and_tenant_are_attached_to_request():
     response = build_client().get(
         "/resources",
