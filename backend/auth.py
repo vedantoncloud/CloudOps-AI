@@ -117,9 +117,24 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
             request.state.tenant_scoped = False
             return await call_next(request)
 
-        auth = request.headers.get("authorization", "")
-        scheme, _, token = auth.partition(" ")
-        principal = self.tokens.get(token) if scheme.lower() == "bearer" else None
+        authorization_headers = [
+            value
+            for name, value in request.scope.get("headers", [])
+            if name.lower() == b"authorization"
+        ]
+        # Multiple Authorization fields and malformed bearer credentials can
+        # be interpreted inconsistently by proxies and application servers.
+        # Accept exactly one well-formed credential at this trust boundary.
+        principal = None
+        if len(authorization_headers) == 1:
+            scheme, separator, token = authorization_headers[0].partition(b" ")
+            if (
+                separator
+                and scheme.lower() == b"bearer"
+                and token
+                and not any(character in token for character in (b" ", b"\\t", b"\\r", b"\\n"))
+            ):
+                principal = self.tokens.get(token.decode("latin-1"))
         if principal is None:
             return JSONResponse(status_code=401, content={"detail": "Bearer token required"}, headers={"WWW-Authenticate": "Bearer"})
 

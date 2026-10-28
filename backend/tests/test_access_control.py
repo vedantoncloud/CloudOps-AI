@@ -44,6 +44,22 @@ def test_protected_routes_reject_missing_and_invalid_bearer_tokens():
     assert response.headers["www-authenticate"] == "Bearer"
 
 
+@pytest.mark.parametrize(
+    "headers",
+    [
+        [("Authorization", "Bearer reader-a"), ("Authorization", "Bearer admin-a")],
+        [("Authorization", "Bearer reader-a"), ("Authorization", "Bearer unknown")],
+        [("Authorization", "Bearer  reader-a")],
+        [("Authorization", "Bearer reader-a ")],
+        [("Authorization", "Bearer")],
+    ],
+)
+def test_ambiguous_or_malformed_authorization_headers_are_rejected(headers):
+    response = build_client().get("/resources", headers=headers)
+
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
+
 def test_authenticated_principal_and_tenant_are_attached_to_request():
     response = build_client().get(
         "/resources",
