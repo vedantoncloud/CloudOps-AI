@@ -97,6 +97,11 @@ def test_rate_limiter_prunes_expired_identities_at_capacity(monkeypatch):
     assert list(limiter._windows) == ["bob"]
 
 
+def test_extremely_large_rate_limit_environment_value_fails_cleanly(monkeypatch):
+    monkeypatch.setenv("CLOUDOPS_RATE_LIMIT_REQUESTS", "9" * 5000)
+    with pytest.raises(RuntimeError, match="CLOUDOPS_RATE_LIMIT_REQUESTS must be a positive integer"):
+        RequestRateLimiter.from_environment()
+
 def test_rate_limit_does_not_allow_unauthenticated_requests_through():
     client = _client(RequestRateLimiter(limit=1, window_seconds=10))
 
