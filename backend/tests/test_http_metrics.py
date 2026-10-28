@@ -47,6 +47,24 @@ def test_request_logs_use_route_templates_instead_of_raw_resource_paths(caplog):
     assert payload["path"] == "/resources/{resource_id}"
     assert "private-resource-123" not in records[0].message
 
+def test_request_logs_normalize_unrecognized_http_methods(caplog):
+    app = FastAPI()
+    app.add_middleware(RequestObservabilityMiddleware, metrics=RequestMetrics())
+
+    @app.api_route("/method", methods=["GET", "CUSTOMMETHOD"])
+    def method_endpoint():
+        return {"ok": True}
+
+    with caplog.at_level("INFO", logger="cloudops.http"):
+        response = TestClient(app).request("CUSTOMMETHOD", "/method")
+
+    assert response.status_code == 200
+    records = [record for record in caplog.records if record.name == "cloudops.http"]
+    assert len(records) == 1
+    payload = __import__("json").loads(records[0].message)
+    assert payload["method"] == "OTHER"
+
+
 def test_metrics_text_escapes_label_values_and_empty_registry_is_valid():
     metrics = RequestMetrics()
     assert metrics.prometheus_text().endswith("\n")
