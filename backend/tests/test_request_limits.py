@@ -74,7 +74,7 @@ def test_streamed_request_without_content_length_is_still_bounded():
 
 
 def test_request_limit_configuration_must_be_positive(monkeypatch):
-    monkeypatch.setenv("CLOUDOPS_MAX_REQUEST_BYTES", "0")
+    monkeypatch.setenv("CLOUDOPS_MAX_REQUEST_BYTES", "+1")
 
     with pytest.raises(RuntimeError, match="CLOUDOPS_MAX_REQUEST_BYTES must be a positive integer"):
         RequestSizeLimitMiddleware(lambda *_: None)
@@ -130,7 +130,7 @@ def test_oversized_buffered_or_streamed_response_is_replaced(path):
 
 
 def test_response_limit_configuration_must_be_positive(monkeypatch):
-    monkeypatch.setenv("CLOUDOPS_MAX_RESPONSE_BYTES", "0")
+    monkeypatch.setenv("CLOUDOPS_MAX_RESPONSE_BYTES", "1_0")
 
     with pytest.raises(RuntimeError, match="CLOUDOPS_MAX_RESPONSE_BYTES must be a positive integer"):
         ResponseSizeLimitMiddleware(lambda *_: None)

@@ -10,10 +10,11 @@ DEFAULT_MAX_RESPONSE_BYTES = 4_194_304
 
 
 def _positive_int(value: str, name: str) -> int:
-    try:
-        parsed = int(value)
-    except (TypeError, ValueError) as exc:
-        raise RuntimeError(f"{name} must be a positive integer") from exc
+    if not isinstance(value, str) or not value or any(
+        character < "0" or character > "9" for character in value
+    ):
+        raise RuntimeError(f"{name} must be a positive integer")
+    parsed = int(value)
     if parsed <= 0:
         raise RuntimeError(f"{name} must be a positive integer")
     return parsed
