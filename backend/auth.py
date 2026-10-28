@@ -75,8 +75,13 @@ def load_token_registry(raw: str | None = None) -> dict[str, Principal]:
         raise RuntimeError("CLOUDOPS_API_TOKENS must be a JSON object")
     registry: dict[str, Principal] = {}
     for token, claims in values.items():
-        if not isinstance(token, str) or not token or not isinstance(claims, dict):
-            raise RuntimeError("Each API token must map to a claims object")
+        if (
+            not isinstance(token, str)
+            or not token
+            or any(character.isspace() for character in token)
+            or not isinstance(claims, dict)
+        ):
+            raise RuntimeError("Each API token must be non-empty, contain no whitespace, and map to a claims object")
         subject, role, tenant_id = (claims.get(key) for key in ("subject", "role", "tenant_id"))
         if not all(isinstance(value, str) and value.strip() for value in (subject, role, tenant_id)):
             raise RuntimeError("API token claims require subject, role, and tenant_id")
