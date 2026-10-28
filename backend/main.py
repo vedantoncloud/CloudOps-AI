@@ -11,6 +11,7 @@ from auth import AccessControlMiddleware, require_role
 from observability import RequestObservabilityMiddleware, aws_operation_metrics, database_operation_metrics, request_metrics
 from rate_limit import RateLimitMiddleware
 from request_limits import RequestSizeLimitMiddleware, ResponseSizeLimitMiddleware
+from security_headers import SecurityHeadersMiddleware
 from services.aws_service import AWSService
 from autonomy.api import router as autonomy_router
 from autonomy.api import action_plan_store
@@ -41,6 +42,7 @@ app.add_middleware(ResponseSizeLimitMiddleware)
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(AccessControlMiddleware)
 app.add_middleware(RequestObservabilityMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 
 CONSOLE_PAGE = Path(__file__).parent / "static" / "console.html"
 
