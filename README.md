@@ -105,6 +105,20 @@ when `CLOUDOPS_ENV=production` and `false` otherwise; an explicit
 `CLOUDOPS_REQUIRE_TENANT_AWS_ROLE` value overrides that default. Configure a
 role for every tenant before routing tenant AWS requests in production.
 
+Credential parsing fails closed: duplicate JSON keys in `CLOUDOPS_API_TOKENS`
+and token keys containing whitespace are rejected at startup. Requests must
+present exactly one well-formed `Authorization: Bearer ...` header; duplicate
+or malformed authorization headers receive HTTP 401. Request bodies with
+duplicate or invalid `Content-Length` fields, or conflicting
+`Content-Length` and `Transfer-Encoding` metadata, are rejected before
+handlers run.
+
+The application adds browser security response headers, including
+`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, a restrictive
+`Permissions-Policy`, `Referrer-Policy`, same-origin resource policy, and
+`Cache-Control: no-store`. HSTS is added only when the ASGI request scheme is
+HTTPS; the service does not impose HSTS on sibling subdomains.
+
 ## Runtime
 
 - Python 3.13
