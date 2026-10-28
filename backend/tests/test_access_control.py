@@ -186,10 +186,6 @@ def test_token_registry_requires_complete_valid_claims():
         load_token_registry('{"secret":{"subject":"alice","role":"reader"}}')
 
 
-@pytest.mark.parametrize("raw", [
-    "{\"secret\":{\"subject\":\"alice\",\"role\":\"reader\",\"tenant_id\":\"account-a\"},\"secret\":{\"subject\":\"mallory\",\"role\":\"admin\",\"tenant_id\":\"account-b\"}}",
-    "{\"secret\":{\"subject\":\"alice\",\"subject\":\"mallory\",\"role\":\"reader\",\"tenant_id\":\"account-a\"}}",
-])
 @pytest.mark.parametrize("token", ["bad token", "bad\\ttoken", "bad\\ntoken"])
 def test_token_registry_rejects_credentials_that_cannot_be_sent_as_bearer_tokens(token):
     import json
@@ -198,6 +194,10 @@ def test_token_registry_rejects_credentials_that_cannot_be_sent_as_bearer_tokens
     with pytest.raises(RuntimeError, match="contain no whitespace"):
         load_token_registry(raw)
 
+@pytest.mark.parametrize("raw", [
+    "{\"secret\":{\"subject\":\"alice\",\"role\":\"reader\",\"tenant_id\":\"account-a\"},\"secret\":{\"subject\":\"mallory\",\"role\":\"admin\",\"tenant_id\":\"account-b\"}}",
+    "{\"secret\":{\"subject\":\"alice\",\"subject\":\"mallory\",\"role\":\"reader\",\"tenant_id\":\"account-a\"}}",
+])
 def test_token_registry_rejects_duplicate_json_keys(raw):
     with pytest.raises(RuntimeError, match="CLOUDOPS_API_TOKENS must be a JSON object"):
         load_token_registry(raw)
