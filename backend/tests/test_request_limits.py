@@ -113,6 +113,7 @@ def test_response_limit_configuration_must_be_positive(monkeypatch):
         [(b"content-length", b"4"), (b"content-length", b"8")],
         [(b"content-length", b"invalid")],
         [(b"content-length", b"-1")],
+        [(b"content-length", b"4"), (b"transfer-encoding", b"chunked")],
     ],
 )
 def test_ambiguous_or_invalid_content_length_is_rejected_before_handler(headers):
