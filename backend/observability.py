@@ -178,7 +178,12 @@ class RequestObservabilityMiddleware(BaseHTTPMiddleware):
         self.metrics = metrics or request_metrics
 
     async def dispatch(self, request: Request, call_next):
-        supplied_id = request.headers.get("x-request-id", "")
+        supplied_ids = [
+            value.decode("latin-1")
+            for name, value in request.scope.get("headers", [])
+            if name.lower() == b"x-request-id"
+        ]
+        supplied_id = supplied_ids[0] if len(supplied_ids) == 1 else ""
         request_id = supplied_id if _REQUEST_ID.fullmatch(supplied_id) else str(uuid4())
         request.state.request_id = request_id
         started = time.perf_counter()

@@ -39,6 +39,17 @@ def test_request_id_is_returned_and_logged_with_safe_route_metadata(caplog):
     assert "access_token" not in json.dumps(record)
 
 
+def test_duplicate_request_id_headers_are_replaced_with_generated_id():
+    response = TestClient(build_app()).get(
+        "/items/abc",
+        headers=[("X-Request-ID", "trace.first"), ("X-Request-ID", "trace.second")],
+    )
+
+    assert response.status_code == 200
+    assert response.headers["x-request-id"] == response.json()["request_id"]
+    assert response.headers["x-request-id"] not in {"trace.first", "trace.second"}
+    assert len(response.headers["x-request-id"]) == 36
+
 def test_invalid_request_id_is_replaced_with_generated_id():
     response = TestClient(build_app()).get("/items/abc", headers={"X-Request-ID": "bad id\r\n"})
 
