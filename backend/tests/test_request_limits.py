@@ -17,6 +17,35 @@ def build_app(limit=8):
     return app
 
 
+def test_extremely_large_declared_content_length_returns_413_without_integer_overflow():
+    import asyncio
+
+    sent = []
+    called = False
+
+    async def app(scope, receive, send):
+        nonlocal called
+        called = True
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message):
+        sent.append(message)
+
+    async def run():
+        middleware = RequestSizeLimitMiddleware(app, max_bytes=8)
+        await middleware(
+            {"type": "http", "method": "POST", "path": "/", "headers": [(b"content-length", b"9" * 5000)]},
+            receive,
+            send,
+        )
+
+    asyncio.run(run())
+
+    assert called is False
+    assert sent[0]["status"] == 413
+
 def test_request_body_at_limit_reaches_handler():
     response = TestClient(build_app()).post("/echo", content=b"12345678")
 
