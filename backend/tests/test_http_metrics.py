@@ -62,3 +62,36 @@ def test_metrics_endpoint_uses_prometheus_content_type_and_requires_authenticati
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/plain; version=0.0.4")
     assert "cloudops_http_requests_total" in response.text
+
+def test_security_headers_are_added_without_overriding_route_headers():
+    from security_headers import SecurityHeadersMiddleware
+
+    app = FastAPI()
+    app.add_middleware(SecurityHeadersMiddleware)
+
+    @app.get("/headers")
+    def headers():
+        from fastapi.responses import Response
+        return Response("ok", headers={"X-Frame-Options": "SAMEORIGIN"})
+
+    response = TestClient(app).get("/headers")
+
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "SAMEORIGIN"
+    assert response.headers["referrer-policy"] == "strict-origin-when-cross-origin"
+    assert response.headers["permissions-policy"] == "camera=(), microphone=(), geolocation=()"
+    assert response.headers["cross-origin-resource-policy"] == "same-origin"
+    assert "strict-transport-security" not in response.headers
+
+
+def test_security_headers_enable_hsts_for_https_requests():
+    from security_headers import SecurityHeadersMiddleware
+
+    app = FastAPI()
+    app.add_middleware(SecurityHeadersMiddleware)
+    app.add_api_route("/headers", lambda: {"ok": True})
+
+    response = TestClient(app, base_url="https://testserver").get("/headers")
+
+    assert response.headers["strict-transport-security"] == "max-age=31536000; includeSubDomains"
+
