@@ -99,6 +99,15 @@ def test_metrics_endpoint_uses_prometheus_content_type_and_requires_authenticati
     assert response.headers["content-type"].startswith("text/plain; version=0.0.4")
     assert "cloudops_http_requests_total" in response.text
 
+def test_assembled_application_applies_security_headers_to_health_responses():
+    response = TestClient(main.app).get("/health")
+
+    assert response.status_code == 200
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "DENY"
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["cross-origin-resource-policy"] == "same-origin"
+
 def test_security_headers_are_added_without_overriding_route_headers():
     from security_headers import SecurityHeadersMiddleware
 
