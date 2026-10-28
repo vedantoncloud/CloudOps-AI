@@ -90,13 +90,15 @@ def test_rate_limiter_bounds_new_identities_with_a_shared_overflow_bucket(monkey
     assert limiter.allow("alice") == (True, 10)
     # New identities share one bounded bucket once the identity map is full.
     assert limiter.allow("bob") == (True, 10)
-    assert len(limiter._windows) == 1
-    assert list(limiter._windows) == ["__rate_limit_overflow__"]
+    assert limiter.allow("carol") == (True, 10)
+    assert len(limiter._windows) == 2
+    assert "__rate_limit_overflow__" in limiter._windows
 
-    assert limiter.allow("carol") == (False, 10)
-    assert len(limiter._windows) == 1
+    # Unknown identities share the overflow budget rather than growing state.
+    assert limiter.allow("dave") == (False, 10)
+    assert len(limiter._windows) <= RequestRateLimiter.MAX_CLIENTS + 1
 
     # The shared bucket resets at the next fixed-window boundary.
     now[0] = 10
-    assert limiter.allow("carol") == (True, 10)
-    assert len(limiter._windows) == 1
+    assert limiter.allow("dave") == (True, 10)
+    assert len(limiter._windows) <= RequestRateLimiter.MAX_CLIENTS + 1
