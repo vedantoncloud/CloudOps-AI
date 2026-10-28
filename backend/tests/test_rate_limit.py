@@ -52,9 +52,20 @@ def test_rate_limit_is_scoped_to_authenticated_principal_and_resets_next_window(
     assert client.get("/items", headers={"Authorization": "Bearer alice-token"}).status_code == 200
 
 
-@pytest.mark.parametrize("limit,window", [(0, 10), (1, 0), (-1, 10)])
-def test_rate_limiter_rejects_nonpositive_bounds(limit, window):
-    with pytest.raises(ValueError, match="must be positive"):
+@pytest.mark.parametrize(
+    "limit,window",
+    [
+        (0, 10),
+        (1, 0),
+        (-1, 10),
+        (True, 10),
+        (1, False),
+        (1.5, 10),
+        (1, 2.5),
+    ],
+)
+def test_rate_limiter_rejects_non_integer_or_nonpositive_bounds(limit, window):
+    with pytest.raises(ValueError, match="must be positive integers"):
         RequestRateLimiter(limit=limit, window_seconds=window)
 
 
