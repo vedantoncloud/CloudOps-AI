@@ -81,7 +81,7 @@ def test_rate_limiter_rejects_non_integer_or_nonpositive_bounds(limit, window):
 
 
 def test_rate_limiter_environment_configuration_must_be_positive_integer(monkeypatch):
-    monkeypatch.setenv("CLOUDOPS_RATE_LIMIT_REQUESTS", "many")
+    monkeypatch.setenv("CLOUDOPS_RATE_LIMIT_REQUESTS", " 1")
     with pytest.raises(RuntimeError, match="CLOUDOPS_RATE_LIMIT_REQUESTS must be a positive integer"):
         RequestRateLimiter.from_environment()
 
