@@ -20,7 +20,7 @@ def _positive_int(value: str, name: str) -> int:
 
 
 class RequestSizeLimitMiddleware:
-    """Reject oversized declared or streamed bodies with a stable 413 response."""
+    """Reject oversized or ambiguous declared bodies and bound streamed bodies."""
 
     def __init__(self, app, max_bytes: int | None = None):
         self.app = app
@@ -38,19 +38,27 @@ class RequestSizeLimitMiddleware:
             await self.app(scope, receive, send)
             return
 
-        headers = {key.lower(): value for key, value in scope.get("headers", [])}
-        content_length = headers.get(b"content-length")
-        if content_length is not None:
+        content_lengths = [
+            value for key, value in scope.get("headers", []) if key.lower() == b"content-length"
+        ]
+        if len(content_lengths) > 1:
+            await self._bad_request(scope, receive, send)
+            return
+        if content_lengths:
             try:
-                declared_size = int(content_length)
-            except ValueError:
-                declared_size = None
-            if declared_size is not None and declared_size > self.max_bytes:
+                declared_size = int(content_lengths[0])
+            except (TypeError, ValueError):
+                await self._bad_request(scope, receive, send)
+                return
+            if declared_size < 0:
+                await self._bad_request(scope, receive, send)
+                return
+            if declared_size > self.max_bytes:
                 await self._too_large(scope, receive, send)
                 return
 
-        # Buffer at most the configured limit plus one byte. This also enforces
-        # the cap for chunked requests that do not declare Content-Length.
+        # Buffer at most the configured limit. This also enforces the cap for
+        # chunked requests that do not declare Content-Length.
         body = bytearray()
         more_body = True
         while more_body:
@@ -76,6 +84,13 @@ class RequestSizeLimitMiddleware:
             return {"type": "http.request", "body": b"", "more_body": False}
 
         await self.app(scope, replay_body, send)
+
+    async def _bad_request(self, scope, receive, send):
+        response = JSONResponse(
+            status_code=400,
+            content={"detail": "Invalid or ambiguous Content-Length header"},
+        )
+        await response(scope, receive, send)
 
     async def _too_large(self, scope, receive, send):
         response = JSONResponse(
