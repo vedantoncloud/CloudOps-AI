@@ -30,18 +30,18 @@ def test_sqlite_close_failure_is_counted_and_propagated():
         def close(self):
             raise sqlite3.OperationalError("private close diagnostic")
 
-    with observed_sqlite_connection(lambda: sqlite3.connect(":memory:"), "close_failure_probe"):
+    with observed_sqlite_connection(lambda: sqlite3.connect(":memory:"), "audit_events"):
         pass
-    before = _entry("close_failure_probe").copy()
+    before = _entry("audit_events").copy()
     try:
-        with observed_sqlite_connection(CloseFailure, "close_failure_probe"):
+        with observed_sqlite_connection(CloseFailure, "audit_events"):
             pass
     except sqlite3.OperationalError as exc:
         assert "private close diagnostic" in str(exc)
     else:
         raise AssertionError("SQLite close failure should propagate")
 
-    after = _entry("close_failure_probe")
+    after = _entry("audit_events")
     assert after["calls"] == before["calls"] + 1
     assert after["failures"] == before["failures"] + 1
 
