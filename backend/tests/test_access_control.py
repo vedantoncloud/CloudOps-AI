@@ -170,6 +170,15 @@ def test_token_registry_requires_complete_valid_claims():
         load_token_registry('{"secret":{"subject":"alice","role":"reader"}}')
 
 
+@pytest.mark.parametrize("raw", [
+    "{\"secret\":{\"subject\":\"alice\",\"role\":\"reader\",\"tenant_id\":\"account-a\"},\"secret\":{\"subject\":\"mallory\",\"role\":\"admin\",\"tenant_id\":\"account-b\"}}",
+    "{\"secret\":{\"subject\":\"alice\",\"subject\":\"mallory\",\"role\":\"reader\",\"tenant_id\":\"account-a\"}}",
+])
+def test_token_registry_rejects_duplicate_json_keys(raw):
+    with pytest.raises(RuntimeError, match="CLOUDOPS_API_TOKENS must be a JSON object"):
+        load_token_registry(raw)
+
+
 def test_token_mode_fails_closed_without_credentials():
     with pytest.raises(RuntimeError, match="CLOUDOPS_API_TOKENS is required"):
         AccessControlMiddleware(lambda scope, receive, send: None, mode="token", tokens={})
