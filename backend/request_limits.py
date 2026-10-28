@@ -56,10 +56,18 @@ class RequestSizeLimitMiddleware:
             if not raw_length or any(byte < 48 or byte > 57 for byte in raw_length):
                 await self._bad_request(scope, receive, send)
                 return
-            declared_size = int(raw_length)
-            if declared_size > self.max_bytes:
+            normalized_length = raw_length.lstrip(b"0") or b"0"
+            limit_length = str(self.max_bytes).encode("ascii")
+            if (
+                len(normalized_length) > len(limit_length)
+                or (
+                    len(normalized_length) == len(limit_length)
+                    and normalized_length > limit_length
+                )
+            ):
                 await self._too_large(scope, receive, send)
                 return
+            declared_size = int(normalized_length)
 
         # Buffer at most the configured limit. This also enforces the cap for
         # chunked requests that do not declare Content-Length.
