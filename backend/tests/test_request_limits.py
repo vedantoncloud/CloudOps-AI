@@ -105,3 +105,42 @@ def test_response_limit_configuration_must_be_positive(monkeypatch):
 
     with pytest.raises(RuntimeError, match="CLOUDOPS_MAX_RESPONSE_BYTES must be a positive integer"):
         ResponseSizeLimitMiddleware(lambda *_: None)
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        [(b"content-length", b"4"), (b"content-length", b"8")],
+        [(b"content-length", b"invalid")],
+        [(b"content-length", b"-1")],
+    ],
+)
+def test_ambiguous_or_invalid_content_length_is_rejected_before_handler(headers):
+    import asyncio
+
+    called = False
+    sent = []
+
+    async def app(scope, receive, send):
+        nonlocal called
+        called = True
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message):
+        sent.append(message)
+
+    async def run():
+        middleware = RequestSizeLimitMiddleware(app, max_bytes=8)
+        await middleware(
+            {"type": "http", "method": "POST", "path": "/", "headers": headers},
+            receive,
+            send,
+        )
+
+    asyncio.run(run())
+
+    assert called is False
+    assert sent[0]["status"] == 400
+    assert b"Invalid or ambiguous Content-Length" in sent[1]["body"]
