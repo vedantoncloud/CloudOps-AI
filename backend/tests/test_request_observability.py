@@ -32,7 +32,8 @@ def test_request_id_is_returned_and_logged_with_safe_route_metadata(caplog):
     assert record["event"] == "http_request"
     assert record["request_id"] == "trace.123"
     assert record["method"] == "GET"
-    assert record["path"] == "/items/abc"
+    assert record["path"] == "/items/{item_id}"
+    assert "abc" not in json.dumps(record)
     assert record["status_code"] == 200
     assert record["duration_ms"] >= 0
     assert "access_token" not in json.dumps(record)
