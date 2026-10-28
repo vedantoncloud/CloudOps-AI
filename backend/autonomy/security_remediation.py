@@ -54,6 +54,9 @@ class SecurityRemediationEngine:
         if not finding.resource_type or not finding.resource_type.strip():
             raise ValueError("resource_type cannot be empty")
 
+        if not isinstance(finding.finding_type, SecurityFindingType):
+            raise ValueError("finding_type must be a SecurityFindingType")
+
         action = self.ACTIONS[finding.finding_type]
 
         return RemediationPlan(
