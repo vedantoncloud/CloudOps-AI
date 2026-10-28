@@ -186,7 +186,7 @@ def test_token_registry_requires_complete_valid_claims():
         load_token_registry('{"secret":{"subject":"alice","role":"reader"}}')
 
 
-@pytest.mark.parametrize("token", ["bad token", "bad\\ttoken", "bad\\ntoken"])
+@pytest.mark.parametrize("token", ["bad token", "bad\ttoken", "bad\ntoken"])
 def test_token_registry_rejects_credentials_that_cannot_be_sent_as_bearer_tokens(token):
     import json
     raw = json.dumps({token: {"subject": "alice", "role": "reader", "tenant_id": "account-a"}})
