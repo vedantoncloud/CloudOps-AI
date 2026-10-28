@@ -27,6 +27,17 @@ def _client(limiter, tokens=None):
     return TestClient(app)
 
 
+def test_rate_limit_identity_encoding_prevents_tenant_subject_collisions():
+    tokens = {
+        "first": Principal("b:c", "reader", "a"),
+        "second": Principal("c", "reader", "a:b"),
+    }
+    client = _client(RequestRateLimiter(limit=1, window_seconds=10), tokens=tokens)
+
+    assert client.get("/items", headers={"Authorization": "Bearer first"}).status_code == 200
+    assert client.get("/items", headers={"Authorization": "Bearer second"}).status_code == 200
+    assert client.get("/items", headers={"Authorization": "Bearer first"}).status_code == 429
+
 def test_rate_limit_returns_429_and_retry_after_after_configured_limit():
     client = _client(RequestRateLimiter(limit=2, window_seconds=30, clock=lambda: 5))
     headers = {"Authorization": "Bearer alice-token"}
