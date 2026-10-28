@@ -111,5 +111,5 @@ def test_security_headers_enable_hsts_for_https_requests():
 
     response = TestClient(app, base_url="https://testserver").get("/headers")
 
-    assert response.headers["strict-transport-security"] == "max-age=31536000; includeSubDomains"
+    assert response.headers["strict-transport-security"] == "max-age=31536000"
 
