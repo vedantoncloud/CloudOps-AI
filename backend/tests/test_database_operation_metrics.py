@@ -8,7 +8,7 @@ from auth import AccessControlMiddleware, Principal
 from autonomy.persistent_audit_idempotency import PersistentAuditIdempotencyStore
 from autonomy.persistent_audit_trail import PersistentAuditTrail
 from main import database_operation_failures
-from observability import database_operation_metrics
+from observability import database_operation_metrics, observed_sqlite_connection
 
 
 def _entry(operation):
@@ -18,6 +18,32 @@ def _entry(operation):
         if item["operation"] == operation
     )
 
+
+def test_sqlite_close_failure_is_counted_and_propagated():
+    class CloseFailure:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def close(self):
+            raise sqlite3.OperationalError("private close diagnostic")
+
+    with observed_sqlite_connection(lambda: sqlite3.connect(":memory:"), "audit_events"):
+        pass
+    before = _entry("audit_events").copy()
+    try:
+        with observed_sqlite_connection(CloseFailure, "audit_events"):
+            pass
+    except sqlite3.OperationalError as exc:
+        assert "private close diagnostic" in str(exc)
+    else:
+        raise AssertionError("SQLite close failure should propagate")
+
+    after = _entry("audit_events")
+    assert after["calls"] == before["calls"] + 1
+    assert after["failures"] == before["failures"] + 1
 
 def test_audit_store_success_and_sqlite_failure_are_counted_safely(tmp_path: Path):
     trail = PersistentAuditTrail(tmp_path / "audit.db")

@@ -159,9 +159,15 @@ def observed_sqlite_connection(connect, operation: str):
         failed = True
         raise
     finally:
-        if connection is not None:
-            connection.close()
-        database_operation_metrics.observe(operation, failed)
+        try:
+            if connection is not None:
+                connection.close()
+        except sqlite3.Error:
+            failed = True
+            raise
+        finally:
+            # Record the attempt even if connection cleanup itself fails.
+            database_operation_metrics.observe(operation, failed)
 
 
 class RequestObservabilityMiddleware(BaseHTTPMiddleware):
