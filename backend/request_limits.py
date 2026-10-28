@@ -38,9 +38,14 @@ class RequestSizeLimitMiddleware:
             await self.app(scope, receive, send)
             return
 
-        content_lengths = [
-            value for key, value in scope.get("headers", []) if key.lower() == b"content-length"
-        ]
+        raw_headers = [(key.lower(), value) for key, value in scope.get("headers", [])]
+        content_lengths = [value for key, value in raw_headers if key == b"content-length"]
+        transfer_encodings = [value for key, value in raw_headers if key == b"transfer-encoding"]
+        # Conflicting framing metadata can be interpreted differently by
+        # upstream servers and application middleware. Reject it at the edge.
+        if transfer_encodings and content_lengths:
+            await self._bad_request(scope, receive, send)
+            return
         if len(content_lengths) > 1:
             await self._bad_request(scope, receive, send)
             return
