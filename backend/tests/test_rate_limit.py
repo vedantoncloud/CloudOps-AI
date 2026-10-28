@@ -79,3 +79,25 @@ def test_rate_limit_does_not_allow_unauthenticated_requests_through():
     client = _client(RequestRateLimiter(limit=1, window_seconds=10))
 
     assert client.get("/items").status_code == 401
+
+
+
+def test_rate_limiter_uses_bounded_overflow_bucket_without_evicting_active_clients(monkeypatch):
+    monkeypatch.setattr(RequestRateLimiter, "MAX_CLIENTS", 1)
+    now = [0]
+    limiter = RequestRateLimiter(limit=2, window_seconds=10, clock=lambda: now[0])
+
+    assert limiter.allow("alice") == (True, 10)
+    # A second identity cannot grow the map beyond its configured capacity.
+    assert limiter.allow("bob") == (True, 10)
+    assert len(limiter._windows) == 1
+    assert list(limiter._windows) == ["alice"]
+
+    # Further unknown identities share the overflow bucket and are bounded.
+    assert limiter.allow("carol") == (False, 10)
+    assert len(limiter._windows) == 1
+
+    # The overflow identity becomes eligible again in the next fixed window.
+    now[0] = 10
+    assert limiter.allow("carol") == (True, 10)
+    assert len(limiter._windows) == 1
