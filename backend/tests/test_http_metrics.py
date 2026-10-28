@@ -117,6 +117,7 @@ def test_security_headers_are_added_without_overriding_route_headers():
     assert response.headers["referrer-policy"] == "strict-origin-when-cross-origin"
     assert response.headers["permissions-policy"] == "camera=(), microphone=(), geolocation=()"
     assert response.headers["cross-origin-resource-policy"] == "same-origin"
+    assert response.headers["cache-control"] == "no-store"
     assert "strict-transport-security" not in response.headers
 
 
