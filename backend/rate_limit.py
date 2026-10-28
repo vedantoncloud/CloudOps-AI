@@ -15,7 +15,10 @@ def _positive_int(value: str, name: str) -> int:
         character < "0" or character > "9" for character in value
     ):
         raise RuntimeError(f"{name} must be a positive integer")
-    parsed = int(value)
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise RuntimeError(f"{name} must be a positive integer") from exc
     if parsed <= 0:
         raise RuntimeError(f"{name} must be a positive integer")
     return parsed
