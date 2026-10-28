@@ -7,7 +7,7 @@ from autonomy.control_loop_governance import (
 )
 from autonomy.decision_intelligence import ResourceContext
 from autonomy.provider import CloudProvider
-from autonomy.resource_discovery import ResourceDiscovery
+from autonomy.resource_discovery import ResourceDiscovery, ResourceProviderUnavailable
 
 
 @dataclass(frozen=True)
@@ -70,7 +70,7 @@ class ResourceContextPipeline:
                 resource.resource_id == resource_id
                 for resource in discovered_resources
             )
-        except (AttributeError, KeyError, ValueError) as exc:
+        except (AttributeError, KeyError, ValueError, ResourceProviderUnavailable) as exc:
             # Some provider test doubles / adapters intentionally implement
             # only read-only observation. Do not let optional inventory
             # capabilities prevent governance and decision evaluation.
