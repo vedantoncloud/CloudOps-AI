@@ -53,14 +53,23 @@ def is_admin_only_path(path: str) -> bool:
     )
 
 
+def _unique_json_object(pairs):
+    """Reject duplicate keys so credential claims cannot be silently overridden."""
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"Duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
 def load_token_registry(raw: str | None = None) -> dict[str, Principal]:
     """Parse CLOUDOPS_API_TOKENS as {token: {subject, role, tenant_id}}."""
     raw = os.getenv("CLOUDOPS_API_TOKENS") if raw is None else raw
     if not raw:
         return {}
     try:
-        values = json.loads(raw)
-    except (TypeError, json.JSONDecodeError) as exc:
+        values = json.loads(raw, object_pairs_hook=_unique_json_object)
+    except (TypeError, ValueError) as exc:
         raise RuntimeError("CLOUDOPS_API_TOKENS must be a JSON object") from exc
     if not isinstance(values, dict):
         raise RuntimeError("CLOUDOPS_API_TOKENS must be a JSON object")
