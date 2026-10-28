@@ -80,6 +80,17 @@ def test_request_limit_configuration_must_be_positive(monkeypatch):
         RequestSizeLimitMiddleware(lambda *_: None)
 
 
+def test_extremely_large_request_limit_environment_value_fails_cleanly(monkeypatch):
+    monkeypatch.setenv("CLOUDOPS_MAX_REQUEST_BYTES", "9" * 5000)
+    with pytest.raises(RuntimeError, match="CLOUDOPS_MAX_REQUEST_BYTES must be a positive integer"):
+        RequestSizeLimitMiddleware(lambda *_: None)
+
+
+def test_extremely_large_response_limit_environment_value_fails_cleanly(monkeypatch):
+    monkeypatch.setenv("CLOUDOPS_MAX_RESPONSE_BYTES", "9" * 5000)
+    with pytest.raises(RuntimeError, match="CLOUDOPS_MAX_RESPONSE_BYTES must be a positive integer"):
+        ResponseSizeLimitMiddleware(lambda *_: None)
+
 def build_response_app(limit=16):
     app = FastAPI()
     app.add_middleware(ResponseSizeLimitMiddleware, max_bytes=limit)
