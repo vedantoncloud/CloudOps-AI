@@ -91,7 +91,7 @@ def test_security_headers_enable_hsts_for_https_requests():
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_api_route("/headers", lambda: {"ok": True})
 
-    response = TestClient(app).get("/headers", base_url="https://testserver")
+    response = TestClient(app, base_url="https://testserver").get("/headers")
 
     assert response.headers["strict-transport-security"] == "max-age=31536000; includeSubDomains"
 
