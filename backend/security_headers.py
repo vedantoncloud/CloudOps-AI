@@ -21,6 +21,7 @@ class SecurityHeadersMiddleware:
                     (b"referrer-policy", b"strict-origin-when-cross-origin"),
                     (b"permissions-policy", b"camera=(), microphone=(), geolocation=()"),
                     (b"cross-origin-resource-policy", b"same-origin"),
+                    (b"cache-control", b"no-store"),
                 ]
                 if scope.get("scheme") == "https":
                     defaults.append((b"strict-transport-security", b"max-age=31536000"))
