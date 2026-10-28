@@ -84,7 +84,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         principal = getattr(request.state, "principal", None)
         if principal is not None:
-            key = f"principal:{getattr(request.state, 'tenant_id', '')}:{principal.subject}"
+            tenant_id = getattr(request.state, "tenant_id", "")
+            subject = principal.subject
+            # Length-prefix both fields so embedded separators cannot make
+            # distinct tenant/principal pairs share one limiter bucket.
+            key = f"principal:{len(tenant_id)}:{tenant_id}:{len(subject)}:{subject}"
         else:
             client = request.client.host if request.client else "unknown"
             key = f"address:{client}"
