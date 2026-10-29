@@ -25,6 +25,9 @@ _request_tenant: ContextVar[str | None] = ContextVar("cloudops_aws_tenant", defa
 _ASSUMED_SESSION_CACHE_MAX_ENTRIES = 256
 _assumed_sessions: OrderedDict[str, tuple[float, str, boto3.Session]] = OrderedDict()
 _assumed_sessions_lock = threading.Lock()
+# Fixed lock striping bounds synchronization state while allowing unrelated
+# tenants to refresh their credentials concurrently.
+_TENANT_SESSION_LOCKS = tuple(threading.Lock() for _ in range(64))
 
 
 def set_aws_tenant(tenant_id: str | None):
@@ -59,24 +62,28 @@ def _tenant_roles_required() -> bool:
 
 
 def _tenant_session(tenant_id: str) -> boto3.Session | None:
-    role_arn = _tenant_role_arn(tenant_id)
-    if role_arn is None:
-        # Removing a tenant mapping is a credential revocation signal for this
-        # process. Do not retain a previously assumed session for that tenant.
-        with _assumed_sessions_lock:
-            _assumed_sessions.pop(tenant_id, None)
-        if _tenant_roles_required():
-            raise RuntimeError("No AWS role is configured for this tenant")
-        return None
-    with _assumed_sessions_lock:
-        cached = _assumed_sessions.get(tenant_id)
-        if cached and cached[1] == role_arn and cached[0] > time.time() + 60:
-            _assumed_sessions.move_to_end(tenant_id)
-            return cached[2]
+    # Serialize refreshes for one tenant without holding the global cache lock
+    # across STS network calls. A fixed stripe count bounds lock memory.
+    tenant_lock = _TENANT_SESSION_LOCKS[hash(tenant_id) % len(_TENANT_SESSION_LOCKS)]
+    with tenant_lock:
+        role_arn = _tenant_role_arn(tenant_id)
+        if role_arn is None:
+            # Removing a tenant mapping is a credential revocation signal for
+            # this process. Do not retain a previously assumed session.
+            with _assumed_sessions_lock:
+                _assumed_sessions.pop(tenant_id, None)
+            if _tenant_roles_required():
+                raise RuntimeError("No AWS role is configured for this tenant")
+            return None
 
-        # A deployment may rotate a tenant's trusted role mapping without
-        # restarting the process. Never reuse credentials issued for the
-        # previous role ARN.
+        with _assumed_sessions_lock:
+            cached = _assumed_sessions.get(tenant_id)
+            if cached and cached[1] == role_arn and cached[0] > time.time() + 60:
+                _assumed_sessions.move_to_end(tenant_id)
+                return cached[2]
+
+        # Do not hold the shared cache lock while waiting on AWS STS. Other
+        # tenants can continue using or refreshing their own sessions.
         sts = boto3.client("sts", config=AWS_CLIENT_CONFIG)
         response = sts.assume_role(
             RoleArn=role_arn,
@@ -90,10 +97,11 @@ def _tenant_session(tenant_id: str) -> boto3.Session | None:
             aws_secret_access_key=credentials["SecretAccessKey"],
             aws_session_token=credentials["SessionToken"],
         )
-        _assumed_sessions[tenant_id] = (expiry, role_arn, session)
-        _assumed_sessions.move_to_end(tenant_id)
-        while len(_assumed_sessions) > _ASSUMED_SESSION_CACHE_MAX_ENTRIES:
-            _assumed_sessions.popitem(last=False)
+        with _assumed_sessions_lock:
+            _assumed_sessions[tenant_id] = (expiry, role_arn, session)
+            _assumed_sessions.move_to_end(tenant_id)
+            while len(_assumed_sessions) > _ASSUMED_SESSION_CACHE_MAX_ENTRIES:
+                _assumed_sessions.popitem(last=False)
         return session
 
 
