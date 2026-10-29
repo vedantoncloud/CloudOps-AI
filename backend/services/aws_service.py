@@ -245,7 +245,12 @@ class AWSService:
                 if not next_token:
                     break
                 if next_token in seen_tokens:
-                    raise RuntimeError("EC2 returned a repeated pagination token")
+                    return {
+                        "provider": "AWS",
+                        "status": "disconnected",
+                        "message": "Unable to connect to AWS services",
+                        "error": "EC2 returned a repeated pagination token",
+                    }
                 seen_tokens.add(next_token)
 
             return {
