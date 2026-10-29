@@ -2616,6 +2616,16 @@ class AWSService:
             if next_token:
                 params["NextToken"] = next_token
             response = cloudwatch.describe_alarms(**params)
+            page_token = response.get("NextToken")
+            if page_token is not None and (
+                not isinstance(page_token, str) or not page_token
+            ):
+                return {
+                    "service": "cloudwatch",
+                    "status": "unhealthy",
+                    "instance_id": instance_id,
+                    "error": "Malformed CloudWatch pagination token",
+                }
             alarms = []
             for alarm in response.get("MetricAlarms", []):
                 if not isinstance(alarm, dict):
@@ -2713,8 +2723,10 @@ class AWSService:
                         "instance_ids": instance_ids,
                     })
                 token = response.get("NextToken")
-                if not token:
+                if token is None:
                     break
+                if not isinstance(token, str) or not token:
+                    return {"service": "cloudwatch", "status": "unhealthy"}
                 if token in seen:
                     return {"service": "cloudwatch", "status": "unhealthy"}
                 seen.add(token)

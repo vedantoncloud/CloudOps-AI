@@ -172,6 +172,31 @@ def test_fleet_cpu_alarms_follow_pages_and_drop_unrelated_alarms():
     assert cw.describe_alarms.call_args_list[1].kwargs["NextToken"] == "next"
 
 
+@pytest.mark.parametrize("bad_token", ["", 42, [], {}])
+def test_instance_alarms_reject_malformed_next_tokens(bad_token):
+    with patch("services.aws_service.boto3.client") as create_client:
+        create_client.return_value.describe_alarms.return_value = {
+            "MetricAlarms": [],
+            "NextToken": bad_token,
+        }
+        result = AWSService().get_ec2_alarms("i-12345678")
+
+    assert result["status"] == "unhealthy"
+    assert result["error"] == "Malformed CloudWatch pagination token"
+
+
+@pytest.mark.parametrize("bad_token", ["", 42, [], {}])
+def test_fleet_alarms_reject_malformed_next_tokens(bad_token):
+    with patch("services.aws_service.boto3.client") as create_client:
+        create_client.return_value.describe_alarms.return_value = {
+            "MetricAlarms": [],
+            "NextToken": bad_token,
+        }
+        result = AWSService().get_ec2_fleet_alarms()
+
+    assert result["status"] == "unhealthy"
+
+
 def test_fleet_alarms_repeated_token_and_provider_failure_are_unhealthy():
     with patch("services.aws_service.boto3.client") as create_client:
         cw = create_client.return_value
