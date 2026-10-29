@@ -112,3 +112,104 @@ def test_failed_role_assumption_does_not_fall_back_to_shared_credentials(monkeyp
             aws_service._aws_client("ec2")
     finally:
         aws_service.reset_aws_tenant(token)
+
+
+
+def test_tenant_role_cache_refreshes_when_role_mapping_changes(monkeypatch):
+    class FakeSession:
+        def __init__(self, role):
+            self.role = role
+
+        def client(self, name, **kwargs):
+            return (self.role, name, kwargs)
+
+    class FakeSts:
+        roles = []
+
+        def assume_role(self, **kwargs):
+            self.roles.append(kwargs["RoleArn"])
+            return {"Credentials": {
+                "AccessKeyId": "key", "SecretAccessKey": "secret", "SessionToken": "session",
+                "Expiration": datetime.now(timezone.utc) + timedelta(hours=1),
+            }}
+
+    sts = FakeSts()
+    sessions = []
+    monkeypatch.setattr(aws_service.boto3, "client", lambda *_args, **_kwargs: sts)
+
+    def make_session(**kwargs):
+        session = FakeSession(kwargs["aws_access_key_id"])
+        sessions.append(session)
+        return session
+
+    monkeypatch.setattr(aws_service.boto3, "Session", make_session)
+    aws_service._assumed_sessions.pop("tenant-a", None)
+    token = aws_service.set_aws_tenant("tenant-a")
+    try:
+        monkeypatch.setenv(
+            "CLOUDOPS_TENANT_AWS_ROLES",
+            '{"tenant-a":"arn:aws:iam::123456789012:role/tenant-a-v1"}',
+        )
+        first = aws_service._aws_client("ec2")
+        monkeypatch.setenv(
+            "CLOUDOPS_TENANT_AWS_ROLES",
+            '{"tenant-a":"arn:aws:iam::123456789012:role/tenant-a-v2"}',
+        )
+        second = aws_service._aws_client("s3")
+    finally:
+        aws_service.reset_aws_tenant(token)
+        aws_service._assumed_sessions.pop("tenant-a", None)
+
+    assert first[0] == "key"
+    assert second[0] == "key"
+    assert len(sessions) == 2
+    assert sts.roles == [
+        "arn:aws:iam::123456789012:role/tenant-a-v1",
+        "arn:aws:iam::123456789012:role/tenant-a-v2",
+    ]
+
+
+def test_tenant_role_cache_evicts_least_recently_used_entries(monkeypatch):
+    class FakeSession:
+        def client(self, name, **kwargs):
+            return name
+
+    class FakeSts:
+        calls = 0
+
+        def assume_role(self, **kwargs):
+            self.calls += 1
+            return {"Credentials": {
+                "AccessKeyId": "key", "SecretAccessKey": "secret", "SessionToken": "session",
+                "Expiration": datetime.now(timezone.utc) + timedelta(hours=1),
+            }}
+
+    sts = FakeSts()
+    monkeypatch.setattr(aws_service.boto3, "client", lambda *_args, **_kwargs: sts)
+    monkeypatch.setattr(aws_service.boto3, "Session", lambda **_kwargs: FakeSession())
+    monkeypatch.setattr(aws_service, "_ASSUMED_SESSION_CACHE_MAX_ENTRIES", 2)
+    aws_service._assumed_sessions.clear()
+    monkeypatch.setenv(
+        "CLOUDOPS_TENANT_AWS_ROLES",
+        '{"tenant-a":"arn:aws:iam::123456789012:role/a",'
+        '"tenant-b":"arn:aws:iam::123456789012:role/b",'
+        '"tenant-c":"arn:aws:iam::123456789012:role/c"}',
+    )
+    try:
+        for tenant in ("tenant-a", "tenant-b", "tenant-a", "tenant-c"):
+            token = aws_service.set_aws_tenant(tenant)
+            try:
+                aws_service._aws_client("ec2")
+            finally:
+                aws_service.reset_aws_tenant(token)
+
+        assert list(aws_service._assumed_sessions) == ["tenant-a", "tenant-c"]
+        token = aws_service.set_aws_tenant("tenant-b")
+        try:
+            aws_service._aws_client("ec2")
+        finally:
+            aws_service.reset_aws_tenant(token)
+        assert sts.calls == 4
+        assert len(aws_service._assumed_sessions) == 2
+    finally:
+        aws_service._assumed_sessions.clear()
