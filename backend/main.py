@@ -1145,7 +1145,7 @@ def aws_s3_object_statistics(
     bucket_name: str,
     request: Request,
     prefix: str = None,
-    max_keys: int = None,
+    max_keys: int = 1000,
 ):
     _require_tenant_s3_bucket(request, bucket_name)
     if max_keys is not None and (max_keys <= 0 or max_keys > 1000):
@@ -1164,7 +1164,7 @@ def aws_s3_largest_objects(
     bucket_name: str,
     request: Request,
     prefix: str = None,
-    max_keys: int = None,
+    max_keys: int = 1000,
     top_n: int = 5,
 ):
     _require_tenant_s3_bucket(request, bucket_name)
@@ -1190,7 +1190,7 @@ def aws_s3_bucket_health(
     bucket_name: str,
     request: Request,
     prefix: str = None,
-    max_keys: int = None,
+    max_keys: int = 1000,
 ):
     _require_tenant_s3_bucket(request, bucket_name)
     if max_keys is not None and (max_keys <= 0 or max_keys > 1000):
@@ -1209,7 +1209,7 @@ def aws_s3_bucket_insights(
     bucket_name: str,
     request: Request,
     prefix: str = None,
-    max_keys: int = None,
+    max_keys: int = 1000,
 ):
     _require_tenant_s3_bucket(request, bucket_name)
     if max_keys is not None and (max_keys <= 0 or max_keys > 1000):
@@ -1228,7 +1228,7 @@ def aws_s3_bucket_optimization(
     bucket_name: str,
     request: Request,
     prefix: str = None,
-    max_keys: int = None,
+    max_keys: int = 1000,
 ):
     _require_tenant_s3_bucket(request, bucket_name)
     if max_keys is not None and (max_keys <= 0 or max_keys > 1000):
