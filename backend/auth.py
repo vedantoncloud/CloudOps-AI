@@ -137,7 +137,7 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
                 separator
                 and scheme.lower() == b"bearer"
                 and token
-                and not any(character in token for character in (b" ", b"\\t", b"\\r", b"\\n"))
+                and not any(character in token for character in (b" ", b"\t", b"\r", b"\n"))
             ):
                 principal = self.tokens.get(token.decode("latin-1"))
         if principal is None:
