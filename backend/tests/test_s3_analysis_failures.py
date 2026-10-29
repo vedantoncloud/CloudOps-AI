@@ -49,3 +49,28 @@ def test_s3_analysis_maps_unhealthy_results_to_dependency_error(monkeypatch):
     response = TestClient(main.app).get("/cloud/aws/s3/buckets/example/insights")
     assert response.status_code == 503
     assert response.json() == {"detail": "AWS resource data is unavailable"}
+
+
+@pytest.mark.parametrize(
+    "path,method_name",
+    [
+        ("statistics", "get_s3_object_statistics"),
+        ("largest-objects", "get_s3_largest_objects"),
+        ("health", "get_s3_bucket_health"),
+        ("insights", "get_s3_bucket_insights"),
+        ("optimization", "get_s3_bucket_optimization"),
+    ],
+)
+def test_s3_analysis_defaults_to_bounded_scan(monkeypatch, path, method_name):
+    captured = {}
+
+    def succeed(*args, **kwargs):
+        captured.update(kwargs)
+        return {"service": "s3", "status": "healthy"}
+
+    monkeypatch.setattr(main.aws_service, method_name, succeed)
+    response = TestClient(main.app).get(f"/cloud/aws/s3/buckets/example/{path}")
+
+    assert response.status_code == 200
+    assert captured["max_keys"] == 1000
+
