@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 import threading
+from collections import OrderedDict
 import time
 from contextvars import ContextVar
 from functools import wraps
@@ -21,7 +22,8 @@ AWS_CLIENT_CONFIG = Config(
 # Requests set this from the authenticated token claim.  Role ARNs are trusted
 # deployment configuration, never supplied by callers.
 _request_tenant: ContextVar[str | None] = ContextVar("cloudops_aws_tenant", default=None)
-_assumed_sessions: dict[str, tuple[float, boto3.Session]] = {}
+_ASSUMED_SESSION_CACHE_MAX_ENTRIES = 256
+_assumed_sessions: OrderedDict[str, tuple[float, str, boto3.Session]] = OrderedDict()
 _assumed_sessions_lock = threading.Lock()
 
 
@@ -64,8 +66,13 @@ def _tenant_session(tenant_id: str) -> boto3.Session | None:
         return None
     with _assumed_sessions_lock:
         cached = _assumed_sessions.get(tenant_id)
-        if cached and cached[0] > time.time() + 60:
-            return cached[1]
+        if cached and cached[1] == role_arn and cached[0] > time.time() + 60:
+            _assumed_sessions.move_to_end(tenant_id)
+            return cached[2]
+
+        # A deployment may rotate a tenant's trusted role mapping without
+        # restarting the process. Never reuse credentials issued for the
+        # previous role ARN.
         sts = boto3.client("sts", config=AWS_CLIENT_CONFIG)
         response = sts.assume_role(
             RoleArn=role_arn,
@@ -79,7 +86,10 @@ def _tenant_session(tenant_id: str) -> boto3.Session | None:
             aws_secret_access_key=credentials["SecretAccessKey"],
             aws_session_token=credentials["SessionToken"],
         )
-        _assumed_sessions[tenant_id] = (expiry, session)
+        _assumed_sessions[tenant_id] = (expiry, role_arn, session)
+        _assumed_sessions.move_to_end(tenant_id)
+        while len(_assumed_sessions) > _ASSUMED_SESSION_CACHE_MAX_ENTRIES:
+            _assumed_sessions.popitem(last=False)
         return session
 
 
