@@ -1,4 +1,7 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
+from threading import Barrier
+import json
 
 import pytest
 
@@ -229,3 +232,50 @@ def test_removed_tenant_role_mapping_discards_cached_session(monkeypatch):
         assert "tenant-revoked" not in aws_service._assumed_sessions
     finally:
         aws_service._assumed_sessions.pop("tenant-revoked", None)
+
+def test_different_tenants_refresh_sts_sessions_concurrently(monkeypatch):
+    # Select tenant IDs that map to different fixed lock stripes.
+    tenants_by_stripe = {}
+    for index in range(1000):
+        tenant_id = f"tenant-{index}"
+        stripe = hash(tenant_id) % len(aws_service._TENANT_SESSION_LOCKS)
+        tenants_by_stripe.setdefault(stripe, tenant_id)
+        if len(tenants_by_stripe) == 2:
+            break
+    tenant_ids = list(tenants_by_stripe.values())
+    roles = {
+        tenant_id: f"arn:aws:iam::123456789012:role/{tenant_id}"
+        for tenant_id in tenant_ids
+    }
+    monkeypatch.setenv("CLOUDOPS_TENANT_AWS_ROLES", json.dumps(roles))
+    barrier = Barrier(2)
+
+    class FakeSts:
+        def assume_role(self, **kwargs):
+            # Both tenant refreshes must reach STS before either can finish.
+            barrier.wait(timeout=5)
+            return {"Credentials": {
+                "AccessKeyId": kwargs["RoleArn"],
+                "SecretAccessKey": "secret",
+                "SessionToken": "session",
+                "Expiration": datetime.now(timezone.utc) + timedelta(hours=1),
+            }}
+
+    class FakeSession:
+        pass
+
+    monkeypatch.setattr(aws_service.boto3, "client", lambda *_args, **_kwargs: FakeSts())
+    monkeypatch.setattr(aws_service.boto3, "Session", lambda **_kwargs: FakeSession())
+    for tenant_id in tenant_ids:
+        aws_service._assumed_sessions.pop(tenant_id, None)
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            sessions = list(executor.map(aws_service._tenant_session, tenant_ids))
+
+        assert all(isinstance(session, FakeSession) for session in sessions)
+        assert all(tenant_id in aws_service._assumed_sessions for tenant_id in tenant_ids)
+    finally:
+        for tenant_id in tenant_ids:
+            aws_service._assumed_sessions.pop(tenant_id, None)
+
