@@ -213,3 +213,19 @@ def test_tenant_role_cache_evicts_least_recently_used_entries(monkeypatch):
         assert len(aws_service._assumed_sessions) == 2
     finally:
         aws_service._assumed_sessions.clear()
+
+
+
+def test_removed_tenant_role_mapping_discards_cached_session(monkeypatch):
+    monkeypatch.setenv("CLOUDOPS_REQUIRE_TENANT_AWS_ROLE", "false")
+    monkeypatch.setenv("CLOUDOPS_TENANT_AWS_ROLES", "{}")
+    aws_service._assumed_sessions["tenant-revoked"] = (
+        datetime.now(timezone.utc).timestamp() + 3600,
+        "arn:aws:iam::123456789012:role/old",
+        object(),
+    )
+    try:
+        assert aws_service._tenant_session("tenant-revoked") is None
+        assert "tenant-revoked" not in aws_service._assumed_sessions
+    finally:
+        aws_service._assumed_sessions.pop("tenant-revoked", None)
