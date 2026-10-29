@@ -1181,6 +1181,7 @@ class AWSService:
 
             objects = []
             next_continuation_token = None
+            seen_continuation_tokens = set()
 
             while True:
                 params = {
@@ -1226,6 +1227,21 @@ class AWSService:
                     break
 
                 next_continuation_token = response.get("NextContinuationToken")
+                if not isinstance(next_continuation_token, str) or not next_continuation_token:
+                    return {
+                        "service": "s3",
+                        "status": "unhealthy",
+                        "bucket": bucket_name,
+                        "error": "S3 returned a truncated page without a continuation token",
+                    }
+                if next_continuation_token in seen_continuation_tokens:
+                    return {
+                        "service": "s3",
+                        "status": "unhealthy",
+                        "bucket": bucket_name,
+                        "error": "S3 returned a repeated continuation token",
+                    }
+                seen_continuation_tokens.add(next_continuation_token)
 
             return {
                 "service": "s3",
