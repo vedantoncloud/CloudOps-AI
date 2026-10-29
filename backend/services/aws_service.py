@@ -1361,6 +1361,7 @@ class AWSService:
             total_objects = 0
             total_size = 0
             continuation_token = None
+            seen_continuation_tokens = set()
             scan_complete = True
 
             while True:
@@ -1394,6 +1395,13 @@ class AWSService:
                     break
 
                 continuation_token = response.get("NextContinuationToken")
+                if not isinstance(continuation_token, str) or not continuation_token:
+                    return {"service": "s3", "status": "unhealthy", "bucket": bucket_name,
+                            "error": "S3 returned a truncated page without a continuation token"}
+                if continuation_token in seen_continuation_tokens:
+                    return {"service": "s3", "status": "unhealthy", "bucket": bucket_name,
+                            "error": "S3 returned a repeated continuation token"}
+                seen_continuation_tokens.add(continuation_token)
 
             return {
                 "service": "s3",
@@ -1420,6 +1428,7 @@ class AWSService:
 
             objects = []
             continuation_token = None
+            seen_continuation_tokens = set()
             scan_complete = True
 
             while True:
@@ -1458,6 +1467,13 @@ class AWSService:
                     break
 
                 continuation_token = response.get("NextContinuationToken")
+                if not isinstance(continuation_token, str) or not continuation_token:
+                    return {"service": "s3", "status": "unhealthy", "bucket": bucket_name,
+                            "error": "S3 returned a truncated page without a continuation token"}
+                if continuation_token in seen_continuation_tokens:
+                    return {"service": "s3", "status": "unhealthy", "bucket": bucket_name,
+                            "error": "S3 returned a repeated continuation token"}
+                seen_continuation_tokens.add(continuation_token)
 
             objects.sort(
                 key=lambda obj: obj["size"],
