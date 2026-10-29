@@ -99,6 +99,36 @@ def test_get_status_when_aws_is_connected():
     assert result["arn"] == fake_identity["Arn"]
 
 
+def test_get_status_aggregates_all_ec2_pages():
+    fake_identity = {
+        "Account": "123456789012",
+        "Arn": "arn:aws:iam::123456789012:user/cloudops-ai",
+    }
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_client.return_value.get_caller_identity.return_value = fake_identity
+        ec2 = mock_client.return_value
+        ec2.describe_instances.side_effect = [
+            {"Reservations": [{"Instances": [{"State": {"Name": "running"}}]}], "NextToken": "page-2"},
+            {"Reservations": [{"Instances": [
+                {"State": {"Name": "stopped"}},
+                {"State": {"Name": "terminated"}},
+            ]}]},
+        ]
+
+        result = AWSService().get_status()
+
+    assert result["services"]["ec2"] == {
+        "status": "healthy",
+        "total_instances": 3,
+        "running_instances": 1,
+        "stopped_instances": 1,
+    }
+    assert ec2.describe_instances.call_args_list[0].kwargs == {"MaxResults": 1000}
+    assert ec2.describe_instances.call_args_list[1].kwargs == {
+        "MaxResults": 1000, "NextToken": "page-2"
+    }
+
+
 def test_get_service_health_for_sts():
     with patch("services.aws_service.boto3.client") as mock_client:
         mock_sts = mock_client.return_value
