@@ -61,6 +61,10 @@ def _tenant_roles_required() -> bool:
 def _tenant_session(tenant_id: str) -> boto3.Session | None:
     role_arn = _tenant_role_arn(tenant_id)
     if role_arn is None:
+        # Removing a tenant mapping is a credential revocation signal for this
+        # process. Do not retain a previously assumed session for that tenant.
+        with _assumed_sessions_lock:
+            _assumed_sessions.pop(tenant_id, None)
         if _tenant_roles_required():
             raise RuntimeError("No AWS role is configured for this tenant")
         return None
