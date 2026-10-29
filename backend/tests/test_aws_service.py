@@ -640,6 +640,42 @@ def test_get_s3_objects_pagination():
     )
 
 
+def test_get_s3_objects_rejects_repeated_continuation_token():
+    repeated_page = {
+        "Contents": [{"Key": "file.txt", "Size": 10}],
+        "IsTruncated": True,
+        "NextContinuationToken": "same-token",
+    }
+    with patch("services.aws_service.boto3.client") as mock_client:
+        s3 = mock_client.return_value
+        s3.list_objects_v2.side_effect = [repeated_page, repeated_page]
+
+        result = AWSService().get_s3_objects("cloudops-test")
+
+    assert result == {
+        "service": "s3",
+        "status": "unhealthy",
+        "bucket": "cloudops-test",
+        "error": "S3 returned a repeated continuation token",
+    }
+    assert s3.list_objects_v2.call_count == 2
+
+
+def test_get_s3_objects_rejects_truncated_page_without_cursor():
+    with patch("services.aws_service.boto3.client") as mock_client:
+        s3 = mock_client.return_value
+        s3.list_objects_v2.return_value = {
+            "Contents": [{"Key": "file.txt", "Size": 10}],
+            "IsTruncated": True,
+        }
+
+        result = AWSService().get_s3_objects("cloudops-test")
+
+    assert result["status"] == "unhealthy"
+    assert result["error"] == "S3 returned a truncated page without a continuation token"
+    assert s3.list_objects_v2.call_count == 1
+
+
 def test_get_s3_objects_resumes_from_continuation_token():
     mock_s3 = MagicMock()
     mock_s3.list_objects_v2.return_value = {
