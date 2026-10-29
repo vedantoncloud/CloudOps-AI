@@ -1767,6 +1767,27 @@ def test_get_s3_bucket_health_access_denied():
     )
 
 
+@pytest.mark.parametrize(
+    "method_name",
+    ["get_s3_object_statistics", "get_s3_largest_objects"],
+)
+def test_s3_analytics_reject_repeated_continuation_tokens(method_name):
+    repeated_page = {
+        "Contents": [{"Key": "file.txt", "Size": 10}],
+        "IsTruncated": True,
+        "NextContinuationToken": "same-token",
+    }
+    with patch("services.aws_service.boto3.client") as mock_client:
+        s3 = mock_client.return_value
+        s3.list_objects_v2.side_effect = [repeated_page, repeated_page]
+
+        result = getattr(AWSService(), method_name)("cloudops-test")
+
+    assert result["status"] == "unhealthy"
+    assert result["error"] == "S3 returned a repeated continuation token"
+    assert s3.list_objects_v2.call_count == 2
+
+
 def test_get_s3_largest_objects():
     fake_response = {
         "Contents": [
