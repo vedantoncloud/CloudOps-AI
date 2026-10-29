@@ -218,22 +218,35 @@ class AWSService:
             identity = sts.get_caller_identity()
 
             ec2 = _aws_client("ec2")
-            response = ec2.describe_instances()
-
             total_instances = 0
             running_instances = 0
             stopped_instances = 0
+            next_token = None
+            seen_tokens = set()
 
-            for reservation in response.get("Reservations", []):
-                for instance in reservation.get("Instances", []):
-                    total_instances += 1
+            # DescribeInstances is paginated. Count every page so the status
+            # endpoint does not silently under-report large AWS accounts.
+            while True:
+                params = {"MaxResults": 1000}
+                if next_token:
+                    params["NextToken"] = next_token
+                response = ec2.describe_instances(**params)
 
-                    state = instance.get("State", {}).get("Name")
+                for reservation in response.get("Reservations", []):
+                    for instance in reservation.get("Instances", []):
+                        total_instances += 1
+                        state = instance.get("State", {}).get("Name")
+                        if state == "running":
+                            running_instances += 1
+                        elif state == "stopped":
+                            stopped_instances += 1
 
-                    if state == "running":
-                        running_instances += 1
-                    elif state == "stopped":
-                        stopped_instances += 1
+                next_token = response.get("NextToken")
+                if not next_token:
+                    break
+                if next_token in seen_tokens:
+                    raise RuntimeError("EC2 returned a repeated pagination token")
+                seen_tokens.add(next_token)
 
             return {
                 "provider": "AWS",
