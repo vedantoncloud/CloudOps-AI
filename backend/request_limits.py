@@ -138,9 +138,32 @@ class ResponseSizeLimitMiddleware:
         messages = []
         size = 0
         oversized = False
+        stream_sqlite_backup = False
 
         async def capture(message):
-            nonlocal size, oversized
+            nonlocal size, oversized, stream_sqlite_backup
+            if message["type"] == "http.response.start":
+                response_headers = {
+                    name.lower(): value
+                    for name, value in message.get("headers", [])
+                }
+                content_type = response_headers.get(b"content-type", b"").split(b";", 1)[0].strip().lower()
+                path = scope.get("path", "")
+                stream_sqlite_backup = (
+                    scope.get("method") == "GET"
+                    and (
+                        path == "/autonomy/audit/database/backup"
+                        or path.startswith("/autonomy/audit/database/backup/")
+                    )
+                    and content_type == b"application/vnd.sqlite3"
+                )
+            # SQLite backup downloads are already generated from a consistent,
+            # integrity-checked snapshot and must remain streamed. Buffering them
+            # here defeats StreamingResponse and incorrectly rejects stores
+            # larger than the ordinary API response budget.
+            if stream_sqlite_backup:
+                await send(message)
+                return
             if message["type"] == "http.response.body":
                 size += len(message.get("body", b""))
                 if size > self.max_bytes:
