@@ -64,7 +64,6 @@ governance or compliance retention rule. Grant `s3:GetBucketObjectLockConfigurat
 to the AWS role for this read-only check. An enabled bucket without a default
 retention rule is shown distinctly from a bucket without Object Lock.
 
-
 ## AWS IAM permission reference
 
 The AWS integration currently performs read-only inventory, posture, metrics, alarm,
@@ -81,7 +80,7 @@ The following actions map the SDK operations used by
 | S3 bucket discovery | `s3:ListAllMyBuckets`, `s3:GetBucketLocation` | `s3:ListAllMyBuckets` requires `Resource: "*"`. Scope `s3:GetBucketLocation` to the required bucket ARNs. |
 | S3 bucket configuration and posture | `s3:GetBucketVersioning`, `s3:GetLifecycleConfiguration`, `s3:GetReplicationConfiguration`, `s3:GetBucketLogging`, `s3:GetEncryptionConfiguration`, `s3:GetBucketObjectLockConfiguration`, `s3:GetBucketTagging`, `s3:GetBucketPolicy`, `s3:GetBucketPolicyStatus`, `s3:GetBucketAcl`, `s3:GetBucketPublicAccessBlock` | Scope bucket-level actions to `arn:aws:s3:::bucket-name` for only the buckets assigned to that tenant. |
 | S3 object inventory and versions | `s3:ListBucket`, `s3:ListBucketVersions` | Scope list actions to the assigned bucket ARNs. |
-| S3 object metadata and downloads | `s3:GetObject` | Scope to assigned object ARNs such as `arn:aws:s3:::bucket-name/*`. This also covers the GET operation signed by the application's presigned-download URL; the caller still needs access when using it. |
+| S3 object metadata and downloads | `s3:GetObject` | Scope to assigned object ARNs such as `arn:aws:s3:::bucket-name/*`. The application signer needs this permission when creating a presigned-download URL. The URL itself is a time-limited bearer credential: anyone who possesses it can use it until it expires, without separate AWS credentials. |
 | EC2 metrics and alarms | `cloudwatch:GetMetricStatistics`, `cloudwatch:DescribeAlarms` | `GetMetricStatistics` does not support resource-level permissions and requires `Resource: "*"`. Scope `DescribeAlarms` to alarm ARNs where supported by the CloudWatch authorization reference. |
 | Account cost analysis | `ce:GetCostAndUsage` | This endpoint is admin-only because it returns account-level spend. Use the Cost Explorer/Billing View resource model supported by the account; otherwise the action commonly needs `Resource: "*"`. |
 
