@@ -26,7 +26,44 @@ class AWSProvider(CloudProvider):
         return self.service.get_ec2_summary()
 
     def get_s3_buckets(self) -> dict[str, Any]:
-        return self.service.get_s3_buckets()
+        """Return bucket inventory with verified ownership tags for tenant filtering."""
+        result = self.service.get_s3_buckets()
+        if not isinstance(result, dict) or result.get("status") != "healthy":
+            return result
+        buckets = result.get("buckets")
+        if not isinstance(buckets, list):
+            return {
+                "service": "s3",
+                "status": "unhealthy",
+                "error": "Malformed S3 bucket inventory",
+            }
+
+        enriched = []
+        for bucket in buckets:
+            if isinstance(bucket, str):
+                bucket = {"name": bucket}
+            if not isinstance(bucket, dict) or not isinstance(bucket.get("name"), str) or not bucket["name"].strip():
+                return {
+                    "service": "s3",
+                    "status": "unhealthy",
+                    "error": "Malformed S3 bucket inventory",
+                }
+            ownership = self.service.get_s3_bucket_tags(bucket["name"])
+            tags = ownership.get("tags") if isinstance(ownership, dict) else None
+            if (
+                not isinstance(ownership, dict)
+                or ownership.get("status") != "healthy"
+                or not isinstance(tags, dict)
+                or any(not isinstance(key, str) or not isinstance(value, str) for key, value in tags.items())
+            ):
+                return {
+                    "service": "s3",
+                    "status": "unhealthy",
+                    "error": "Unable to verify S3 bucket ownership tags",
+                }
+            enriched.append({**bucket, "tags": tags})
+
+        return {**result, "buckets": enriched}
 
     def get_resource(
         self,

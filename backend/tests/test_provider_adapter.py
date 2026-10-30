@@ -81,15 +81,22 @@ class TestAWSProvider:
             "status": "healthy",
             "buckets": ["bucket-a"],
         }
+        service.get_s3_bucket_tags.return_value = {
+            "status": "healthy",
+            "tags": {"CloudOpsTenantId": "tenant-a"},
+        }
 
         provider = AWSProvider(service)
 
         result = provider.get_s3_buckets()
 
         service.get_s3_buckets.assert_called_once_with()
+        service.get_s3_bucket_tags.assert_called_once_with("bucket-a")
         assert result == {
             "status": "healthy",
-            "buckets": ["bucket-a"],
+            "buckets": [
+                {"name": "bucket-a", "tags": {"CloudOpsTenantId": "tenant-a"}}
+            ],
         }
 
     def test_adapter_does_not_expose_mutation_api(self):
