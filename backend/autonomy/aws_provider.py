@@ -40,6 +40,8 @@ class AWSProvider(CloudProvider):
 
         enriched = []
         for bucket in buckets:
+            if isinstance(bucket, str):
+                bucket = {"name": bucket}
             if not isinstance(bucket, dict) or not isinstance(bucket.get("name"), str) or not bucket["name"].strip():
                 return {
                     "service": "s3",
