@@ -46,6 +46,48 @@ def test_admin_downloads_consistent_audit_database_backup(tmp_path, monkeypatch)
     assert source.read_bytes() == source_before
 
 
+
+
+
+def test_large_sqlite_backup_streams_beyond_normal_response_limit(tmp_path, monkeypatch):
+    from request_limits import ResponseSizeLimitMiddleware
+
+    source = tmp_path / "large-audit.db"
+    trail = PersistentAuditTrail(source)
+    with sqlite3.connect(source) as connection:
+        connection.execute("CREATE TABLE backup_payload (payload BLOB)")
+        connection.execute(
+            "INSERT INTO backup_payload VALUES (?)",
+            (b"x" * (5 * 1024 * 1024),),
+        )
+    monkeypatch.setattr(audit_api, "audit_trail", trail)
+
+    app = FastAPI()
+    app.include_router(audit_api.router)
+    app.add_middleware(
+        AccessControlMiddleware,
+        mode="token",
+        tokens={"test-token": Principal("operator-1", "admin", "tenant-1")},
+    )
+    app.add_middleware(ResponseSizeLimitMiddleware, max_bytes=1024)
+
+    response = TestClient(app).get(
+        "/autonomy/audit/database/backup",
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 200
+    assert len(response.content) > 5 * 1024 * 1024
+    backup = tmp_path / "large-backup.db"
+    backup.write_bytes(response.content)
+    with sqlite3.connect(backup) as connection:
+        assert connection.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+        payload = connection.execute(
+            "SELECT length(payload) FROM backup_payload"
+        ).fetchone()
+    assert payload == (5 * 1024 * 1024,)
+
+
 def test_audit_database_backup_requires_admin(tmp_path, monkeypatch):
     trail = PersistentAuditTrail(tmp_path / "audit.db")
     monkeypatch.setattr(audit_api, "audit_trail", trail)
