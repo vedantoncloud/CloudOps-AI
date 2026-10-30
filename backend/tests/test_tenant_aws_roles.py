@@ -367,3 +367,19 @@ def test_different_tenants_refresh_sts_sessions_concurrently(monkeypatch):
         for tenant_id in tenant_ids:
             aws_service._assumed_sessions.pop(tenant_id, None)
 
+
+
+@pytest.mark.parametrize(
+    "mapping",
+    [
+        '{"tenant-a":"arn:aws:iam::123456789012:role/first",'
+        '"tenant-a":"arn:aws:iam::123456789012:role/second"}',
+        '{"tenant-a":{"role_arn":"arn:aws:iam::123456789012:role/tenant-a",'
+        '"role_arn":"arn:aws:iam::123456789012:role/other",'
+        '"external_id":"tenant-a-external"}}',
+    ],
+)
+def test_tenant_role_mapping_rejects_duplicate_json_keys(monkeypatch, mapping):
+    monkeypatch.setenv("CLOUDOPS_TENANT_AWS_ROLES", mapping)
+    with pytest.raises(RuntimeError, match="without duplicate keys"):
+        aws_service._tenant_role_arn("tenant-a")
