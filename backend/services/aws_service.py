@@ -884,6 +884,11 @@ class AWSService:
 
     def get_s3_buckets(self, max_buckets=1000, continuation_token=None, prefix=None):
         try:
+            request_cursor_error = _page_cursor_error(
+                "S3 bucket request", continuation_token
+            )
+            if request_cursor_error:
+                return {"service": "s3", "status": "unhealthy", "error": request_cursor_error}
             s3 = _aws_client("s3")
             request = {}
             if max_buckets is not None:
@@ -893,6 +898,19 @@ class AWSService:
             if prefix is not None:
                 request["Prefix"] = prefix
             response = s3.list_buckets(**request)
+            if not isinstance(response, dict) or not isinstance(response.get("Buckets", []), list):
+                return {"service": "s3", "status": "unhealthy", "error": "Malformed S3 bucket list response"}
+            page_token = response.get("ContinuationToken")
+            cursor_error = _page_cursor_error("S3 bucket", page_token, continuation_token)
+            if cursor_error:
+                return {"service": "s3", "status": "unhealthy", "error": cursor_error}
+            is_truncated = response.get("IsTruncated", page_token is not None)
+            if not isinstance(is_truncated, bool) or is_truncated != (page_token is not None):
+                return {
+                    "service": "s3",
+                    "status": "unhealthy",
+                    "error": "S3 bucket pagination response is inconsistent",
+                }
 
             buckets = []
 
@@ -913,8 +931,8 @@ class AWSService:
             }
             if max_buckets is not None or continuation_token is not None:
                 result.update({
-                    "is_truncated": bool(response.get("ContinuationToken")),
-                    "next_continuation_token": response.get("ContinuationToken"),
+                    "is_truncated": is_truncated,
+                    "next_continuation_token": page_token,
                 })
             return result
 
