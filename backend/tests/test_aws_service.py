@@ -119,6 +119,23 @@ def test_get_status_rejects_repeated_ec2_pagination_token():
     assert "repeated pagination token" in result["error"]
 
 
+@pytest.mark.parametrize("bad_token", ["", "   ", 42, [], {}])
+def test_get_status_rejects_malformed_ec2_pagination_tokens(bad_token):
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_client.return_value.get_caller_identity.return_value = {
+            "Account": "123456789012",
+            "Arn": "arn:aws:iam::123456789012:user/cloudops-ai",
+        }
+        mock_client.return_value.describe_instances.return_value = {
+            "Reservations": [], "NextToken": bad_token
+        }
+        result = AWSService().get_status()
+
+    assert result["status"] == "disconnected"
+    assert result["error"] == "Malformed EC2 status page cursor"
+    assert mock_client.return_value.describe_instances.call_count == 1
+
+
 def test_get_status_aggregates_all_ec2_pages():
     fake_identity = {
         "Account": "123456789012",
@@ -147,6 +164,19 @@ def test_get_status_aggregates_all_ec2_pages():
     assert ec2.describe_instances.call_args_list[1].kwargs == {
         "MaxResults": 1000, "NextToken": "page-2"
     }
+
+
+@pytest.mark.parametrize("bad_token", ["", "   ", 42, [], {}])
+def test_get_ec2_summary_rejects_malformed_pagination_tokens(bad_token):
+    with patch("services.aws_service.boto3.client") as mock_client:
+        mock_client.return_value.describe_instances.return_value = {
+            "Reservations": [], "NextToken": bad_token
+        }
+        result = AWSService().get_ec2_summary()
+
+    assert result["status"] == "unhealthy"
+    assert result["error"] == "Malformed EC2 summary page cursor"
+    assert mock_client.return_value.describe_instances.call_count == 1
 
 
 def test_get_service_health_for_sts():
