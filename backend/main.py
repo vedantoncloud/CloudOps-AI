@@ -1585,6 +1585,11 @@ def aws_ec2_alarms(
     """List CloudWatch CPU alarms attached to one visible EC2 instance."""
     _validate_ec2_instance_id(instance_id)
     _validate_ec2_region(region)
+    if next_token is not None and (not next_token.strip() or len(next_token) > 4096):
+        raise HTTPException(
+            status_code=400,
+            detail="next_token must contain 1 to 4096 non-whitespace characters",
+        )
     _require_tenant_ec2_instance(request, instance_id, region)
     result = _aws_resource_result(lambda: aws_service.get_ec2_alarms(
         instance_id,
