@@ -978,6 +978,13 @@ def aws_s3_objects(
     continuation_token: str = None,
     delimiter: str = None,
 ):
+    if continuation_token is not None and (
+        not continuation_token.strip() or len(continuation_token) > 4096
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="continuation_token must contain 1 to 4096 non-whitespace characters",
+        )
     _require_tenant_s3_bucket(request, bucket_name)
     if max_keys is not None and (max_keys <= 0 or max_keys > 1000):
         raise HTTPException(
@@ -1083,6 +1090,15 @@ def aws_s3_object_versions(
     max_keys: int = 100,
 ):
     """Browse one bounded page of S3 object versions within the tenant bucket."""
+    for name, marker in (
+        ("key_marker", key_marker),
+        ("version_id_marker", version_id_marker),
+    ):
+        if marker is not None and (not marker.strip() or len(marker) > 4096):
+            raise HTTPException(
+                status_code=400,
+                detail=f"{name} must contain 1 to 4096 non-whitespace characters",
+            )
     _require_tenant_s3_bucket(request, bucket_name)
     if max_keys <= 0 or max_keys > 1000:
         raise HTTPException(status_code=400, detail="max_keys must be between 1 and 1000")
