@@ -64,6 +64,48 @@ governance or compliance retention rule. Grant `s3:GetBucketObjectLockConfigurat
 to the AWS role for this read-only check. An enabled bucket without a default
 retention rule is shown distinctly from a bucket without Object Lock.
 
+## AWS IAM permission reference
+
+The AWS integration currently performs read-only inventory, posture, metrics, alarm,
+and cost queries, plus `sts:AssumeRole` when tenant role mappings are configured.
+The following actions map the SDK operations used by
+`backend/services/aws_service.py`; they are not a general-purpose AWS policy.
+
+| Feature | IAM actions used | Resource scope guidance |
+| --- | --- | --- |
+| Tenant role assumption | `sts:AssumeRole` | Restrict the application principal's identity policy to the exact tenant role ARNs it must assume. In each target role's trust policy, trust only the dedicated application principal and require that tenant's exact ExternalId. ExternalId is a trust-policy condition, not a substitute for restricting the role ARN. |
+| Caller identity | No IAM allow action required for `sts:GetCallerIdentity` | AWS documents that this operation requires no permission, even when explicitly denied. |
+| EC2 inventory and details | `ec2:DescribeRegions`, `ec2:DescribeInstances`, `ec2:DescribeVolumes`, `ec2:DescribeSnapshots`, `ec2:DescribeSecurityGroups`, `ec2:DescribeInstanceStatus` | These Describe operations do not expose resource-level authorization in the EC2 service authorization reference; use `Resource: "*"` for these actions. |
+| RDS inventory and ownership tags | `rds:DescribeDBInstances`, `rds:DescribeDBSnapshots`, `rds:ListTagsForResource` | Where supported by the action's authorization model, scope to the relevant DB instance and DB snapshot ARNs. Validate the exact resource types and conditions against the current RDS authorization reference before deploying a restrictive policy. |
+| S3 bucket discovery | `s3:ListAllMyBuckets`, `s3:GetBucketLocation` | `s3:ListAllMyBuckets` requires `Resource: "*"`. Scope `s3:GetBucketLocation` to the required bucket ARNs. |
+| S3 bucket configuration and posture | `s3:GetBucketVersioning`, `s3:GetLifecycleConfiguration`, `s3:GetReplicationConfiguration`, `s3:GetBucketLogging`, `s3:GetEncryptionConfiguration`, `s3:GetBucketObjectLockConfiguration`, `s3:GetBucketTagging`, `s3:GetBucketPolicy`, `s3:GetBucketPolicyStatus`, `s3:GetBucketAcl`, `s3:GetBucketPublicAccessBlock` | Scope bucket-level actions to `arn:aws:s3:::bucket-name` for only the buckets assigned to that tenant. |
+| S3 object inventory and versions | `s3:ListBucket`, `s3:ListBucketVersions` | Scope list actions to the assigned bucket ARNs. |
+| S3 object metadata and downloads | `s3:GetObject`, `s3:GetObjectVersion` | Scope to assigned object ARNs such as `arn:aws:s3:::bucket-name/*`. `s3:GetObjectVersion` is needed when metadata or a presigned download targets a specific version ID. The application signer needs the applicable read permission when creating a presigned-download URL. The URL itself is a time-limited bearer credential: anyone who possesses it can use it until it expires, without separate AWS credentials. |
+| EC2 metrics and alarms | `cloudwatch:GetMetricStatistics`, `cloudwatch:DescribeAlarms` | `GetMetricStatistics` does not support resource-level permissions and requires `Resource: "*"`. Scope `DescribeAlarms` to alarm ARNs where supported by the CloudWatch authorization reference. |
+| Account cost analysis | `ce:GetCostAndUsage` | This endpoint is admin-only because it returns account-level spend. Use the Cost Explorer/Billing View resource model supported by the account; otherwise the action commonly needs `Resource: "*"`. |
+
+This mapping is based on the SDK operations currently present in the service layer.
+It deliberately does not grant create, update, delete, start, stop, or other
+infrastructure-mutation actions. Tenant ownership tags enforced by the API are
+an application authorization boundary; they do not replace IAM permissions or
+resource scoping in the target account.
+
+Start with the smallest feature-specific action set and add permissions only
+when an enabled endpoint demonstrably needs them. A deployment that disables a
+feature can omit its corresponding actions. Test the final policy in a
+non-production account: service authorization can vary by resource type,
+region, account configuration, and dependent permissions. Do not use
+`AdministratorAccess` as a troubleshooting shortcut.
+
+Official references:
+- [EC2 service authorization reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_ec2.html)
+- [S3 service authorization reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_s3.html)
+- [RDS service authorization reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_rds.html)
+- [CloudWatch service authorization reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_cloudwatch.html)
+- [Cost Explorer service authorization reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_ce.html)
+- [STS service authorization reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_sts.html)
+- [STS GetCallerIdentity API](https://docs.aws.amazon.com/STS/latest/APIReference/API_GetCallerIdentity.html)
+
 ## API access control
 
 The assembled API supports two access modes. For local development, set
