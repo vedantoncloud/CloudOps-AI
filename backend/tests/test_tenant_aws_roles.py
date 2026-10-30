@@ -52,6 +52,94 @@ def test_tenant_role_configuration_rejects_malformed_or_untrusted_values(monkeyp
         aws_service._tenant_role_arn("tenant-a")
 
 
+
+
+
+def test_tenant_role_mapping_supports_sts_external_id(monkeypatch):
+    class FakeSession:
+        def client(self, name, **kwargs):
+            return name
+
+    class FakeSts:
+        calls = []
+
+        def assume_role(self, **kwargs):
+            self.calls.append(kwargs)
+            return {"Credentials": {
+                "AccessKeyId": "key", "SecretAccessKey": "secret", "SessionToken": "session",
+                "Expiration": datetime.now(timezone.utc) + timedelta(hours=1),
+            }}
+
+    sts = FakeSts()
+    mapping = {
+        "tenant-a": {
+            "role_arn": "arn:aws:iam::123456789012:role/tenant-a",
+            "external_id": "cloudops-tenant-a-external",
+        }
+    }
+    monkeypatch.setenv("CLOUDOPS_TENANT_AWS_ROLES", json.dumps(mapping))
+    monkeypatch.setattr(aws_service.boto3, "client", lambda *_args, **_kwargs: sts)
+    monkeypatch.setattr(aws_service.boto3, "Session", lambda **_kwargs: FakeSession())
+    aws_service._assumed_sessions.pop("tenant-a", None)
+    token = aws_service.set_aws_tenant("tenant-a")
+    try:
+        aws_service._aws_client("ec2")
+        assert sts.calls[0]["ExternalId"] == "cloudops-tenant-a-external"
+        assert sts.calls[0]["RoleArn"] == mapping["tenant-a"]["role_arn"]
+    finally:
+        aws_service.reset_aws_tenant(token)
+        aws_service._assumed_sessions.pop("tenant-a", None)
+
+
+def test_external_id_change_invalidates_cached_tenant_session(monkeypatch):
+    class FakeSession:
+        def client(self, name, **kwargs):
+            return name
+
+    class FakeSts:
+        calls = []
+
+        def assume_role(self, **kwargs):
+            self.calls.append(kwargs.copy())
+            return {"Credentials": {
+                "AccessKeyId": "key", "SecretAccessKey": "secret", "SessionToken": "session",
+                "Expiration": datetime.now(timezone.utc) + timedelta(hours=1),
+            }}
+
+    sts = FakeSts()
+    monkeypatch.setattr(aws_service.boto3, "client", lambda *_args, **_kwargs: sts)
+    monkeypatch.setattr(aws_service.boto3, "Session", lambda **_kwargs: FakeSession())
+    aws_service._assumed_sessions.pop("tenant-a", None)
+    token = aws_service.set_aws_tenant("tenant-a")
+    try:
+        for external_id in ("external-v1", "external-v2"):
+            monkeypatch.setenv("CLOUDOPS_TENANT_AWS_ROLES", json.dumps({
+                "tenant-a": {
+                    "role_arn": "arn:aws:iam::123456789012:role/tenant-a",
+                    "external_id": external_id,
+                }
+            }))
+            aws_service._aws_client("ec2")
+    finally:
+        aws_service.reset_aws_tenant(token)
+        aws_service._assumed_sessions.pop("tenant-a", None)
+
+    assert [call["ExternalId"] for call in sts.calls] == ["external-v1", "external-v2"]
+
+
+@pytest.mark.parametrize("mapping", [
+    {"tenant-a": "arn:aws:s3:::not-a-role"},
+    {"tenant-a": "arn:aws:iam::123:role/short-account"},
+    {"tenant-a": {"role_arn": "arn:aws:iam::123456789012:role/tenant-a", "external_id": ""}},
+    {"tenant-a": {"role_arn": "arn:aws:iam::123456789012:role/tenant-a", "external_id": "bad value"}},
+    {"tenant-a": {"role_arn": "arn:aws:iam::123456789012:role/tenant-a", "external_id": "valid", "extra": "field"}},
+])
+def test_tenant_role_mapping_rejects_invalid_role_arns_and_external_ids(monkeypatch, mapping):
+    monkeypatch.setenv("CLOUDOPS_TENANT_AWS_ROLES", json.dumps(mapping))
+    with pytest.raises(RuntimeError):
+        aws_service._tenant_role_config("tenant-a")
+
+
 def test_unmapped_tenant_keeps_default_aws_identity(monkeypatch):
     sentinel = object()
     monkeypatch.setenv("CLOUDOPS_ENV", "development")

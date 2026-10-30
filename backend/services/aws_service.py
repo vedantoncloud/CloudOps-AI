@@ -2,6 +2,7 @@ import boto3
 import hashlib
 import json
 import os
+import re
 import threading
 from collections import OrderedDict
 import time
@@ -23,7 +24,7 @@ AWS_CLIENT_CONFIG = Config(
 # deployment configuration, never supplied by callers.
 _request_tenant: ContextVar[str | None] = ContextVar("cloudops_aws_tenant", default=None)
 _ASSUMED_SESSION_CACHE_MAX_ENTRIES = 256
-_assumed_sessions: OrderedDict[str, tuple[float, str, boto3.Session]] = OrderedDict()
+_assumed_sessions: OrderedDict[str, tuple[float, tuple[str, str | None], boto3.Session]] = OrderedDict()
 _assumed_sessions_lock = threading.Lock()
 # Fixed lock striping bounds synchronization state while allowing unrelated
 # tenants to refresh their credentials concurrently.
@@ -39,17 +40,55 @@ def reset_aws_tenant(token) -> None:
     _request_tenant.reset(token)
 
 
-def _tenant_role_arn(tenant_id: str) -> str | None:
+_IAM_ROLE_ARN_PATTERN = re.compile(
+    r"^arn:[a-z0-9-]+:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$"
+)
+_EXTERNAL_ID_PATTERN = re.compile(r"^[A-Za-z0-9_+=,.@:/-]{2,1224}$")
+
+
+def _tenant_role_config(tenant_id: str) -> dict | None:
+    """Return a validated tenant role mapping, including optional STS ExternalId.
+
+    Legacy string values remain supported. Object values must contain both
+    role_arn and external_id so cross-account trust policies can require it.
+    """
     try:
         roles = json.loads(os.getenv("CLOUDOPS_TENANT_AWS_ROLES", "{}"))
     except (TypeError, json.JSONDecodeError) as exc:
         raise RuntimeError("CLOUDOPS_TENANT_AWS_ROLES must be a JSON object") from exc
-    if not isinstance(roles, dict) or any(
-        not isinstance(key, str) or not isinstance(value, str) or not value.startswith("arn:")
-        for key, value in roles.items()
-    ):
+
+    if not isinstance(roles, dict):
         raise RuntimeError("CLOUDOPS_TENANT_AWS_ROLES must map tenant IDs to role ARNs")
-    return roles.get(tenant_id)
+
+    for key, value in roles.items():
+        if not isinstance(key, str) or not key.strip():
+            raise RuntimeError("CLOUDOPS_TENANT_AWS_ROLES must map tenant IDs to role ARNs")
+        if isinstance(value, str):
+            role_arn, external_id = value, None
+        elif isinstance(value, dict) and set(value) == {"role_arn", "external_id"}:
+            role_arn, external_id = value["role_arn"], value["external_id"]
+        else:
+            raise RuntimeError("CLOUDOPS_TENANT_AWS_ROLES entries must be role ARNs or role_arn/external_id objects")
+
+        if not isinstance(role_arn, str) or not _IAM_ROLE_ARN_PATTERN.fullmatch(role_arn):
+            raise RuntimeError("CLOUDOPS_TENANT_AWS_ROLES must contain valid IAM role ARNs")
+        if external_id is not None and (
+            not isinstance(external_id, str) or not _EXTERNAL_ID_PATTERN.fullmatch(external_id)
+        ):
+            raise RuntimeError("CLOUDOPS_TENANT_AWS_ROLES contains an invalid STS ExternalId")
+
+    value = roles.get(tenant_id)
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return {"role_arn": value, "external_id": None}
+    return {"role_arn": value["role_arn"], "external_id": value["external_id"]}
+
+
+def _tenant_role_arn(tenant_id: str) -> str | None:
+    """Backward-compatible role ARN accessor for existing callers/tests."""
+    config = _tenant_role_config(tenant_id)
+    return config["role_arn"] if config else None
 
 
 def _tenant_roles_required() -> bool:
@@ -66,8 +105,8 @@ def _tenant_session(tenant_id: str) -> boto3.Session | None:
     # across STS network calls. A fixed stripe count bounds lock memory.
     tenant_lock = _TENANT_SESSION_LOCKS[hash(tenant_id) % len(_TENANT_SESSION_LOCKS)]
     with tenant_lock:
-        role_arn = _tenant_role_arn(tenant_id)
-        if role_arn is None:
+        role_config = _tenant_role_config(tenant_id)
+        if role_config is None:
             # Removing a tenant mapping is a credential revocation signal for
             # this process. Do not retain a previously assumed session.
             with _assumed_sessions_lock:
@@ -76,20 +115,26 @@ def _tenant_session(tenant_id: str) -> boto3.Session | None:
                 raise RuntimeError("No AWS role is configured for this tenant")
             return None
 
+        role_arn = role_config["role_arn"]
+        external_id = role_config["external_id"]
+        cache_key = (role_arn, external_id)
         with _assumed_sessions_lock:
             cached = _assumed_sessions.get(tenant_id)
-            if cached and cached[1] == role_arn and cached[0] > time.time() + 60:
+            if cached and cached[1] == cache_key and cached[0] > time.time() + 60:
                 _assumed_sessions.move_to_end(tenant_id)
                 return cached[2]
 
         # Do not hold the shared cache lock while waiting on AWS STS. Other
         # tenants can continue using or refreshing their own sessions.
         sts = boto3.client("sts", config=AWS_CLIENT_CONFIG)
-        response = sts.assume_role(
-            RoleArn=role_arn,
-            RoleSessionName="cloudops-" + hashlib.sha256(tenant_id.encode()).hexdigest()[:16],
-            DurationSeconds=3600,
-        )
+        assume_role_args = {
+            "RoleArn": role_arn,
+            "RoleSessionName": "cloudops-" + hashlib.sha256(tenant_id.encode()).hexdigest()[:16],
+            "DurationSeconds": 3600,
+        }
+        if external_id is not None:
+            assume_role_args["ExternalId"] = external_id
+        response = sts.assume_role(**assume_role_args)
         credentials = response["Credentials"]
         expiry = credentials["Expiration"].timestamp()
         session = boto3.Session(
@@ -98,7 +143,7 @@ def _tenant_session(tenant_id: str) -> boto3.Session | None:
             aws_session_token=credentials["SessionToken"],
         )
         with _assumed_sessions_lock:
-            _assumed_sessions[tenant_id] = (expiry, role_arn, session)
+            _assumed_sessions[tenant_id] = (expiry, cache_key, session)
             _assumed_sessions.move_to_end(tenant_id)
             while len(_assumed_sessions) > _ASSUMED_SESSION_CACHE_MAX_ENTRIES:
                 _assumed_sessions.popitem(last=False)
