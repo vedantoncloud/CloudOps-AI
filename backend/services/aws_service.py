@@ -262,7 +262,19 @@ class AWSService:
                             stopped_instances += 1
 
                 next_token = response.get("NextToken")
-                if not next_token:
+                cursor_error = _page_cursor_error("EC2 status", next_token, params.get("NextToken"))
+                if cursor_error:
+                    return {
+                        "provider": "AWS",
+                        "status": "disconnected",
+                        "message": "Unable to connect to AWS services",
+                        "error": (
+                            "EC2 returned a repeated pagination token"
+                            if cursor_error.startswith("Repeated")
+                            else cursor_error
+                        ),
+                    }
+                if next_token is None:
                     break
                 if next_token in seen_tokens:
                     return {
@@ -364,7 +376,10 @@ class AWSService:
                             stopped_instances += 1
 
                 next_token = response.get("NextToken")
-                if not next_token:
+                cursor_error = _page_cursor_error("EC2 summary", next_token, params.get("NextToken"))
+                if cursor_error:
+                    return {"service": "ec2", "status": "unhealthy", "error": cursor_error}
+                if next_token is None:
                     break
                 if next_token in seen_tokens:
                     return {"service": "ec2", "status": "unhealthy"}
