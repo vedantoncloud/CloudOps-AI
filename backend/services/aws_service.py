@@ -115,6 +115,17 @@ def _aws_client(service_name, **kwargs):
     return boto3.client(service_name, config=AWS_CLIENT_CONFIG, **kwargs)
 
 
+def _page_cursor_error(resource, token, previous=None):
+    """Reject malformed or non-advancing provider pagination cursors."""
+    if token is None:
+        return None
+    if not isinstance(token, str) or not token.strip():
+        return f"Malformed {resource} page cursor"
+    if previous is not None and token == previous:
+        return f"Repeated {resource} page cursor"
+    return None
+
+
 class AWSService:
     def get_ec2_regions(self):
         """List regions enabled for the configured AWS account."""
@@ -428,6 +439,10 @@ class AWSService:
             if next_token:
                 params["NextToken"] = next_token
             response = ec2.describe_instances(**params)
+            page_token = response.get("NextToken")
+            cursor_error = _page_cursor_error("EC2 instance", page_token, next_token)
+            if cursor_error:
+                return {"service": "ec2", "status": "unhealthy", "error": cursor_error}
 
             instances = []
 
@@ -473,8 +488,8 @@ class AWSService:
             }
             if max_results is not None or next_token is not None:
                 result.update({
-                    "is_truncated": bool(response.get("NextToken")),
-                    "next_token": response.get("NextToken"),
+                    "is_truncated": bool(page_token),
+                    "next_token": page_token,
                 })
             return result
 
@@ -669,6 +684,10 @@ class AWSService:
             if next_token:
                 params["NextToken"] = next_token
             response = client.describe_volumes(**params)
+            page_token = response.get("NextToken")
+            cursor_error = _page_cursor_error("EC2 volume", page_token, next_token)
+            if cursor_error:
+                return {"service": "ec2", "status": "unhealthy", "error": cursor_error}
             volumes = response.get("Volumes")
             if not isinstance(volumes, list):
                 return {"service": "ec2", "status": "unhealthy", "error": "Malformed volume response"}
@@ -695,7 +714,7 @@ class AWSService:
                     "attachments": [{"instance_id": item["InstanceId"], "device": item.get("Device"), "state": item.get("State")} for item in attachments],
                 })
             return {"service": "ec2", "status": "healthy", "volumes": rows,
-                    "next_token": response.get("NextToken"), "is_truncated": bool(response.get("NextToken"))}
+                    "next_token": page_token, "is_truncated": bool(page_token)}
         except (BotoCoreError, ClientError) as error:
             return {"service": "ec2", "status": "unhealthy", "error": str(error)}
 
@@ -728,8 +747,9 @@ class AWSService:
                     "tags": {tag["Key"]: tag["Value"] for tag in tags},
                 })
             token = response.get("NextToken")
-            if token is not None and (not isinstance(token, str) or not token):
-                return {"service": "ec2", "status": "unhealthy", "error": "Malformed snapshot page cursor"}
+            cursor_error = _page_cursor_error("EC2 snapshot", token, next_token)
+            if cursor_error:
+                return {"service": "ec2", "status": "unhealthy", "error": cursor_error}
             return {"service": "ec2", "status": "healthy", "snapshots": rows, "next_token": token, "is_truncated": bool(token)}
         except (BotoCoreError, ClientError) as error:
             return {"service": "ec2", "status": "unhealthy", "error": str(error)}
@@ -783,8 +803,9 @@ class AWSService:
                     "tags": {tag["Key"]: tag["Value"] for tag in tag_list},
                 })
             next_marker = response.get("Marker")
-            if next_marker is not None and (not isinstance(next_marker, str) or not next_marker):
-                return {"service": "rds", "status": "unhealthy", "error": "Malformed RDS page cursor"}
+            cursor_error = _page_cursor_error("RDS instance", next_marker, marker)
+            if cursor_error:
+                return {"service": "rds", "status": "unhealthy", "error": cursor_error}
             return {"service": "rds", "status": "healthy", "instances": rows,
                     "next_marker": next_marker, "is_truncated": bool(next_marker)}
         except (BotoCoreError, ClientError) as error:
@@ -829,8 +850,9 @@ class AWSService:
                     "tags": {tag["Key"]: tag["Value"] for tag in tag_list},
                 })
             next_marker = response.get("Marker")
-            if next_marker is not None and (not isinstance(next_marker, str) or not next_marker):
-                return {"service": "rds", "status": "unhealthy", "error": "Malformed RDS snapshot cursor"}
+            cursor_error = _page_cursor_error("RDS snapshot", next_marker, marker)
+            if cursor_error:
+                return {"service": "rds", "status": "unhealthy", "error": cursor_error}
             return {"service": "rds", "status": "healthy", "snapshots": rows,
                     "next_marker": next_marker, "is_truncated": bool(next_marker)}
         except (BotoCoreError, ClientError) as error:
