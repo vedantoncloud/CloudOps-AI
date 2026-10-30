@@ -2,6 +2,7 @@ import boto3
 import hashlib
 import json
 import os
+import re
 import threading
 from collections import OrderedDict
 import time
@@ -23,7 +24,7 @@ AWS_CLIENT_CONFIG = Config(
 # deployment configuration, never supplied by callers.
 _request_tenant: ContextVar[str | None] = ContextVar("cloudops_aws_tenant", default=None)
 _ASSUMED_SESSION_CACHE_MAX_ENTRIES = 256
-_assumed_sessions: OrderedDict[str, tuple[float, str, boto3.Session]] = OrderedDict()
+_assumed_sessions: OrderedDict[str, tuple[float, tuple[str, str | None], boto3.Session]] = OrderedDict()
 _assumed_sessions_lock = threading.Lock()
 # Fixed lock striping bounds synchronization state while allowing unrelated
 # tenants to refresh their credentials concurrently.
