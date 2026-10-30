@@ -184,13 +184,22 @@ class AWSService:
                                 group_amount.get("Amount", 0)
                             )
                 next_token = response.get("NextPageToken")
-                if not next_token:
+                cursor_error = _page_cursor_error(
+                    "Cost Explorer", next_token, request.get("NextPageToken")
+                )
+                if cursor_error:
+                    return {
+                        "service": "aws-cost-explorer",
+                        "status": "unhealthy",
+                        "error": cursor_error,
+                    }
+                if next_token is None:
                     break
                 if next_token in seen_page_tokens:
                     return {
                         "service": "aws-cost-explorer",
                         "status": "unhealthy",
-                        "error": "Cost Explorer returned a repeated page token",
+                        "error": "Repeated Cost Explorer page cursor",
                     }
                 seen_page_tokens.add(next_token)
                 request["NextPageToken"] = next_token
