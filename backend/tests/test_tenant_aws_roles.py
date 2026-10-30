@@ -48,7 +48,7 @@ def test_tenant_role_configuration_rejects_malformed_or_untrusted_values(monkeyp
     with pytest.raises(RuntimeError, match="must map tenant IDs"):
         aws_service._tenant_role_arn("tenant-a")
     monkeypatch.setenv("CLOUDOPS_TENANT_AWS_ROLES", '{"tenant-a":"not-an-arn"}')
-    with pytest.raises(RuntimeError, match="must map tenant IDs"):
+    with pytest.raises(RuntimeError, match="valid IAM role ARNs"):
         aws_service._tenant_role_arn("tenant-a")
 
 
