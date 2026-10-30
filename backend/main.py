@@ -475,6 +475,11 @@ def aws_ec2_instances(request: Request, state: str = None, tag: str = None, max_
 
     if max_results is not None and not 5 <= max_results <= 1000:
         raise HTTPException(status_code=400, detail="max_results must be between 5 and 1000")
+    if next_token is not None and (not next_token.strip() or len(next_token) > 4096):
+        raise HTTPException(
+            status_code=400,
+            detail="next_token must contain 1 to 4096 non-whitespace characters",
+        )
 
     if name is not None and (not name.strip() or len(name) > 128):
         raise HTTPException(status_code=400, detail="name must contain 1 to 128 characters")
@@ -509,8 +514,8 @@ def aws_ec2_volumes(request: Request, region: str | None = None, max_results: in
     _validate_ec2_region(region)
     if not 5 <= max_results <= 500:
         raise HTTPException(status_code=400, detail="max_results must be between 5 and 500")
-    if next_token is not None and (not next_token or len(next_token) > 4096):
-        raise HTTPException(status_code=400, detail="next_token must contain 1 to 4096 characters")
+    if next_token is not None and (not next_token.strip() or len(next_token) > 4096):
+        raise HTTPException(status_code=400, detail="next_token must contain 1 to 4096 non-whitespace characters")
     result = _aws_resource_result(lambda: aws_service.get_ec2_volumes(
         max_results=max_results, next_token=next_token, unattached_only=unattached_only,
         **({"region": region} if region else {})
@@ -553,8 +558,8 @@ def aws_ec2_snapshots(request: Request, region: str | None = None, max_results: 
     _validate_ec2_region(region)
     if not 5 <= max_results <= 1000:
         raise HTTPException(status_code=400, detail="max_results must be between 5 and 1000")
-    if next_token is not None and (not next_token or len(next_token) > 4096):
-        raise HTTPException(status_code=400, detail="next_token must contain 1 to 4096 characters")
+    if next_token is not None and (not next_token.strip() or len(next_token) > 4096):
+        raise HTTPException(status_code=400, detail="next_token must contain 1 to 4096 non-whitespace characters")
     result = _aws_resource_result(lambda: aws_service.get_ec2_snapshots(
         max_results=max_results, next_token=next_token, **({"region": region} if region else {})
     ))
