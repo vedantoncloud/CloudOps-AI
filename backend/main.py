@@ -685,6 +685,13 @@ def aws_s3_buckets(
         raise HTTPException(status_code=400, detail="max_buckets must be between 1 and 10000")
     if prefix is not None and (not prefix.strip() or len(prefix) > 255):
         raise HTTPException(status_code=400, detail="prefix must contain 1 to 255 characters")
+    if continuation_token is not None and (
+        not continuation_token.strip() or len(continuation_token) > 4096
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="continuation_token must contain 1 to 4096 non-whitespace characters",
+        )
     def list_page(page_size, cursor):
         try:
             result = aws_service.get_s3_buckets(
@@ -700,7 +707,20 @@ def aws_s3_buckets(
     result = list_page(max_buckets, continuation_token)
     if (not isinstance(result, dict) or result.get("status") != "healthy"
             or not isinstance(result.get("buckets"), list)
-            or any(not isinstance(bucket, dict) for bucket in result["buckets"])):
+            or any(not isinstance(bucket, dict) for bucket in result["buckets"])
+            or not isinstance(result.get("is_truncated"), bool)
+            or (
+                result["is_truncated"]
+                and (
+                    not isinstance(result.get("next_continuation_token"), str)
+                    or not result["next_continuation_token"].strip()
+                    or len(result["next_continuation_token"]) > 4096
+                )
+            )
+            or (
+                not result["is_truncated"]
+                and result.get("next_continuation_token") is not None
+            )):
         _raise_aws_resource_unavailable()
     if not getattr(request.state, "tenant_scoped", False):
         return result

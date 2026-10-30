@@ -76,6 +76,8 @@ class FakeAWSService:
                 {"name": "foreign"},
                 {"name": "untagged"},
             ],
+            "is_truncated": False,
+            "next_continuation_token": None,
         }
 
     def get_s3_bucket_tags(self, bucket_name):
