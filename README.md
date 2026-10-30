@@ -96,8 +96,15 @@ or mismatched ownership tags are hidden as not found for governance lookups.
 Direct EC2 and S3 inventory and resource routes also enforce tenant ownership
 using the `CloudOpsTenantId` tag. Configure `CLOUDOPS_TENANT_AWS_ROLES` as a
 JSON object mapping tenant IDs to IAM role ARNs to route each tenant's AWS
-calls through its own account role. Assumed credentials are cached until near
-expiry, and a failed role assumption never falls back to the process identity.
+calls through its own account role. For cross-account deployments, entries may
+instead use {"role_arn":"arn:aws:iam::123456789012:role/tenant-a",
+"external_id":"a-unique-per-tenant-value"}; the ExternalId is sent to STS and
+included in the assumed-session cache identity. Configure the target role trust
+policy to require that exact ExternalId and trust only the application's
+dedicated AWS principal. Legacy ARN string entries remain supported but do not
+send an ExternalId. Use a unique, high-entropy ExternalId per tenant and store
+the mapping in deployment secrets/configuration. Assumed credentials are cached
+until near expiry, and a failed role assumption never falls back to the process identity.
 For compatibility, tenants without a mapping use the process AWS identity by
 default. Set `CLOUDOPS_REQUIRE_TENANT_AWS_ROLE=true` to fail closed when any
 authenticated tenant has no configured role. The setting defaults to `true`
