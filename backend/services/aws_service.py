@@ -46,6 +46,16 @@ _IAM_ROLE_ARN_PATTERN = re.compile(
 _EXTERNAL_ID_PATTERN = re.compile(r"^[A-Za-z0-9_+=,.@:/-]{2,1224}$")
 
 
+def _unique_json_object(pairs):
+    """Reject duplicate keys in tenant AWS role configuration at every depth."""
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("Duplicate JSON key in tenant AWS role configuration")
+        result[key] = value
+    return result
+
+
 def _tenant_role_config(tenant_id: str) -> dict | None:
     """Return a validated tenant role mapping, including optional STS ExternalId.
 
@@ -53,9 +63,12 @@ def _tenant_role_config(tenant_id: str) -> dict | None:
     role_arn and external_id so cross-account trust policies can require it.
     """
     try:
-        roles = json.loads(os.getenv("CLOUDOPS_TENANT_AWS_ROLES", "{}"))
-    except (TypeError, json.JSONDecodeError) as exc:
-        raise RuntimeError("CLOUDOPS_TENANT_AWS_ROLES must be a JSON object") from exc
+        roles = json.loads(
+            os.getenv("CLOUDOPS_TENANT_AWS_ROLES", "{}"),
+            object_pairs_hook=_unique_json_object,
+        )
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("CLOUDOPS_TENANT_AWS_ROLES must be a JSON object without duplicate keys") from exc
 
     if not isinstance(roles, dict):
         raise RuntimeError("CLOUDOPS_TENANT_AWS_ROLES must map tenant IDs to role ARNs")
