@@ -122,7 +122,20 @@ def test_account_costs_stops_on_repeated_page_token():
         factory.return_value.get_cost_and_usage.return_value = {"ResultsByTime": [], "NextPageToken": "repeat"}
         result = AWSService().get_account_costs()
     assert result["status"] == "unhealthy"
+    assert result["error"] == "Repeated Cost Explorer page cursor"
     assert factory.return_value.get_cost_and_usage.call_count == 2
+
+
+@pytest.mark.parametrize("bad_cursor", ["", "   ", 42, [], {}])
+def test_account_costs_rejects_malformed_page_cursors(bad_cursor):
+    with patch("services.aws_service.boto3.client") as factory:
+        factory.return_value.get_cost_and_usage.return_value = {
+            "ResultsByTime": [], "NextPageToken": bad_cursor
+        }
+        result = AWSService().get_account_costs()
+    assert result["status"] == "unhealthy"
+    assert result["error"] == "Malformed Cost Explorer page cursor"
+    assert factory.return_value.get_cost_and_usage.call_count == 1
 
 
 def test_account_costs_service_returns_unhealthy_on_aws_error():
