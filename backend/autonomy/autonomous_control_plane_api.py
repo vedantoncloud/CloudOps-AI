@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -108,9 +110,26 @@ def _target(payload: ControlPlaneRunRequest) -> ActionTarget:
     )
 
 
-def _action(payload: ControlPlaneRunRequest) -> ActionPlan:
+def _action(
+    payload: ControlPlaneRunRequest,
+    tenant_id: str | None = None,
+) -> ActionPlan:
+    # ApprovalExecutionBridge is shared by the process. Namespace its key by
+    # tenant, resource, action, and idempotency key to prevent state collisions.
+    identity = json.dumps(
+        [
+            tenant_id,
+            payload.resource_type,
+            payload.resource_id,
+            payload.action_type,
+            payload.idempotency_key,
+        ],
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    action_id = f"api-{hashlib.sha256(identity.encode('utf-8')).hexdigest()[:32]}"
     return ActionPlan(
-        action_id=f"api-{payload.resource_type}-{payload.resource_id}",
+        action_id=action_id,
         action_type=payload.action_type,
         target=_target(payload),
         reason=payload.reason,
@@ -129,7 +148,12 @@ def _provider(name: str) -> CloudProvider:
 @router.post("/run")
 def run_control_plane(payload: ControlPlaneRunRequest, request: Request) -> dict[str, Any]:
     try:
-        action = _action(payload)
+        tenant_id = (
+            request.state.tenant_id
+            if getattr(request.state, "tenant_scoped", False)
+            else None
+        )
+        action = _action(payload, tenant_id=tenant_id)
         principal = getattr(request.state, "principal", None)
         actor_id = getattr(principal, "subject", None)
 
@@ -152,6 +176,7 @@ def run_control_plane(payload: ControlPlaneRunRequest, request: Request) -> dict
             idempotency_seen=payload.idempotency_seen,
             dry_run=payload.dry_run,
             actor_id=actor_id,
+            tenant_id=tenant_id,
         )
 
         return {
