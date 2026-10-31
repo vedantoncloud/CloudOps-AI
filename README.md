@@ -105,6 +105,8 @@ Official references:
 - [Cost Explorer service authorization reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_ce.html)
 - [STS service authorization reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_sts.html)
 - [STS GetCallerIdentity API](https://docs.aws.amazon.com/STS/latest/APIReference/API_GetCallerIdentity.html)
+- [AWS third-party role access and ExternalId guidance](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_common-scenarios_third-party.html)
+- [IAM Principal element and role-principal behavior](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_principal.html)
 
 ## API access control
 
