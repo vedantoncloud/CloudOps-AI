@@ -105,6 +105,8 @@ Official references:
 - [Cost Explorer service authorization reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_ce.html)
 - [STS service authorization reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_sts.html)
 - [STS GetCallerIdentity API](https://docs.aws.amazon.com/STS/latest/APIReference/API_GetCallerIdentity.html)
+- [AWS third-party role access and ExternalId guidance](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_common-scenarios_third-party.html)
+- [IAM Principal element and role-principal behavior](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_principal.html)
 
 ## API access control
 
@@ -138,15 +140,57 @@ or mismatched ownership tags are hidden as not found for governance lookups.
 Direct EC2 and S3 inventory and resource routes also enforce tenant ownership
 using the `CloudOpsTenantId` tag. Configure `CLOUDOPS_TENANT_AWS_ROLES` as a
 JSON object mapping tenant IDs to IAM role ARNs to route each tenant's AWS
-calls through its own account role. For cross-account deployments, entries may
-instead use {"role_arn":"arn:aws:iam::123456789012:role/tenant-a",
-"external_id":"a-unique-per-tenant-value"}; the ExternalId is sent to STS and
-included in the assumed-session cache identity. Configure the target role trust
-policy to require that exact ExternalId and trust only the application's
-dedicated AWS principal. Legacy ARN string entries remain supported but do not
-send an ExternalId. Use a unique, high-entropy ExternalId per tenant and store
-the mapping in deployment secrets/configuration. Assumed credentials are cached
-until near expiry, and a failed role assumption never falls back to the process identity.
+calls through its own account role. For cross-account deployments, entries should use the object form:
+{"role_arn":"arn:aws:iam::123456789012:role/tenant-a",
+"external_id":"a-unique-per-tenant-value"}. The ExternalId is sent to STS and
+included in the assumed-session cache identity. Require that exact value in
+the target role's trust policy. Use a different, randomly generated ExternalId
+for each tenant/customer account. An ExternalId is not a secret and must not be
+treated as an authentication credential; its purpose is to mitigate the
+cross-account confused deputy problem. Keep the tenant-to-role mapping in
+controlled deployment configuration.
+
+Legacy ARN string entries remain supported for compatibility, but they do not
+send an ExternalId. Do not use this legacy form for a third-party multi-tenant
+cross-account integration: migrate those entries to the object form and update
+the target trust policies to require the matching ExternalId. A trust policy
+that does not require it does not get confused-deputy protection from this
+mechanism. Assumed credentials are cached until near expiry, and a failed role
+assumption never falls back to the process identity.
+
+For each target-account role, the trust policy should name only the exact
+CloudOps-AI workload role as its AWS principal and require the tenant-specific
+ExternalId. Replace the example values below; install this policy on the role
+in the tenant's AWS account:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::111122223333:role/cloudops-runtime"
+      },
+      "Action": "sts:AssumeRole",
+      "Condition": {
+        "StringEquals": {
+          "sts:ExternalId": "replace-with-this-tenants-unique-external-id"
+        }
+      }
+    }
+  ]
+}
+```
+
+The CloudOps-AI workload role in the caller account must also have an
+identity-based policy allowing sts:AssumeRole on only the tenant role ARNs it
+needs. Do not use a wildcard principal or wildcard ExternalId in the target
+trust policy. Verify that the intended caller succeeds with the correct
+ExternalId and is denied when the ExternalId is missing or incorrect. AWS
+binds a directly named IAM role principal to that role's unique principal ID;
+if the workload role is deleted and recreated, update the target trust policy
+to reference the new role.
 For compatibility, tenants without a mapping use the process AWS identity by
 default. Set `CLOUDOPS_REQUIRE_TENANT_AWS_ROLE=true` to fail closed when any
 authenticated tenant has no configured role. The setting defaults to `true`
