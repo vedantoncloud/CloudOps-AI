@@ -106,6 +106,19 @@ def test_action_identity_is_isolated_by_tenant_and_operation():
     assert tenant_a.action_id == _action(request, tenant_id="tenant-a").action_id
 
 
+def test_unkeyed_submissions_receive_distinct_approval_identities():
+    request = ControlPlaneRunRequest(
+        resource_type="ec2",
+        resource_id="i-12345678",
+        action_type="review_instance_state",
+    )
+
+    first = _action(request, tenant_id="tenant-a")
+    second = _action(request, tenant_id="tenant-a")
+
+    assert first.action_id != second.action_id
+
+
 def test_unknown_provider_returns_400(client):
     response = client.post(
         "/autonomy/control-plane/run",
