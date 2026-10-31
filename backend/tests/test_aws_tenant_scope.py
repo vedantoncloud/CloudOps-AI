@@ -171,6 +171,27 @@ def test_ec2_volume_details_verify_instance_tenant_before_provider_lookup(monkey
     assert foreign.status_code == 404
 
 
+def test_aws_resource_wrapper_rejects_error_field_in_healthy_provider_payload(monkeypatch):
+    client = tenant_client(monkeypatch)
+    monkeypatch.setattr(
+        main.aws_service,
+        "get_ec2_regions",
+        lambda: {
+            "status": "healthy",
+            "regions": ["us-east-1"],
+            "error": "private AWS account diagnostic 123456789012",
+        },
+    )
+
+    response = client.get(
+        "/cloud/aws/ec2/regions",
+        headers={"Authorization": "Bearer token-a"},
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AWS resource data is unavailable"}
+    assert "123456789012" not in response.text
+
 def test_aws_status_retains_full_diagnostics_for_admin(monkeypatch):
     client = tenant_client(monkeypatch)
     response = client.get(

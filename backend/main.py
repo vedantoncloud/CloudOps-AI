@@ -451,7 +451,12 @@ def _aws_resource_result(operation):
         result = operation()
     except Exception:
         _raise_aws_resource_unavailable()
-    if not isinstance(result, dict) or result.get("status") != "healthy":
+    if (
+        not isinstance(result, dict)
+        or result.get("status") != "healthy"
+        or "error" in result
+    ):
+        # A successful provider payload must never carry raw diagnostic text.
         _raise_aws_resource_unavailable()
     return result
 
