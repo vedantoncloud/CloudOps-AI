@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from typing import Any
+from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
@@ -116,18 +117,23 @@ def _action(
 ) -> ActionPlan:
     # ApprovalExecutionBridge is shared by the process. Namespace its key by
     # tenant, resource, action, and idempotency key to prevent state collisions.
-    identity = json.dumps(
-        [
-            tenant_id,
-            payload.resource_type,
-            payload.resource_id,
-            payload.action_type,
-            payload.idempotency_key,
-        ],
-        separators=(",", ":"),
-        ensure_ascii=True,
-    )
-    action_id = f"api-{hashlib.sha256(identity.encode('utf-8')).hexdigest()[:32]}"
+    if payload.idempotency_key is None:
+        # Without an explicit idempotency key, every submission is a new
+        # approval request and must not inherit an earlier approval.
+        action_id = f"api-{uuid4().hex}"
+    else:
+        identity = json.dumps(
+            [
+                tenant_id,
+                payload.resource_type,
+                payload.resource_id,
+                payload.action_type,
+                payload.idempotency_key,
+            ],
+            separators=(",", ":"),
+            ensure_ascii=True,
+        )
+        action_id = f"api-{hashlib.sha256(identity.encode('utf-8')).hexdigest()[:32]}"
     return ActionPlan(
         action_id=action_id,
         action_type=payload.action_type,
