@@ -58,6 +58,7 @@ class ExecutionVerificationBridge:
         execution_hook: Callable[[ActionPlan, ExecutionResult], None] | None = None,
         verification_details: dict[str, Any] | None = None,
         actor_id: str | None = None,
+        tenant_id: str | None = None,
     ) -> ExecutionVerificationResult:
         self._validate_action(action)
 
@@ -94,6 +95,7 @@ class ExecutionVerificationBridge:
                 "successful": execution_result.successful,
                 "message": execution_result.message,
                 **dict(execution_result.details),
+                **({"tenant_id": tenant_id} if tenant_id is not None else {}),
             },
         )
 
@@ -131,7 +133,7 @@ class ExecutionVerificationBridge:
             old_status=executing_status,
             new_status=new_status,
             event="action_verification_completed",
-            details=details,
+            details={**details, **({"tenant_id": tenant_id} if tenant_id is not None else {})},
             actor_id=actor_id,
         )
 
@@ -167,6 +169,7 @@ class ExecutionVerificationBridge:
         *,
         verification_details: dict[str, Any] | None = None,
         actor_id: str | None = None,
+        tenant_id: str | None = None,
     ) -> ExecutionVerificationResult:
         """Verify an already completed execution result and audit it."""
         self._validate_action(action)
