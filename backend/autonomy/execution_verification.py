@@ -208,7 +208,7 @@ class ExecutionVerificationBridge:
             old_status=old_status,
             new_status=new_status,
             event="action_verification_completed",
-            details=details,
+            details={**details, **({"tenant_id": tenant_id} if tenant_id is not None else {})},
             actor_id=actor_id,
         )
 
