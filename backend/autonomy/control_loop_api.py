@@ -68,6 +68,7 @@ def _audit_gate_result(
     provider_name: str,
     gate_result: Any,
     actor_id: str | None = None,
+    tenant_id: str | None = None,
 ) -> None:
     decision = gate_result.decision.value
     event = (
@@ -95,6 +96,7 @@ def _audit_gate_result(
             "requires_human_review": gate_result.requires_human_review,
             "blocked": gate_result.blocked,
             "evidence": dict(gate_result.evidence),
+            **({"tenant_id": tenant_id} if tenant_id is not None else {}),
         },
     )
 
@@ -114,6 +116,7 @@ def _audit_gate_result(
                 "governance_gate": gate_result.evidence.get("governance_gate"),
                 "blocked": True,
                 "evidence": dict(gate_result.evidence),
+                **({"tenant_id": tenant_id} if tenant_id is not None else {}),
             },
         )
 
@@ -162,7 +165,15 @@ def evaluate_control_loop(request: ControlLoopEvaluateRequest, http_request: Req
         pipeline_evidence = dict(pipeline.evidence)
 
         if not pipeline.allowed_for_decision:
-            _audit_gate_result(action, provider.provider_name, governance, actor_id)
+            _audit_gate_result(
+                action,
+                provider.provider_name,
+                governance,
+                actor_id,
+                getattr(http_request.state, "tenant_id", None)
+                if getattr(http_request.state, "tenant_scoped", False)
+                else None,
+            )
             recommendation = "deny" if pipeline.blocked else "review"
 
             return ControlLoopEvaluateResponse(
