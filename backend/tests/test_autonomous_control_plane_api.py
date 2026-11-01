@@ -71,6 +71,54 @@ def test_action_target_is_bound_to_resource():
     assert action.target.resource_type == "ec2"
 
 
+def test_action_identity_is_isolated_by_tenant_and_operation():
+    request = ControlPlaneRunRequest(
+        resource_type="ec2",
+        resource_id="i-12345678",
+        action_type="review_instance_state",
+        idempotency_key="retry-1",
+    )
+
+    tenant_a = _action(request, tenant_id="tenant-a")
+    tenant_b = _action(request, tenant_id="tenant-b")
+    different_action = _action(
+        ControlPlaneRunRequest(
+            resource_type="ec2",
+            resource_id="i-12345678",
+            action_type="investigate_cpu_capacity",
+            idempotency_key="retry-1",
+        ),
+        tenant_id="tenant-a",
+    )
+    different_key = _action(
+        ControlPlaneRunRequest(
+            resource_type="ec2",
+            resource_id="i-12345678",
+            action_type="review_instance_state",
+            idempotency_key="retry-2",
+        ),
+        tenant_id="tenant-a",
+    )
+
+    assert tenant_a.action_id != tenant_b.action_id
+    assert tenant_a.action_id != different_action.action_id
+    assert tenant_a.action_id != different_key.action_id
+    assert tenant_a.action_id == _action(request, tenant_id="tenant-a").action_id
+
+
+def test_unkeyed_submissions_receive_distinct_approval_identities():
+    request = ControlPlaneRunRequest(
+        resource_type="ec2",
+        resource_id="i-12345678",
+        action_type="review_instance_state",
+    )
+
+    first = _action(request, tenant_id="tenant-a")
+    second = _action(request, tenant_id="tenant-a")
+
+    assert first.action_id != second.action_id
+
+
 def test_unknown_provider_returns_400(client):
     response = client.post(
         "/autonomy/control-plane/run",
@@ -176,6 +224,7 @@ def test_run_attributes_actor_and_ignores_caller_supplied_reviewer(monkeypatch):
 
     assert response.status_code == 200
     assert observed["actor_id"] == "operator-17"
+    assert observed["tenant_id"] == "tenant-a"
     assert observed["approved_by"] == "operator-17"
     assert observed["rejected_by"] is None
     assert response.json()["evidence"]["actor"] == "operator-17"
