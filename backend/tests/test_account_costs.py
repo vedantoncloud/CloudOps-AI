@@ -22,15 +22,15 @@ def _healthy_cost_result(days=30):
 
 
 def test_account_costs_requests_daily_unblended_totals():
-    current_start = datetime.now(timezone.utc).date() - timedelta(days=30)
+    report_date = datetime.now(timezone.utc).date() - timedelta(days=29)
     with patch("services.aws_service.boto3.client") as factory:
         client = factory.return_value
         client.get_cost_and_usage.return_value = {"ResultsByTime": [
-            {"TimePeriod": {"Start": current_start.isoformat()}, "Total": {"UnblendedCost": {"Amount": "1.25", "Unit": "USD"}}, "Groups": [
+            {"TimePeriod": {"Start": report_date.isoformat()}, "Total": {"UnblendedCost": {"Amount": "1.25", "Unit": "USD"}}, "Groups": [
                 {"Keys": ["Amazon EC2"], "Metrics": {"UnblendedCost": {"Amount": "1.00", "Unit": "USD"}}},
                 {"Keys": ["Amazon S3"], "Metrics": {"UnblendedCost": {"Amount": "0.25", "Unit": "USD"}}},
             ]},
-            {"TimePeriod": {"Start": (current_start + timedelta(days=1)).isoformat()}, "Total": {"UnblendedCost": {"Amount": "2.50", "Unit": "USD"}}, "Groups": [
+            {"TimePeriod": {"Start": (report_date + timedelta(days=1)).isoformat()}, "Total": {"UnblendedCost": {"Amount": "2.50", "Unit": "USD"}}, "Groups": [
                 {"Keys": ["Amazon EC2"], "Metrics": {"UnblendedCost": {"Amount": "2.00", "Unit": "USD"}}},
                 {"Keys": ["Amazon S3"], "Metrics": {"UnblendedCost": {"Amount": "0.50", "Unit": "USD"}}},
             ]},
@@ -45,7 +45,7 @@ def test_account_costs_requests_daily_unblended_totals():
     assert args["GroupBy"] == [{"Type": "DIMENSION", "Key": "SERVICE"}]
     assert args["TimePeriod"]["End"] == datetime.now(timezone.utc).date().isoformat()
     assert result["currency"] == "USD" and result["total"] == 3.75
-    assert result["daily"] == [{"date": current_start.isoformat(), "amount": 1.25}, {"date": (current_start + timedelta(days=1)).isoformat(), "amount": 2.5}]
+    assert result["daily"] == [{"date": report_date.isoformat(), "amount": 1.25}, {"date": (report_date + timedelta(days=1)).isoformat(), "amount": 2.5}]
     assert result["services"] == [
         {"service": "Amazon EC2", "amount": 3.0},
         {"service": "Amazon S3", "amount": 0.75},
@@ -78,14 +78,14 @@ def test_account_costs_compares_equal_windows_and_calculates_change():
 
 
 def test_account_costs_follows_cost_explorer_pages_without_double_counting_daily_totals():
-    current_start = datetime.now(timezone.utc).date() - timedelta(days=30)
+    report_date = datetime.now(timezone.utc).date() - timedelta(days=29)
     first_page = {"ResultsByTime": [{
-        "TimePeriod": {"Start": current_start.isoformat()},
+        "TimePeriod": {"Start": report_date.isoformat()},
         "Total": {"UnblendedCost": {"Amount": "3.00", "Unit": "USD"}},
         "Groups": [{"Keys": ["Amazon EC2"], "Metrics": {"UnblendedCost": {"Amount": "2.00", "Unit": "USD"}}}],
     }], "NextPageToken": "page-2"}
     second_page = {"ResultsByTime": [{
-        "TimePeriod": {"Start": current_start.isoformat()},
+        "TimePeriod": {"Start": report_date.isoformat()},
         "Total": {"UnblendedCost": {"Amount": "3.00", "Unit": "USD"}},
         "Groups": [{"Keys": ["Amazon S3"], "Metrics": {"UnblendedCost": {"Amount": "1.00", "Unit": "USD"}}}],
     }]}
@@ -98,7 +98,7 @@ def test_account_costs_follows_cost_explorer_pages_without_double_counting_daily
     assert "NextPageToken" not in calls[0].kwargs
     assert calls[1].kwargs["NextPageToken"] == "page-2"
     assert result["total"] == 3.0
-    assert result["daily"] == [{"date": current_start.isoformat(), "amount": 3.0}]
+    assert result["daily"] == [{"date": report_date.isoformat(), "amount": 3.0}]
     assert result["services"] == [
         {"service": "Amazon EC2", "amount": 2.0},
         {"service": "Amazon S3", "amount": 1.0},
