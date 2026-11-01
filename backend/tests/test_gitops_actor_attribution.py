@@ -61,6 +61,7 @@ def test_gitops_lifecycle_audit_events_attribute_authenticated_actor(monkeypatch
         "gitops_change_verified",
     ]
     assert [event.actor_id for event in events] == ["operator-a"] * 4
+    assert [event.details.get("tenant_id") for event in events] == ["tenant-a"] * 4
     assert change.approved_by == "operator-a"
 
 
@@ -93,3 +94,4 @@ def test_gitops_rejection_attributes_actor_and_foreign_attempt_is_not_audited(mo
     event = trail.get_events("actor-action")[-1]
     assert event.event == "gitops_change_rejected"
     assert event.actor_id == "operator-a"
+    assert event.details.get("tenant_id") == "tenant-a"
