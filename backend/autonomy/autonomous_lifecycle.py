@@ -220,6 +220,7 @@ class AutonomousLifecycleOrchestrator:
                 "safety_decision": safety.decision.value,
             },
             actor_id=actor_id,
+            tenant_id=tenant_id,
         )
 
         outcome = (
