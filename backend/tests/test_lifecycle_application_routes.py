@@ -63,6 +63,7 @@ def test_approval_uses_authenticated_actor_and_audit_records_it():
     )
     assert audit.status_code == 200
     assert all(event["actor_id"] == "operator-1" for event in audit.json()["events"])
+    assert all(event["details"].get("tenant_id") == "tenant-a" for event in audit.json()["events"])
 
 
 def test_lifecycle_audit_is_hidden_from_other_tenants_and_unknown_actions():
@@ -86,6 +87,29 @@ def test_lifecycle_audit_is_hidden_from_other_tenants_and_unknown_actions():
         headers={"Authorization": "Bearer colleague-token"},
     )
     assert same_tenant.status_code == 200
+
+
+def test_rejection_audit_events_include_authenticated_tenant():
+    client = make_client()
+    body = action_payload("tenant-rejected-lifecycle")
+    body.pop("approved_by")
+    body.update({"rejected_by": "forged-reviewer", "rejection_reason": "Risk too high"})
+
+    response = client.post(
+        "/autonomy/lifecycle/reject",
+        json=body,
+        headers={"Authorization": "Bearer operator-token"},
+    )
+
+    assert response.status_code == 200
+    audit = client.get(
+        "/autonomy/lifecycle/tenant-rejected-lifecycle/audit",
+        headers={"Authorization": "Bearer operator-token"},
+    )
+    assert audit.status_code == 200
+    assert audit.json()["events"]
+    assert all(event["actor_id"] == "operator-1" for event in audit.json()["events"])
+    assert all(event["details"].get("tenant_id") == "tenant-a" for event in audit.json()["events"])
 
 
 def test_reader_cannot_approve_lifecycle_action():

@@ -162,6 +162,7 @@ def _result(result: AutonomousLifecycleResult) -> dict[str, Any]:
 def run_lifecycle(payload: LifecycleRunRequest, request: Request) -> dict[str, Any]:
     try:
         actor = _actor(request, payload.approved_by)
+        tenant_id = request.state.tenant_id if getattr(request.state, "tenant_scoped", False) else None
         if getattr(request.state, "principal", None) is not None and payload.approved_by:
             payload = payload.model_copy(update={"approved_by": actor})
         action = _action(payload)
@@ -173,6 +174,7 @@ def run_lifecycle(payload: LifecycleRunRequest, request: Request) -> dict[str, A
             idempotency_seen=payload.idempotency_seen,
             dry_run=(payload.dry_run if payload.approved_by else False),
             actor_id=actor,
+            tenant_id=tenant_id,
         )
         return _result(result)
     except HTTPException:
@@ -185,6 +187,7 @@ def run_lifecycle(payload: LifecycleRunRequest, request: Request) -> dict[str, A
 def approve_lifecycle(payload: LifecycleApproveRequest, request: Request) -> dict[str, Any]:
     try:
         actor = _actor(request, payload.approved_by)
+        tenant_id = request.state.tenant_id if getattr(request.state, "tenant_scoped", False) else None
         if getattr(request.state, "principal", None) is not None:
             payload = payload.model_copy(update={"approved_by": actor})
         action = _action(payload)
@@ -196,6 +199,7 @@ def approve_lifecycle(payload: LifecycleApproveRequest, request: Request) -> dic
             idempotency_seen=payload.idempotency_seen,
             dry_run=payload.dry_run,
             actor_id=actor,
+            tenant_id=tenant_id,
         )
         return _result(result)
     except HTTPException:
@@ -208,6 +212,7 @@ def approve_lifecycle(payload: LifecycleApproveRequest, request: Request) -> dic
 def reject_lifecycle(payload: LifecycleRejectRequest, request: Request) -> dict[str, Any]:
     try:
         actor = _actor(request, payload.rejected_by)
+        tenant_id = request.state.tenant_id if getattr(request.state, "tenant_scoped", False) else None
         if getattr(request.state, "principal", None) is not None:
             payload = payload.model_copy(update={"rejected_by": actor})
         action = _action(payload)
@@ -218,6 +223,7 @@ def reject_lifecycle(payload: LifecycleRejectRequest, request: Request) -> dict[
             reason=payload.rejection_reason,
             dry_run=False,
             actor_id=actor,
+            tenant_id=tenant_id,
         )
         return _result(result)
     except HTTPException:

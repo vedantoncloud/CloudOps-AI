@@ -104,10 +104,11 @@ def test_execute_and_verify_attributes_both_audit_events_to_operator():
     audit = AuditTrail()
     bridge = ExecutionVerificationBridge(executor=FakeExecutor(), audit_trail=audit)
 
-    bridge.execute_and_verify(make_action(), actor_id="operator-17")
+    bridge.execute_and_verify(make_action(), actor_id="operator-17", tenant_id="tenant-a")
 
     events = audit.get_events("act-verify-1")
     assert [event.actor_id for event in events] == ["operator-17", "operator-17"]
+    assert [event.details.get("tenant_id") for event in events] == ["tenant-a", "tenant-a"]
 
 
 def test_failed_verification_preserves_actor_attribution():
