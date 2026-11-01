@@ -102,7 +102,10 @@ def test_control_loop_allows_tenant_owned_resource(monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["recommendation"] == "review"
-    assert trail.get_events("tenant-scope-action")
+    events = trail.get_events("tenant-scope-action")
+    assert events
+    assert all(event.actor_id == "operator-a" for event in events)
+    assert all(event.details.get("tenant_id") == "tenant-a" for event in events)
 
 
 def test_control_loop_hides_foreign_and_unowned_resources(monkeypatch):
