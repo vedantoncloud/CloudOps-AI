@@ -40,7 +40,7 @@ def _read_rows(path: Path, table: str, order_by: str) -> list[dict[str, Any]]:
     with sqlite3.connect(f"{source.as_uri()}?mode=ro", uri=True, timeout=10) as connection:
         connection.row_factory = sqlite3.Row
         integrity = connection.execute("PRAGMA integrity_check").fetchone()
-        if integrity != ("ok",):
+        if integrity is None or integrity[0] != "ok":
             raise ValueError(f"{table} source failed SQLite integrity validation")
         names = {
             row[1] for row in connection.execute(f"PRAGMA table_info({table})")
