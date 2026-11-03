@@ -96,11 +96,25 @@ def _get_plan(action_id: str, request: Request | None = None):
         return plan
 
 
-def _persist_plan(plan: ActionPlan) -> None:
+def _persist_plan(plan: ActionPlan, audit_event: dict | None = None) -> None:
     with _registry_lock:
-        action_plan_store.save_many(
-            [plan], _plan_tenants.get(plan.action_id)
+        tenant_id = _plan_tenants.get(plan.action_id)
+        atomic_audit = (
+            audit_event is not None
+            and getattr(action_plan_store, "uses_shared_database", False)
+            and getattr(audit_trail, "uses_shared_database", False)
         )
+        if atomic_audit:
+            action_plan_store.save_many(
+                [plan],
+                tenant_id,
+                audit_trail=audit_trail,
+                audit_events=[audit_event],
+            )
+        else:
+            action_plan_store.save_many([plan], tenant_id)
+            if audit_event is not None:
+                audit_trail.record(**audit_event)
 
 
 def _plan_response(plans, request: Request):
@@ -153,22 +167,22 @@ def _load_action_insights(provider_call):
     return result["insights"]
 
 
-def _record_plan_transition(action: ActionPlan, request: Request, old_status: ActionStatus) -> None:
-    """Persist an attributed audit event for a lifecycle decision."""
+def _record_plan_transition(action: ActionPlan, request: Request, old_status: ActionStatus) -> dict:
+    """Build an attributed audit event for a lifecycle decision."""
     principal = getattr(request.state, "principal", None)
     tenant_id = request.state.tenant_id if getattr(request.state, "tenant_scoped", False) else None
     event = f"plan_{action.status.value}"
-    audit_trail.record(
-        action_id=action.action_id,
-        action_type=action.action_type,
-        resource_type=action.target.resource_type,
-        resource_id=action.target.resource_id,
-        old_status=old_status.value,
-        new_status=action.status.value,
-        event=event,
-        actor_id=getattr(principal, "subject", None),
-        details={"tenant_id": tenant_id} if tenant_id is not None else {},
-    )
+    return {
+        "action_id": action.action_id,
+        "action_type": action.action_type,
+        "resource_type": action.target.resource_type,
+        "resource_id": action.target.resource_id,
+        "old_status": old_status.value,
+        "new_status": action.status.value,
+        "event": event,
+        "actor_id": getattr(principal, "subject", None),
+        "details": {"tenant_id": tenant_id} if tenant_id is not None else {},
+    }
 
 
 def _require_tenant_ec2_instance(request: Request, instance_id: str, region: str | None = None) -> None:
@@ -389,8 +403,7 @@ def evaluate_plan(action_id: str, request: Request):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     try:
-        _record_plan_transition(evaluated, request, old_status)
-        _persist_plan(evaluated)
+        _persist_plan(evaluated, _record_plan_transition(evaluated, request, old_status))
     except Exception:
         action.status = old_status
         action.requires_approval = old_requires_approval
@@ -416,8 +429,7 @@ def approve_plan(action_id: str, request: Request):
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     try:
-        _record_plan_transition(approved, request, old_status)
-        _persist_plan(approved)
+        _persist_plan(approved, _record_plan_transition(approved, request, old_status))
     except Exception:
         action.status, action.decision_by, action.decision_reason = old_status, old_decision_by, old_decision_reason
         raise
@@ -448,8 +460,7 @@ def reject_plan(action_id: str, payload: RejectionRequest, request: Request):
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     try:
-        _record_plan_transition(rejected, request, old_status)
-        _persist_plan(rejected)
+        _persist_plan(rejected, _record_plan_transition(rejected, request, old_status))
     except Exception:
         action.status, action.decision_by, action.decision_reason = old_status, old_decision_by, old_decision_reason
         raise
@@ -474,8 +485,7 @@ def cancel_plan(action_id: str, request: Request):
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     try:
-        _record_plan_transition(cancelled, request, old_status)
-        _persist_plan(cancelled)
+        _persist_plan(cancelled, _record_plan_transition(cancelled, request, old_status))
     except Exception:
         action.status, action.decision_by, action.decision_reason = old_status, old_decision_by, old_decision_reason
         raise
@@ -529,8 +539,7 @@ def execute_plan(
     except (ValueError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    _record_plan_transition(final_action, request, old_status)
-    _persist_plan(final_action)
+    _persist_plan(final_action, _record_plan_transition(final_action, request, old_status))
 
     return {
         "status": "healthy",
