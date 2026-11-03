@@ -10,7 +10,7 @@ The GitOps change-set registry now supports the shared Alembic schema through an
 
 Migration 0004 adds a singleton `gitops_state` allocator seeded from the current maximum `created_order`. New registrations lock that row and insert the change set, relational tenant ID, payload, and order in one transaction. Reads (`get`, `list_all`, `list_pending`, and `require`) refresh from the shared database rather than trusting the process-local cache.
 
-Transitions lock the current row and compare the persisted payload with the exact prior snapshot before updating. A stale worker cannot overwrite a newer approval, rejection, apply, or verification state; it receives a conflict and refreshes its local cache. The same registry lock serializes operations within a process. SQLite shared-URL tests use `BEGIN IMMEDIATE`; MySQL uses row locks.
+Transitions lock the current row and compare the persisted payload with the exact prior snapshot before updating. A stale worker cannot overwrite a newer approval, rejection, apply, or verification state; it receives a conflict and refreshes its local cache. Tenant-scoped transitions also re-check the authenticated tenant inside the registry boundary, rather than relying only on an earlier API visibility read. The same registry lock serializes operations within a process. SQLite shared-URL tests use `BEGIN IMMEDIATE`; MySQL uses row locks.
 
 ## Safety and remaining cutover gate
 
