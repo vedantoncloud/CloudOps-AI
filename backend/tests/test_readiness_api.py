@@ -152,3 +152,50 @@ def test_readiness_fails_when_gitops_store_is_unavailable(monkeypatch):
 
     assert response.status_code == 503
     assert response.json()["detail"]["dependencies"]["gitops_changes"] == "unhealthy"
+
+
+def _configure_shared_database_readiness(monkeypatch, database_url):
+    monkeypatch.setattr(main.audit_trail, "database_path", database_url)
+    monkeypatch.setattr(main.action_plan_store, "database_path", database_url)
+    monkeypatch.setattr(main.gitops_registry, "database_path", database_url)
+    monkeypatch.setattr(main, "DEFAULT_DB_PATH", database_url)
+
+
+def test_readiness_probes_all_shared_persistence_stores(monkeypatch):
+    database_url = "mysql+pymysql://user:secret@db.example.test:3306/cloudops"
+    _configure_shared_database_readiness(monkeypatch, database_url)
+    monkeypatch.setattr(main.aws_service, "get_status", lambda: {"status": "connected"})
+    probed = []
+    monkeypatch.setattr(
+        main,
+        "_shared_database_ready",
+        lambda url: probed.append(url) or True,
+    )
+
+    response = TestClient(main.app).get("/ready")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ready"
+    assert probed == [database_url] * 4
+    assert "secret" not in response.text
+    assert "db.example.test" not in response.text
+
+
+def test_readiness_fails_closed_when_shared_database_is_unavailable(monkeypatch):
+    database_url = "mysql+pymysql://user:secret@db.example.test:3306/cloudops"
+    _configure_shared_database_readiness(monkeypatch, database_url)
+    monkeypatch.setattr(main.aws_service, "get_status", lambda: {"status": "connected"})
+    monkeypatch.setattr(main, "_shared_database_ready", lambda url: False)
+
+    response = TestClient(main.app).get("/ready")
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["dependencies"] == {
+        "aws": "healthy",
+        "audit_events": "unhealthy",
+        "audit_idempotency": "unhealthy",
+        "action_plans": "unhealthy",
+        "gitops_changes": "unhealthy",
+    }
+    assert "secret" not in response.text
+    assert "db.example.test" not in response.text
