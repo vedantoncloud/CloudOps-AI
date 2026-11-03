@@ -26,6 +26,8 @@ class PersistentAuditHealthChecker:
     def __init__(self, path: str | Path) -> None:
         self.path = str(path)
         self.backend = "sqlalchemy" if "://" in self.path else "sqlite"
+        # Never return a database URL (which may contain credentials) from an API.
+        self.display_path = "shared-database" if self.backend == "sqlalchemy" else self.path
 
     def _shared_query(self, statement: str, params: dict[str, Any] | None = None):
         engine = create_engine(self.path, pool_pre_ping=True, future=True)
@@ -58,7 +60,7 @@ class PersistentAuditHealthChecker:
                 int(value or 0) for value in row
             )
             return PersistentAuditHealth(
-                path=self.path,
+                path=self.display_path,
                 total_claims=total,
                 pending_claims=pending,
                 emitted_claims=emitted,
@@ -100,7 +102,7 @@ class PersistentAuditHealthChecker:
             int(value or 0) for value in row
         )
         return PersistentAuditHealth(
-            path=self.path,
+            path=self.display_path,
             total_claims=total,
             pending_claims=pending,
             emitted_claims=emitted,
