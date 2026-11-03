@@ -5,7 +5,7 @@ import os
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import create_engine, inspect, text
 
 
 @pytest.mark.skipif(not os.environ.get("CLOUDOPS_MYSQL_TEST_URL"), reason="MySQL CI service is not configured")
@@ -29,6 +29,21 @@ def test_shared_persistence_schema_upgrades_and_downgrades_on_mysql():
         assert {column["name"] for column in inspector.get_columns("audit_idempotency")} >= {
             "run_id", "event_type", "evidence_json", "status", "claim_token", "claimed_at"
         }
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO audit_idempotency "
+                    "(run_id, event_type, evidence_json) "
+                    "VALUES (:run, :event, :evidence)"
+                ),
+                [
+                    {"run": "Run-A", "event": "created", "evidence": "{}"},
+                    {"run": "run-a", "event": "created", "evidence": "{}"},
+                ],
+            )
+            assert connection.execute(
+                text("SELECT COUNT(*) FROM audit_idempotency")
+            ).scalar_one() == 2
     finally:
         engine.dispose()
 
