@@ -539,7 +539,11 @@ def execute_plan(
     except (ValueError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    _persist_plan(final_action, _record_plan_transition(final_action, request, old_status))
+    try:
+        _persist_plan(final_action, _record_plan_transition(final_action, request, old_status))
+    except Exception:
+        action.status = old_status
+        raise
 
     return {
         "status": "healthy",
