@@ -124,6 +124,7 @@ def test_shared_health_and_reconciliation_are_read_only(database_url):
 
         assert before.total_claims == after.total_claims
         assert before.pending_claims == after.pending_claims
+        assert before.path == "shared-database"
         assert before.evidence["store"] == "mysql"
         assert before.evidence["read_only"] is True
         assert any(row["run_id"] == identity for row in pending_rows)
