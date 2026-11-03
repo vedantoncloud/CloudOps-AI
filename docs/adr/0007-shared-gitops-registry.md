@@ -18,7 +18,7 @@ Transitions lock the current row and compare the persisted payload with the exac
 - SQLite remains the default when `CLOUDOPS_DATABASE_URL` is absent.
 - Shared GitOps persistence requires Alembic migrations through head.
 - Tenant ID is persisted in both the payload metadata and relational column.
-- Audit events are still appended after the GitOps state transaction, not in the same database transaction. The cross-store atomicity gap documented in ADR 0002 remains a production cutover gate.
+- When the GitOps registry and `PersistentAuditTrail` share the same configured database URL, registration and lifecycle transitions append their audit event inside the same transaction (ADR 0008). Legacy SQLite-file or in-memory audit configurations retain the separate-write fallback.
 - The GitOps apply engine's existing dry-run safety boundary is unchanged; real infrastructure mutations remain disabled.
 - No existing SQLite data is copied or deleted.
 
