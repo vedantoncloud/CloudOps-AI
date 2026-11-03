@@ -193,3 +193,25 @@ def test_shared_database_backup_is_not_misrepresented_as_sqlite(tmp_path, monkey
     assert response.status_code == 503
     assert "database provider" in response.json()["detail"]
     assert "private-password" not in response.text
+
+
+def test_shared_action_plan_database_backup_is_provider_managed(monkeypatch):
+    from autonomy import api
+
+    monkeypatch.setattr(
+        api,
+        "action_plan_store",
+        type(
+            "Store",
+            (),
+            {"database_path": "mysql+pymysql://private-user:private-password@db.example/cloudops"},
+        )(),
+    )
+    response = make_client().get(
+        "/autonomy/audit/database/backup/action-plans",
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 503
+    assert "database provider" in response.json()["detail"]
+    assert "private-password" not in response.text
