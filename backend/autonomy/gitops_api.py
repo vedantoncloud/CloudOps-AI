@@ -18,10 +18,16 @@ router = APIRouter(
     tags=["autonomy-gitops"],
 )
 
+_shared_database_url = os.getenv("CLOUDOPS_DATABASE_URL")
 registry = GitOpsChangeSetRegistry(
     audit_trail=audit_trail,
-    database_path=os.getenv("CLOUDOPS_GITOPS_DB_PATH")
-    or Path(__file__).resolve().parents[1] / "gitops_changes.db",
+    database_url=_shared_database_url,
+    database_path=(
+        None
+        if _shared_database_url
+        else os.getenv("CLOUDOPS_GITOPS_DB_PATH")
+        or Path(__file__).resolve().parents[1] / "gitops_changes.db"
+    ),
 )
 engine = GitOpsEngine()
 
