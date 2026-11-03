@@ -20,6 +20,7 @@ from typing import Any
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import SQLAlchemyError
 
 from autonomy.persistent_audit_health import PersistentAuditHealthChecker
 from autonomy.persistent_audit_trail import PersistentAuditTrail
@@ -97,10 +98,19 @@ def _validate_sources(paths: dict[str, Path]) -> dict[str, list[dict[str, Any]]]
     if audit_sequences != list(range(1, len(audit_sequences) + 1)):
         raise ValueError("audit event sequence is not contiguous from one")
 
+    for row in rows["audit_idempotency"]:
+        if len(row["run_id"]) > 255 or len(row["event_type"]) > 255:
+            raise ValueError("idempotency key exceeds the shared schema length limit")
+        if len(row["claim_token"]) > 64:
+            raise ValueError("idempotency claim token exceeds the shared schema length limit")
     for row in rows["action_plans"]:
         payload = json.loads(row["payload"])
         if payload.get("action_id") != row["action_id"]:
             raise ValueError("action-plan payload ID does not match its primary key")
+        if len(row["action_id"]) > 255 or (
+            row["tenant_id"] is not None and len(row["tenant_id"]) > 255
+        ):
+            raise ValueError("action-plan identifier or tenant exceeds the shared schema length limit")
     for row in rows["gitops"]:
         payload = json.loads(row["payload"])
         if payload.get("change_id") != row["change_id"]:
@@ -109,6 +119,8 @@ def _validate_sources(paths: dict[str, Path]) -> dict[str, list[dict[str, Any]]]
         tenant = metadata.get("tenant_id")
         if tenant is not None and not isinstance(tenant, str):
             raise ValueError("GitOps tenant ownership metadata is invalid")
+        if len(row["change_id"]) > 255 or (tenant is not None and len(tenant) > 255):
+            raise ValueError("GitOps identifier or tenant exceeds the shared schema length limit")
     return rows
 
 
@@ -296,6 +308,9 @@ def run_import(
     resolved_paths = {name: Path(path) for name, path in paths.items()}
     if set(resolved_paths) != {"audit_events", "audit_idempotency", "action_plans", "gitops"}:
         raise ValueError("exactly four source SQLite files are required")
+    canonical_paths = [path.resolve(strict=True) for path in resolved_paths.values()]
+    if len(set(canonical_paths)) != 4:
+        raise ValueError("each persistence store must come from a distinct SQLite source file")
     rows = _validate_sources(resolved_paths)
     manifest_hash, summary = _canonical_manifest(rows)
     engine = create_engine(database_url, pool_pre_ping=True, future=True)
@@ -329,6 +344,12 @@ def main(argv: list[str] | None = None) -> int:
     }
     try:
         result = run_import(paths, database_url, apply=args.apply)
+    except SQLAlchemyError:
+        print(json.dumps({
+            "status": "not_ready",
+            "reason": "target_database_operation_failed",
+        }, sort_keys=True), file=sys.stderr)
+        return 1
     except (OSError, sqlite3.Error, ValueError, TypeError, KeyError) as exc:
         print(json.dumps({
             "status": "not_ready",
