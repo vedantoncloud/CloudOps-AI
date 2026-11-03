@@ -178,3 +178,18 @@ def test_unknown_database_backup_store_is_rejected():
         "/autonomy/audit/database/backup/other", headers={"Authorization": "Bearer test-token"}
     )
     assert response.status_code == 404
+
+
+def test_shared_database_backup_is_not_misrepresented_as_sqlite(tmp_path, monkeypatch):
+    trail = PersistentAuditTrail(tmp_path / "audit.db")
+    trail.database_path = "mysql+pymysql://private-user:private-password@db.example/cloudops"
+    monkeypatch.setattr(audit_api, "audit_trail", trail)
+
+    response = make_client().get(
+        "/autonomy/audit/database/backup",
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 503
+    assert "database provider" in response.json()["detail"]
+    assert "private-password" not in response.text
