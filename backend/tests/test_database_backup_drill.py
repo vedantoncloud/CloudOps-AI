@@ -4,6 +4,7 @@ import pytest
 
 from autonomy.action_plan_store import ActionPlanStore
 from autonomy.gitops_registry import GitOpsChangeSetRegistry
+from autonomy.persistent_audit_idempotency import PersistentAuditIdempotencyStore
 from verify_database_backup import verify_backup
 
 
@@ -11,6 +12,7 @@ from verify_database_backup import verify_backup
     ("store", "build"),
     [
         ("audit", "audit"),
+        ("idempotency", "idempotency"),
         ("action-plans", "plans"),
         ("gitops", "gitops"),
     ],
@@ -25,6 +27,11 @@ def test_restore_drill_loads_each_store_without_modifying_backup(tmp_path, store
             action_id="a1", action_type="inspect", resource_type="instance", resource_id="i-1",
             old_status="running", new_status="running", event="inspection_completed",
         )
+    elif build == "idempotency":
+        store = PersistentAuditIdempotencyStore(backup)
+        claim = store.claim("run-1", "failure", {"result": "failed"})
+        assert store.mark_emitted("run-1", "failure", claim.claim_token)
+        store.close()
     elif build == "plans":
         ActionPlanStore(backup)
     else:
@@ -33,7 +40,7 @@ def test_restore_drill_loads_each_store_without_modifying_backup(tmp_path, store
     original = backup.read_bytes()
     result = verify_backup(store, backup)
 
-    assert result == {"store": store, "records_loaded": 1 if build == "audit" else 0}
+    assert result == {"store": store, "records_loaded": 1 if build in {"audit", "idempotency"} else 0}
     assert backup.read_bytes() == original
 
 
@@ -60,3 +67,18 @@ def test_restore_drill_rejects_corrupt_audit_chain(tmp_path):
 
     with pytest.raises(ValueError, match="hash chain failed"):
         verify_backup("audit", backup)
+
+
+def test_restore_drill_rejects_inconsistent_idempotency_backup(tmp_path):
+    backup = tmp_path / "bad-idempotency.db"
+    store = PersistentAuditIdempotencyStore(backup)
+    store.close()
+    with sqlite3.connect(backup) as connection:
+        connection.execute(
+            "INSERT INTO audit_idempotency "
+            "(run_id, event_type, evidence_json, status, claim_token, claimed_at) "
+            "VALUES ('run-bad', 'failure', '{\\"ok\\":true}', 'unknown', '', 0)"
+        )
+
+    with pytest.raises(ValueError, match="inconsistent claims"):
+        verify_backup("idempotency", backup)
