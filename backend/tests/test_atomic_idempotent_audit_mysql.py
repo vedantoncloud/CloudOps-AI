@@ -71,7 +71,10 @@ def test_mysql_bridge_commits_audit_events_and_claim_finalization_atomically(dat
         assert _status(database_url, run_id, "autonomous_run_failed") == "emitted"
         assert _status(database_url, run_id, "recovery_failed") == "emitted"
         events = [event for event in trail.get_events() if event.details.get("run_id") == run_id]
-        assert len(events) == 1
+        assert sorted(event.event for event in events) == [
+            "autonomous_run_failed",
+            "recovery_failed",
+        ]
         recovery_events = [
             event for event in trail.get_events()
             if event.details.get("run_id") == run_id and event.event == "recovery_failed"
