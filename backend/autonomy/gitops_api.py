@@ -351,6 +351,8 @@ def verify_gitops_change(
             observed_values=request.observed_values,
             engine=engine,
             actor_id=_authenticated_actor(http_request),
+            tenant_id=getattr(http_request.state, "tenant_id", None),
+            tenant_scoped=getattr(http_request.state, "tenant_scoped", False),
         )
 
         change_set = registry.require(change_id)
