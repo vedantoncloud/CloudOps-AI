@@ -246,6 +246,8 @@ def approve_gitops_change(
             _change_actor(http_request, request.approved_by),
             engine=engine,
             actor_id=_change_actor(http_request, request.approved_by),
+            tenant_id=getattr(http_request.state, "tenant_id", None),
+            tenant_scoped=getattr(http_request.state, "tenant_scoped", False),
         )
         return _serialize_change_set(_visible_change(change_set, http_request))
 
@@ -279,6 +281,8 @@ def reject_gitops_change(
             request.reason,
             engine=engine,
             actor_id=_change_actor(http_request, request.rejected_by),
+            tenant_id=getattr(http_request.state, "tenant_id", None),
+            tenant_scoped=getattr(http_request.state, "tenant_scoped", False),
         )
         return _serialize_change_set(_visible_change(change_set, http_request))
 
@@ -311,6 +315,8 @@ def apply_gitops_change(
             dry_run=request.dry_run,
             engine=engine,
             actor_id=_authenticated_actor(http_request),
+            tenant_id=getattr(http_request.state, "tenant_id", None),
+            tenant_scoped=getattr(http_request.state, "tenant_scoped", False),
         )
 
         return ApplyResponse(
