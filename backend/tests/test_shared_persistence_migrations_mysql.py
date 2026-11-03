@@ -34,6 +34,12 @@ def test_shared_persistence_schema_upgrades_and_downgrades_on_mysql():
         }
         assert "LONGTEXT" in str(idempotency_columns["evidence_json"]["type"]).upper()
         assert "DOUBLE" in str(idempotency_columns["claimed_at"]["type"]).upper()
+        for table_name in ("action_plans", "gitops_change_sets"):
+            payload = next(
+                column for column in inspector.get_columns(table_name)
+                if column["name"] == "payload"
+            )
+            assert "LONGTEXT" in str(payload["type"]).upper()
         with engine.begin() as connection:
             connection.execute(
                 text(
