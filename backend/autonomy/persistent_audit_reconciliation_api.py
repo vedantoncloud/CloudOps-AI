@@ -18,6 +18,7 @@ DEFAULT_DB_PATH = os.getenv(
     "CLOUDOPS_AUDIT_IDEMPOTENCY_DB",
     "cloudops_audit_idempotency.db",
 )
+SHARED_DATABASE_URL = os.getenv("CLOUDOPS_DATABASE_URL")
 DEFAULT_LEASE_SECONDS = 300.0
 
 
@@ -73,6 +74,8 @@ class AuditReconciliationResponse(BaseModel):
 
 
 def _store() -> PersistentAuditIdempotencyStore:
+    if SHARED_DATABASE_URL:
+        return PersistentAuditIdempotencyStore(database_url=SHARED_DATABASE_URL)
     return PersistentAuditIdempotencyStore(Path(DEFAULT_DB_PATH))
 
 
