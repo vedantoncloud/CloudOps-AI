@@ -167,3 +167,20 @@ def test_shared_registry_fails_closed_on_tenant_column_payload_mismatch(shared_d
     finally:
         engine.dispose()
         registry.close()
+
+
+def test_shared_registry_checks_tenant_inside_transition(shared_database_url):
+    registry = GitOpsChangeSetRegistry(database_url=shared_database_url)
+    change_set = _change_set("change-tenant-transition")
+    try:
+        registry.register(change_set)
+        with pytest.raises(KeyError, match="GitOps change set not found"):
+            registry.approve(
+                change_set.change_id,
+                "operator-b",
+                tenant_id="tenant-b",
+                tenant_scoped=True,
+            )
+        assert registry.get(change_set.change_id).status == GitOpsChangeStatus.PENDING_APPROVAL
+    finally:
+        registry.close()
