@@ -2,7 +2,7 @@
 
 **Status: preparation only. This runbook is not approval to perform a production cutover.**
 
-The application has opt-in shared SQL adapters for audit events, audit idempotency, action plans, and GitOps state. The default Docker configuration still points to four SQLite files. No production database endpoint or credentials have been supplied, and no data importer has been implemented or approved. Setting `CLOUDOPS_DATABASE_URL` against an empty database would make the application use empty shared tables instead of the existing SQLite records. Do not switch production to shared SQL until the data-import phase below is implemented, reviewed, and tested.
+The application has opt-in shared SQL adapters for audit events, audit idempotency, action plans, and GitOps state. The default Docker configuration still points to four SQLite files. A deterministic, dry-run-first importer is now implemented, but no production database endpoint or credentials have been supplied and no production import or cutover has been approved. Setting `CLOUDOPS_DATABASE_URL` against an empty database before importing the legacy records would hide existing operational state. Do not switch production to shared SQL without the owner approvals and staged procedure below.
 
 ## 1. Required owner confirmations
 
@@ -68,24 +68,36 @@ Run the full MySQL integration suite and exercise audit integrity, audit health/
 
 ## 5. Data import is a hard gate
 
-**Do not cut over yet.** The repository currently has schema migrations, shared-store adapters, SQLite source preflight, and backup verification, but it does not yet have an approved, resumable importer that transfers all four source stores into MySQL.
+The importer is implemented in `backend/import_legacy_persistence.py`. It requires all four source snapshots, a target already migrated through Alembic head, and an explicitly configured `CLOUDOPS_DATABASE_URL`. The default mode is a read-only dry run; no target data is written unless `--apply` is supplied.
 
-The importer must be designed and reviewed separately. It must preserve:
+Run the dry run from the backend directory, using the protected backup paths:
 
-- Every audit event's exact canonical JSON, sequence, and SHA-256 hash-chain order.
+```bash
+python import_legacy_persistence.py \
+  --audit-events /secure/audit-events.db \
+  --audit-idempotency /secure/audit-idempotency.db \
+  --action-plans /secure/action-plans.db \
+  --gitops /secure/gitops.db
+```
+
+Review the deterministic `manifest_sha256`, counts, audit final hash, and ordering high-water marks. The importer validates the full audit chain, idempotency states/evidence/tokens, payload identifiers, tenant values, source schemas, and target emptiness. It preserves:
+
+- Every audit event's exact JSON, sequence, and SHA-256 hash.
 - Every idempotency key, evidence payload, status, lease timestamp, and claim token.
 - Action-plan IDs, tenant ownership, payloads, and creation order.
 - GitOps change IDs, tenant ownership, payloads, and creation order.
 
-It must be deterministic, resumable, transactionally safe, and able to produce source/target reconciliation evidence. A dry-run import plan and count/hash comparison must pass before any write to the target.
+After the dry-run report has been reviewed and the database/application owners have approved the operation, run the exact same command with `--apply`. The four stores, three allocator heads, and import-ledger marker are written in one SQL transaction. An exact retry returns `already_imported`; a different manifest or non-empty target is rejected. Source SQLite files are opened read-only, and the audit-chain validation uses an isolated temporary snapshot.
+
+This importer is a migration primitive, not an approval to import production data. Keep the target isolated from application writers until the import and independent reconciliation are complete.
 
 ## 6. Future cutover sequence (only after importer approval)
 
 1. Announce maintenance and pause all writers on the source deployment.
 2. Take final consistent SQLite snapshots and run all four restore drills.
-3. Run importer dry-run; compare source and target counts, keys, tenant attribution, lifecycle states, pending/emitted claims, and complete audit-chain integrity.
-4. Obtain explicit approval from the database owner and application owner.
-5. Run the approved import into the isolated target, then repeat all reconciliation checks.
+3. Obtain explicit approval from the database owner and application owner to run the importer against the isolated target.
+4. Run importer dry-run; review the manifest and compare source/target counts, keys, tenant attribution, lifecycle states, pending/emitted claims, and complete audit-chain integrity.
+5. Obtain final approval, then run the same importer command with `--apply` against the frozen snapshots and repeat all independent reconciliation checks.
 6. Set `CLOUDOPS_DATABASE_URL` in the deployment secret store and deploy the shared-SQL application.
 7. Confirm `/ready`, `/autonomy/audit/integrity`, `/autonomy/audit/health`, and `/autonomy/audit/reconciliation` are healthy; exercise two-worker lifecycle and idempotency checks.
 8. Keep source snapshots immutable for the agreed rollback and retention period. Do not dual-write to SQLite and MySQL.
