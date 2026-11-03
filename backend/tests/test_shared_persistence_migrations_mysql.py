@@ -1,0 +1,42 @@
+"""MySQL migration smoke tests run only when CI provides a service database."""
+
+import os
+
+import pytest
+from alembic import command
+from alembic.config import Config
+from sqlalchemy import create_engine, inspect
+
+
+@pytest.mark.skipif(not os.environ.get("CLOUDOPS_MYSQL_TEST_URL"), reason="MySQL CI service is not configured")
+def test_shared_persistence_schema_upgrades_and_downgrades_on_mysql():
+    url = os.environ["CLOUDOPS_MYSQL_TEST_URL"]
+    config = Config("backend/alembic.ini")
+    config.set_section_option("alembic", "sqlalchemy.url", url.replace("%", "%%"))
+    os.environ["CLOUDOPS_DATABASE_URL"] = url
+
+    command.upgrade(config, "head")
+    engine = create_engine(url)
+    try:
+        inspector = inspect(engine)
+        assert {
+            "audit_events",
+            "audit_idempotency",
+            "action_plans",
+            "gitops_change_sets",
+            "alembic_version",
+        }.issubset(set(inspector.get_table_names()))
+        assert {column["name"] for column in inspector.get_columns("audit_idempotency")} >= {
+            "run_id", "event_type", "evidence_json", "status", "claim_token", "claimed_at"
+        }
+    finally:
+        engine.dispose()
+
+    command.downgrade(config, "base")
+    engine = create_engine(url)
+    try:
+        assert not {
+            "audit_events", "audit_idempotency", "action_plans", "gitops_change_sets"
+        }.intersection(inspect(engine).get_table_names())
+    finally:
+        engine.dispose()
