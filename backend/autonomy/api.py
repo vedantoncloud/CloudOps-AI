@@ -61,9 +61,25 @@ def _serialize(value):
     return value
 
 
-def _store_plans(plans, tenant_id=None):
+def _store_plans(plans, tenant_id=None, audit_events=None):
+    audit_events = audit_events or []
     with _registry_lock:
-        action_plan_store.save_many(plans, tenant_id)
+        atomic_audit = (
+            bool(audit_events)
+            and action_plan_store.uses_shared_database
+            and getattr(audit_trail, "uses_shared_database", False)
+        )
+        if atomic_audit:
+            action_plan_store.save_many(
+                plans,
+                tenant_id,
+                audit_trail=audit_trail,
+                audit_events=audit_events,
+            )
+        else:
+            action_plan_store.save_many(plans, tenant_id)
+            for audit_event in audit_events:
+                audit_trail.record(**audit_event)
         for plan in plans:
             _plan_registry[plan.action_id] = plan
             _plan_tenants[plan.action_id] = tenant_id
@@ -91,19 +107,21 @@ def _plan_response(plans, request: Request):
     tenant_id = request.state.tenant_id if getattr(request.state, "tenant_scoped", False) else None
     principal = getattr(request.state, "principal", None)
     actor_id = getattr(principal, "subject", None)
-    for plan in plans:
-        audit_trail.record(
-            action_id=plan.action_id,
-            action_type=plan.action_type,
-            resource_type=plan.target.resource_type,
-            resource_id=plan.target.resource_id,
-            old_status="none",
-            new_status=plan.status.value,
-            event="plan_created",
-            actor_id=actor_id,
-            details={"tenant_id": tenant_id} if tenant_id is not None else {},
-        )
-    _store_plans(plans, tenant_id)
+    audit_events = [
+        {
+            "action_id": plan.action_id,
+            "action_type": plan.action_type,
+            "resource_type": plan.target.resource_type,
+            "resource_id": plan.target.resource_id,
+            "old_status": "none",
+            "new_status": plan.status.value,
+            "event": "plan_created",
+            "actor_id": actor_id,
+            "details": {"tenant_id": tenant_id} if tenant_id is not None else {},
+        }
+        for plan in plans
+    ]
+    _store_plans(plans, tenant_id, audit_events)
     return {
         "status": "healthy",
         "plan_count": len(plans),
