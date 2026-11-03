@@ -16,6 +16,7 @@ import json
 from pathlib import Path
 import sqlite3
 import sys
+import tempfile
 from typing import Any
 
 from sqlalchemy import create_engine, text
@@ -70,13 +71,20 @@ def _validate_sources(paths: dict[str, Path]) -> dict[str, list[dict[str, Any]]]
         "gitops": _read_rows(paths["gitops"], "gitops_change_sets", "created_order"),
     }
 
-    audit = PersistentAuditTrail(paths["audit_events"])
-    try:
-        integrity = audit.get_integrity_diagnostics()
-        if not integrity.valid or integrity.event_count != len(rows["audit_events"]):
-            raise ValueError("audit source hash chain is invalid")
-    finally:
-        audit.close()
+    with tempfile.TemporaryDirectory(prefix="cloudops-import-audit-check-") as directory:
+        audit_snapshot = Path(directory) / "audit-events.db"
+        source_path = paths["audit_events"].resolve(strict=True)
+        with sqlite3.connect(
+            f"{source_path.as_uri()}?mode=ro", uri=True, timeout=10
+        ) as source, sqlite3.connect(audit_snapshot) as destination:
+            source.backup(destination)
+        audit = PersistentAuditTrail(audit_snapshot)
+        try:
+            integrity = audit.get_integrity_diagnostics()
+            if not integrity.valid or integrity.event_count != len(rows["audit_events"]):
+                raise ValueError("audit source hash chain is invalid")
+        finally:
+            audit.close()
 
     health = PersistentAuditHealthChecker(paths["audit_idempotency"]).inspect()
     if (
