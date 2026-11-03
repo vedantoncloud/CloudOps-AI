@@ -35,6 +35,15 @@ def test_shared_persistence_schema_migrates_and_downgrades_on_sqlite(tmp_path, m
                 "VALUES ('legacy-plan', 'tenant-a', '{}', 7)"
             )
         )
+    command.upgrade(config, "0003_action_plan_order_lock")
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO gitops_change_sets "
+                "(change_id, tenant_id, payload, created_order) "
+                "VALUES ('legacy-change', 'tenant-a', '{}', 11)"
+            )
+        )
     command.upgrade(config, "head")
     try:
         inspector = inspect(engine)
@@ -46,6 +55,7 @@ def test_shared_persistence_schema_migrates_and_downgrades_on_sqlite(tmp_path, m
             "action_plans",
             "action_plan_state",
             "gitops_change_sets",
+            "gitops_state",
         }
         assert {column["name"] for column in inspector.get_columns("audit_idempotency")} == {
             "run_id", "event_type", "evidence_json", "status", "claim_token", "claimed_at"
@@ -72,6 +82,13 @@ def test_shared_persistence_schema_migrates_and_downgrades_on_sqlite(tmp_path, m
         assert {column["name"] for column in inspector.get_columns("gitops_change_sets")} == {
             "change_id", "tenant_id", "payload", "created_order"
         }
+        with engine.connect() as connection:
+            gitops_state = connection.execute(
+                text(
+                    "SELECT singleton_id, last_created_order FROM gitops_state"
+                )
+            ).one()
+            assert tuple(gitops_state) == (1, 11)
         with engine.begin() as connection:
             connection.execute(
                 text("INSERT INTO audit_events (event_json, event_hash) VALUES (:event, :hash)"),
@@ -85,7 +102,7 @@ def test_shared_persistence_schema_migrates_and_downgrades_on_sqlite(tmp_path, m
     engine = create_engine(url)
     try:
         assert not {
-            "audit_events", "audit_chain_state", "audit_idempotency", "action_plans", "action_plan_state", "gitops_change_sets"
+            "audit_events", "audit_chain_state", "audit_idempotency", "action_plans", "action_plan_state", "gitops_change_sets", "gitops_state"
         }.intersection(inspect(engine).get_table_names())
     finally:
         engine.dispose()

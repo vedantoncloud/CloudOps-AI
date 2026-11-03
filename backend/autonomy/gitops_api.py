@@ -18,10 +18,16 @@ router = APIRouter(
     tags=["autonomy-gitops"],
 )
 
+_shared_database_url = os.getenv("CLOUDOPS_DATABASE_URL")
 registry = GitOpsChangeSetRegistry(
     audit_trail=audit_trail,
-    database_path=os.getenv("CLOUDOPS_GITOPS_DB_PATH")
-    or Path(__file__).resolve().parents[1] / "gitops_changes.db",
+    database_url=_shared_database_url,
+    database_path=(
+        None
+        if _shared_database_url
+        else os.getenv("CLOUDOPS_GITOPS_DB_PATH")
+        or Path(__file__).resolve().parents[1] / "gitops_changes.db"
+    ),
 )
 engine = GitOpsEngine()
 
@@ -240,6 +246,8 @@ def approve_gitops_change(
             _change_actor(http_request, request.approved_by),
             engine=engine,
             actor_id=_change_actor(http_request, request.approved_by),
+            tenant_id=getattr(http_request.state, "tenant_id", None),
+            tenant_scoped=getattr(http_request.state, "tenant_scoped", False),
         )
         return _serialize_change_set(_visible_change(change_set, http_request))
 
@@ -273,6 +281,8 @@ def reject_gitops_change(
             request.reason,
             engine=engine,
             actor_id=_change_actor(http_request, request.rejected_by),
+            tenant_id=getattr(http_request.state, "tenant_id", None),
+            tenant_scoped=getattr(http_request.state, "tenant_scoped", False),
         )
         return _serialize_change_set(_visible_change(change_set, http_request))
 
@@ -305,6 +315,8 @@ def apply_gitops_change(
             dry_run=request.dry_run,
             engine=engine,
             actor_id=_authenticated_actor(http_request),
+            tenant_id=getattr(http_request.state, "tenant_id", None),
+            tenant_scoped=getattr(http_request.state, "tenant_scoped", False),
         )
 
         return ApplyResponse(
@@ -339,6 +351,8 @@ def verify_gitops_change(
             observed_values=request.observed_values,
             engine=engine,
             actor_id=_authenticated_actor(http_request),
+            tenant_id=getattr(http_request.state, "tenant_id", None),
+            tenant_scoped=getattr(http_request.state, "tenant_scoped", False),
         )
 
         change_set = registry.require(change_id)
