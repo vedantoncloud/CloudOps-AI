@@ -5,7 +5,7 @@ import os
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, inspect, text, text
+from sqlalchemy import create_engine, inspect, text
 
 
 @pytest.mark.skipif(not os.environ.get("CLOUDOPS_MYSQL_TEST_URL"), reason="MySQL CI service is not configured")
@@ -27,6 +27,14 @@ def test_shared_persistence_schema_upgrades_and_downgrades_on_mysql():
             "gitops_change_sets",
             "alembic_version",
         }.issubset(set(inspector.get_table_names()))
+        with engine.connect() as connection:
+            state = connection.execute(
+                text(
+                    "SELECT singleton_id, last_sequence, last_hash "
+                    "FROM audit_chain_state"
+                )
+            ).one()
+            assert tuple(state) == (1, 0, "")
         assert {column["name"] for column in inspector.get_columns("audit_idempotency")} >= {
             "run_id", "event_type", "evidence_json", "status", "claim_token", "claimed_at"
         }
