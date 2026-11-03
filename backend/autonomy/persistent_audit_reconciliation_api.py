@@ -73,6 +73,9 @@ class AuditReconciliationResponse(BaseModel):
 
 
 def _store() -> PersistentAuditIdempotencyStore:
+    shared_database_url = os.getenv("CLOUDOPS_DATABASE_URL")
+    if shared_database_url:
+        return PersistentAuditIdempotencyStore(database_url=shared_database_url)
     return PersistentAuditIdempotencyStore(Path(DEFAULT_DB_PATH))
 
 
@@ -93,13 +96,19 @@ def _reconciliation() -> PersistentAuditReconciliation:
     },
 )
 def audit_reconciliation() -> AuditReconciliationResponse:
+    reconciliation = None
     try:
-        result = _reconciliation().inspect()
+        reconciliation = _reconciliation()
+        result = reconciliation.inspect()
     except (ValueError, OSError, sqlite3.Error) as exc:
         raise HTTPException(
             status_code=503,
             detail="Persistent audit reconciliation is unavailable",
         ) from exc
+    finally:
+        store = getattr(reconciliation, "store", None)
+        if store is not None:
+            store.close()
 
     return {
         "count": result.count,

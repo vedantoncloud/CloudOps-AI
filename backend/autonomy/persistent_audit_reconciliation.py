@@ -95,7 +95,7 @@ class PersistentAuditReconciliation:
             )
 
         evidence = {
-            "store": "sqlite",
+            "store": "mysql" if self.store.path.startswith("mysql") else "sqlite",
             "read_only": True,
             "lease_seconds": self.lease_seconds,
             "pending_count": len(items),

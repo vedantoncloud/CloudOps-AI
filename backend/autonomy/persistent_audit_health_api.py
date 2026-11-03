@@ -74,7 +74,9 @@ class AuditPendingResponse(BaseModel):
 
 
 def _checker() -> PersistentAuditHealthChecker:
-    return PersistentAuditHealthChecker(Path(DEFAULT_DB_PATH))
+    return PersistentAuditHealthChecker(
+        os.getenv("CLOUDOPS_DATABASE_URL") or Path(DEFAULT_DB_PATH)
+    )
 
 
 def _store_unavailable(exc: Exception) -> HTTPException:
