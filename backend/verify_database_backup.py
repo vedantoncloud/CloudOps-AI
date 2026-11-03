@@ -14,10 +14,12 @@ from pathlib import Path
 from autonomy.action_plan_store import ActionPlanStore
 from autonomy.gitops_registry import GitOpsChangeSetRegistry
 from autonomy.persistent_audit_trail import PersistentAuditTrail
+from autonomy.persistent_audit_health import PersistentAuditHealthChecker
 
 
 TABLES = {
     "audit": "audit_events",
+    "idempotency": "audit_idempotency",
     "action-plans": "action_plans",
     "gitops": "gitops_change_sets",
 }
@@ -30,6 +32,14 @@ def _load_copy(store: str, path: Path) -> int:
         if not integrity.valid:
             raise ValueError(f"Audit hash chain failed at event {integrity.first_invalid_index}")
         return integrity.event_count
+    if store == "idempotency":
+        health = PersistentAuditHealthChecker(path).inspect()
+        if not health.evidence.get("consistent") or health.evidence.get("malformed_evidence_claims", 0):
+            raise ValueError("Audit idempotency backup contains inconsistent claims")
+        pending = PersistentAuditHealthChecker(path).list_pending()
+        if len(pending) != health.pending_claims:
+            raise ValueError("Audit idempotency pending-claim count is inconsistent")
+        return health.total_claims
     if store == "action-plans":
         return len(ActionPlanStore(path).load_all())
     return len(GitOpsChangeSetRegistry(database_path=path).list_all())
