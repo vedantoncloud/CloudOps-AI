@@ -165,6 +165,10 @@ def _validate_target(engine: Engine) -> None:
         for table in ("audit_events", "audit_idempotency", "action_plans", "gitops_change_sets"):
             if connection.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar_one():
                 raise ValueError("target persistence tables are not empty; refusing import")
+        if connection.execute(
+            text("SELECT COUNT(*) FROM persistence_import_runs")
+        ).scalar_one():
+            raise ValueError("target already contains a different import ledger entry")
         for table in ("audit_chain_state", "action_plan_state", "gitops_state"):
             row = connection.execute(
                 text(f"SELECT singleton_id FROM {table} WHERE singleton_id = 1")
@@ -180,7 +184,6 @@ def _dry_run_or_import(
     summary: dict[str, Any],
     apply: bool,
 ) -> dict[str, Any]:
-    _validate_target(engine)
     with engine.connect() as connection:
         existing = connection.execute(
             text(
@@ -192,6 +195,7 @@ def _dry_run_or_import(
     if existing is not None:
         return {"status": "already_imported", **summary}
 
+    _validate_target(engine)
     if not apply:
         return {"status": "dry_run", "read_only": True, **summary}
 
@@ -200,29 +204,31 @@ def _dry_run_or_import(
     # One target transaction: either all four stores and all state heads import,
     # or none do. The ledger row is the commit marker and retry fence.
     with engine.begin() as connection:
-        _validate_target(connection.engine)
-        connection.execute(
-            text(
-                "INSERT INTO audit_events (sequence, event_json, event_hash) "
-                "VALUES (:sequence, :event_json, :event_hash)"
-            ),
-            rows["audit_events"],
-        )
-        connection.execute(
-            text(
-                "INSERT INTO audit_idempotency "
-                "(run_id, event_type, evidence_json, status, claim_token, claimed_at) "
-                "VALUES (:run_id, :event_type, :evidence_json, :status, :claim_token, :claimed_at)"
-            ),
-            rows["audit_idempotency"],
-        )
-        connection.execute(
-            text(
-                "INSERT INTO action_plans (action_id, tenant_id, payload, created_order) "
-                "VALUES (:action_id, :tenant_id, :payload, :created_order)"
-            ),
-            rows["action_plans"],
-        )
+        if rows["audit_events"]:
+            connection.execute(
+                text(
+                    "INSERT INTO audit_events (sequence, event_json, event_hash) "
+                    "VALUES (:sequence, :event_json, :event_hash)"
+                ),
+                rows["audit_events"],
+            )
+        if rows["audit_idempotency"]:
+            connection.execute(
+                text(
+                    "INSERT INTO audit_idempotency "
+                    "(run_id, event_type, evidence_json, status, claim_token, claimed_at) "
+                    "VALUES (:run_id, :event_type, :evidence_json, :status, :claim_token, :claimed_at)"
+                ),
+                rows["audit_idempotency"],
+            )
+        if rows["action_plans"]:
+            connection.execute(
+                text(
+                    "INSERT INTO action_plans (action_id, tenant_id, payload, created_order) "
+                    "VALUES (:action_id, :tenant_id, :payload, :created_order)"
+                ),
+                rows["action_plans"],
+            )
         gitops_rows = []
         for row in rows["gitops"]:
             payload = json.loads(row["payload"])
@@ -233,14 +239,15 @@ def _dry_run_or_import(
                 "payload": row["payload"],
                 "created_order": row["created_order"],
             })
-        connection.execute(
-            text(
-                "INSERT INTO gitops_change_sets "
-                "(change_id, tenant_id, payload, created_order) "
-                "VALUES (:change_id, :tenant_id, :payload, :created_order)"
-            ),
-            gitops_rows,
-        )
+        if gitops_rows:
+            connection.execute(
+                text(
+                    "INSERT INTO gitops_change_sets "
+                    "(change_id, tenant_id, payload, created_order) "
+                    "VALUES (:change_id, :tenant_id, :payload, :created_order)"
+                ),
+                gitops_rows,
+            )
         final_hash = summary["audit_final_hash"]
         connection.execute(
             text(
