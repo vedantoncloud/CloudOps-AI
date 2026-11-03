@@ -432,9 +432,11 @@ class GitOpsChangeSetRegistry:
         *,
         engine: GitOpsEngine | None = None,
         actor_id: str | None = None,
+        tenant_id: str | None = None,
+        tenant_scoped: bool = False,
     ) -> GitOpsChangeSet:
         with self._lock:
-            change_set = self.require(change_id)
+            change_set = self._require_for_tenant(change_id, tenant_id, tenant_scoped)
             if engine is None:
                 engine = GitOpsEngine()
 
