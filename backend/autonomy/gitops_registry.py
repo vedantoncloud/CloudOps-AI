@@ -289,6 +289,8 @@ class GitOpsChangeSetRegistry:
                 refreshed = self._load_shared_one(change_set.change_id)
                 if refreshed is not None:
                     self._changes[change_set.change_id] = refreshed
+                else:
+                    self._changes.pop(change_set.change_id, None)
             raise
 
     def _persist(self, change_set: GitOpsChangeSet) -> None:
@@ -312,7 +314,7 @@ class GitOpsChangeSetRegistry:
             raise ValueError("change_id cannot be empty")
 
         with self._lock:
-            if change_set.change_id in self._changes:
+            if self._engine is None and change_set.change_id in self._changes:
                 raise ValueError(
                     f"change set already registered: {change_set.change_id}"
                 )
