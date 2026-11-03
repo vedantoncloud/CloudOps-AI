@@ -9,7 +9,7 @@ from threading import RLock
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError
 
 from autonomy.audit import AuditTrail
 from autonomy.gitops import (
@@ -361,6 +361,17 @@ class GitOpsChangeSetRegistry:
             raise KeyError(f"GitOps change set not found: {change_id}")
         return change_set
 
+    def _require_for_tenant(
+        self,
+        change_id: str,
+        tenant_id: str | None,
+        tenant_scoped: bool,
+    ) -> GitOpsChangeSet:
+        change_set = self.require(change_id)
+        if tenant_scoped and change_set.metadata.get("tenant_id") != tenant_id:
+            raise KeyError(f"GitOps change set not found: {change_id}")
+        return change_set
+
     def list_all(self) -> list[GitOpsChangeSet]:
         with self._lock:
             if self._engine is not None:
@@ -383,9 +394,11 @@ class GitOpsChangeSetRegistry:
         *,
         engine: GitOpsEngine | None = None,
         actor_id: str | None = None,
+        tenant_id: str | None = None,
+        tenant_scoped: bool = False,
     ) -> GitOpsChangeSet:
         with self._lock:
-            change_set = self.require(change_id)
+            change_set = self._require_for_tenant(change_id, tenant_id, tenant_scoped)
             if engine is None:
                 engine = GitOpsEngine()
 
@@ -455,9 +468,11 @@ class GitOpsChangeSetRegistry:
         dry_run: bool = True,
         engine: GitOpsEngine | None = None,
         actor_id: str | None = None,
+        tenant_id: str | None = None,
+        tenant_scoped: bool = False,
     ) -> GitOpsApplyResult:
         with self._lock:
-            change_set = self.require(change_id)
+            change_set = self._require_for_tenant(change_id, tenant_id, tenant_scoped)
             if engine is None:
                 engine = GitOpsEngine()
 
@@ -498,9 +513,11 @@ class GitOpsChangeSetRegistry:
         observed_values: dict[str, object] | None = None,
         engine: GitOpsEngine | None = None,
         actor_id: str | None = None,
+        tenant_id: str | None = None,
+        tenant_scoped: bool = False,
     ) -> bool:
         with self._lock:
-            change_set = self.require(change_id)
+            change_set = self._require_for_tenant(change_id, tenant_id, tenant_scoped)
             if engine is None:
                 engine = GitOpsEngine()
 
