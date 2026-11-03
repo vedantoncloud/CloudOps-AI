@@ -35,6 +35,7 @@ def test_shared_persistence_schema_migrates_and_downgrades_on_sqlite(tmp_path, m
             "audit_chain_state",
             "audit_idempotency",
             "action_plans",
+            "action_plan_state",
             "gitops_change_sets",
         }
         assert {column["name"] for column in inspector.get_columns("audit_idempotency")} == {
@@ -51,6 +52,14 @@ def test_shared_persistence_schema_migrates_and_downgrades_on_sqlite(tmp_path, m
         assert {column["name"] for column in inspector.get_columns("action_plans")} == {
             "action_id", "tenant_id", "payload", "created_order"
         }
+        with engine.connect() as connection:
+            plan_state = connection.execute(
+                text(
+                    "SELECT singleton_id, last_created_order "
+                    "FROM action_plan_state"
+                )
+            ).one()
+            assert tuple(plan_state) == (1, 7)
         assert {column["name"] for column in inspector.get_columns("gitops_change_sets")} == {
             "change_id", "tenant_id", "payload", "created_order"
         }
@@ -67,7 +76,7 @@ def test_shared_persistence_schema_migrates_and_downgrades_on_sqlite(tmp_path, m
     engine = create_engine(url)
     try:
         assert not {
-            "audit_events", "audit_chain_state", "audit_idempotency", "action_plans", "gitops_change_sets"
+            "audit_events", "audit_chain_state", "audit_idempotency", "action_plans", "action_plan_state", "gitops_change_sets"
         }.intersection(inspect(engine).get_table_names())
     finally:
         engine.dispose()
