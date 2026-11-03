@@ -147,3 +147,23 @@ def test_shared_registry_requires_an_applied_schema(tmp_path):
     missing_url = f"sqlite:///{tmp_path / 'not-migrated.db'}"
     with pytest.raises(ValueError, match="run Alembic migrations first"):
         GitOpsChangeSetRegistry(database_url=missing_url)
+
+
+def test_shared_registry_fails_closed_on_tenant_column_payload_mismatch(shared_database_url):
+    registry = GitOpsChangeSetRegistry(database_url=shared_database_url)
+    change_set = _change_set("change-tenant-mismatch")
+    registry.register(change_set)
+    engine = create_engine(shared_database_url, future=True)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "UPDATE gitops_change_sets SET tenant_id = 'tenant-b' "
+                    "WHERE change_id = 'change-tenant-mismatch'"
+                )
+            )
+        with pytest.raises(ValueError, match="tenant ownership metadata is inconsistent"):
+            registry.get(change_set.change_id)
+    finally:
+        engine.dispose()
+        registry.close()
