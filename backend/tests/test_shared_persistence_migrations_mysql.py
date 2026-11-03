@@ -24,6 +24,7 @@ def test_shared_persistence_schema_upgrades_and_downgrades_on_mysql():
             "audit_chain_state",
             "audit_idempotency",
             "action_plans",
+            "action_plan_state",
             "gitops_change_sets",
             "alembic_version",
         }.issubset(set(inspector.get_table_names()))
@@ -35,6 +36,13 @@ def test_shared_persistence_schema_upgrades_and_downgrades_on_mysql():
                 )
             ).one()
             assert tuple(state) == (1, 0, "")
+            plan_state = connection.execute(
+                text(
+                    "SELECT singleton_id, last_created_order "
+                    "FROM action_plan_state"
+                )
+            ).one()
+            assert tuple(plan_state) == (1, 0)
         assert {column["name"] for column in inspector.get_columns("audit_idempotency")} >= {
             "run_id", "event_type", "evidence_json", "status", "claim_token", "claimed_at"
         }
@@ -76,7 +84,7 @@ def test_shared_persistence_schema_upgrades_and_downgrades_on_mysql():
     engine = create_engine(url)
     try:
         assert not {
-            "audit_events", "audit_chain_state", "audit_idempotency", "action_plans", "gitops_change_sets"
+            "audit_events", "audit_chain_state", "audit_idempotency", "action_plans", "action_plan_state", "gitops_change_sets"
         }.intersection(inspect(engine).get_table_names())
     finally:
         engine.dispose()
