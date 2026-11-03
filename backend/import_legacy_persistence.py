@@ -99,14 +99,20 @@ def _validate_sources(paths: dict[str, Path]) -> dict[str, list[dict[str, Any]]]
         raise ValueError("audit event sequence is not contiguous from one")
 
     for row in rows["audit_idempotency"]:
+        if not isinstance(row["run_id"], str) or not isinstance(row["event_type"], str):
+            raise ValueError("idempotency key fields must be strings")
         if len(row["run_id"]) > 255 or len(row["event_type"]) > 255:
             raise ValueError("idempotency key exceeds the shared schema length limit")
-        if len(row["claim_token"]) > 64:
-            raise ValueError("idempotency claim token exceeds the shared schema length limit")
+        if not isinstance(row["claim_token"], str) or len(row["claim_token"]) > 64:
+            raise ValueError("idempotency claim token is invalid for the shared schema")
     for row in rows["action_plans"]:
         payload = json.loads(row["payload"])
         if payload.get("action_id") != row["action_id"]:
             raise ValueError("action-plan payload ID does not match its primary key")
+        if not isinstance(row["action_id"], str) or (
+            row["tenant_id"] is not None and not isinstance(row["tenant_id"], str)
+        ):
+            raise ValueError("action-plan identifier or tenant must be a string")
         if len(row["action_id"]) > 255 or (
             row["tenant_id"] is not None and len(row["tenant_id"]) > 255
         ):
