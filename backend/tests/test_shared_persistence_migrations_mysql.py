@@ -5,7 +5,7 @@ import os
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, inspect, text, text
 
 
 @pytest.mark.skipif(not os.environ.get("CLOUDOPS_MYSQL_TEST_URL"), reason="MySQL CI service is not configured")
@@ -21,6 +21,7 @@ def test_shared_persistence_schema_upgrades_and_downgrades_on_mysql():
         inspector = inspect(engine)
         assert {
             "audit_events",
+            "audit_chain_state",
             "audit_idempotency",
             "action_plans",
             "gitops_change_sets",
@@ -67,7 +68,7 @@ def test_shared_persistence_schema_upgrades_and_downgrades_on_mysql():
     engine = create_engine(url)
     try:
         assert not {
-            "audit_events", "audit_idempotency", "action_plans", "gitops_change_sets"
+            "audit_events", "audit_chain_state", "audit_idempotency", "action_plans", "gitops_change_sets"
         }.intersection(inspect(engine).get_table_names())
     finally:
         engine.dispose()
