@@ -28,10 +28,10 @@ def test_restore_drill_loads_each_store_without_modifying_backup(tmp_path, store
             old_status="running", new_status="running", event="inspection_completed",
         )
     elif build == "idempotency":
-        store = PersistentAuditIdempotencyStore(backup)
-        claim = store.claim("run-1", "failure", {"result": "failed"})
-        assert store.mark_emitted("run-1", "failure", claim.claim_token)
-        store.close()
+        idempotency_store = PersistentAuditIdempotencyStore(backup)
+        claim = idempotency_store.claim("run-1", "failure", {"result": "failed"})
+        assert idempotency_store.mark_emitted("run-1", "failure", claim.claim_token)
+        idempotency_store.close()
     elif build == "plans":
         ActionPlanStore(backup)
     else:
