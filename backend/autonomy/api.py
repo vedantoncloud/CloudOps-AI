@@ -1,4 +1,5 @@
 from dataclasses import asdict
+import os
 from datetime import datetime
 from enum import Enum
 from threading import Lock
@@ -33,7 +34,7 @@ recovery_coordinator = RecoveryCoordinator(verifier=action_verifier)
 _plan_registry = {}
 _plan_tenants = {}
 _registry_lock = Lock()
-action_plan_store = ActionPlanStore()
+action_plan_store = ActionPlanStore(database_url=os.getenv("CLOUDOPS_DATABASE_URL"))
 for _stored_plan, _stored_tenant in action_plan_store.load_all():
     _plan_registry[_stored_plan.action_id] = _stored_plan
     _plan_tenants[_stored_plan.action_id] = _stored_tenant
