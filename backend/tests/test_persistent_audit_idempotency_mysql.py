@@ -97,9 +97,9 @@ def test_evidence_conflicts_and_case_sensitive_identifiers_are_preserved(databas
         with pytest.raises(ValueError, match="Conflicting audit evidence"):
             store.claim(identity, "Created", {"owner": "B"})
 
-        lower = store.claim(identity.lower(), "Created", {"owner": "A"})
+        upper = store.claim(identity.upper(), "Created", {"owner": "A"})
         assert original.emitted is True
-        assert lower.emitted is True
+        assert upper.emitted is True
     finally:
         store.close()
 
