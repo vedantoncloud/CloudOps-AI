@@ -29,6 +29,11 @@ def test_shared_persistence_schema_upgrades_and_downgrades_on_mysql():
         assert {column["name"] for column in inspector.get_columns("audit_idempotency")} >= {
             "run_id", "event_type", "evidence_json", "status", "claim_token", "claimed_at"
         }
+        idempotency_columns = {
+            column["name"]: column for column in inspector.get_columns("audit_idempotency")
+        }
+        assert "LONGTEXT" in str(idempotency_columns["evidence_json"]["type"]).upper()
+        assert "DOUBLE" in str(idempotency_columns["claimed_at"]["type"]).upper()
         with engine.begin() as connection:
             connection.execute(
                 text(
