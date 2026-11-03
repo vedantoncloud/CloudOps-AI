@@ -15,14 +15,24 @@ def test_shared_persistence_schema_migrates_and_downgrades_on_sqlite(tmp_path, m
     monkeypatch.setenv("CLOUDOPS_DATABASE_URL", url)
 
     config = _config(url)
-    command.upgrade(config, "head")
+    command.upgrade(config, "0001_shared_persistence")
 
     engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO audit_events (sequence, event_json, event_hash) "
+                "VALUES (1, :event, :hash)"
+            ),
+            {"event": "{}", "hash": "1" * 64},
+        )
+    command.upgrade(config, "head")
     try:
         inspector = inspect(engine)
         assert set(inspector.get_table_names()) == {
             "alembic_version",
             "audit_events",
+            "audit_chain_state",
             "audit_idempotency",
             "action_plans",
             "gitops_change_sets",
@@ -30,6 +40,14 @@ def test_shared_persistence_schema_migrates_and_downgrades_on_sqlite(tmp_path, m
         assert {column["name"] for column in inspector.get_columns("audit_idempotency")} == {
             "run_id", "event_type", "evidence_json", "status", "claim_token", "claimed_at"
         }
+        with engine.connect() as connection:
+            state = connection.execute(
+                text(
+                    "SELECT singleton_id, last_sequence, last_hash "
+                    "FROM audit_chain_state"
+                )
+            ).one()
+            assert tuple(state) == (1, 1, "1" * 64)
         assert {column["name"] for column in inspector.get_columns("action_plans")} == {
             "action_id", "tenant_id", "payload", "created_order"
         }
@@ -41,7 +59,7 @@ def test_shared_persistence_schema_migrates_and_downgrades_on_sqlite(tmp_path, m
                 text("INSERT INTO audit_events (event_json, event_hash) VALUES (:event, :hash)"),
                 {"event": "{}", "hash": "0" * 64},
             )
-            assert connection.execute(text("SELECT sequence FROM audit_events")).scalar_one() == 1
+            assert connection.execute(text("SELECT MAX(sequence) FROM audit_events")).scalar_one() == 2
     finally:
         engine.dispose()
 
@@ -49,7 +67,7 @@ def test_shared_persistence_schema_migrates_and_downgrades_on_sqlite(tmp_path, m
     engine = create_engine(url)
     try:
         assert not {
-            "audit_events", "audit_idempotency", "action_plans", "gitops_change_sets"
+            "audit_events", "audit_chain_state", "audit_idempotency", "action_plans", "gitops_change_sets"
         }.intersection(inspect(engine).get_table_names())
     finally:
         engine.dispose()

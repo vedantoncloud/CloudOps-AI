@@ -1,36 +1,77 @@
-"""SQLite-backed durable audit events with the same hash-chain contract."""
+"""Durable SHA-256 audit chain with legacy SQLite and opt-in shared SQL storage."""
 
 from __future__ import annotations
 
-import json
 import hmac
+import json
 import sqlite3
 from pathlib import Path
 from threading import RLock
 from typing import Any
+
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine
+from sqlalchemy.exc import SQLAlchemyError
 
 from autonomy.audit import AuditEvent, AuditIntegrityResult, AuditTrail
 from observability import observed_sqlite_connection
 
 
 class PersistentAuditTrail(AuditTrail):
-    """Append-only audit storage that survives process restarts.
+    """Append-only audit storage with transactional cross-worker chain ordering.
 
-    The database path is always explicit. Callers can select a dedicated file
-    and this class never chooses or discovers another database.
+    SQLite remains the default. An explicit database URL selects the Alembic-
+    managed shared schema; MySQL appends serialize on the singleton chain-head
+    row, while SQLite uses BEGIN IMMEDIATE.
     """
 
     def __init__(self, database_path: str | Path) -> None:
         self.database_path = str(database_path)
         self._lock = RLock()
-        with observed_sqlite_connection(self._connect, "audit_events") as connection:
-            connection.execute(
-                """CREATE TABLE IF NOT EXISTS audit_events (
-                    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
-                    event_json TEXT NOT NULL,
-                    event_hash TEXT NOT NULL
-                )"""
+        self._engine: Engine | None = None
+        if "://" in self.database_path:
+            if not self.database_path.startswith(("mysql+pymysql://", "sqlite:///")):
+                raise ValueError("database URL must use mysql+pymysql or sqlite")
+            self._engine = create_engine(
+                self.database_path,
+                pool_pre_ping=True,
+                future=True,
             )
+            self._validate_shared_schema()
+        else:
+            with observed_sqlite_connection(self._connect, "audit_events") as connection:
+                connection.execute(
+                    """CREATE TABLE IF NOT EXISTS audit_events (
+                        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+                        event_json TEXT NOT NULL,
+                        event_hash TEXT NOT NULL
+                    )"""
+                )
+
+    def _validate_shared_schema(self) -> None:
+        assert self._engine is not None
+        try:
+            with self._engine.connect() as connection:
+                connection.execute(
+                    text(
+                        "SELECT sequence, event_json, event_hash "
+                        "FROM audit_events LIMIT 0"
+                    )
+                )
+                state = connection.execute(
+                    text(
+                        "SELECT singleton_id, last_sequence, last_hash "
+                        "FROM audit_chain_state WHERE singleton_id = 1"
+                    )
+                ).first()
+                if state is None:
+                    raise ValueError("shared audit chain head row is missing")
+        except (SQLAlchemyError, ValueError) as exc:
+            self._engine.dispose()
+            self._engine = None
+            raise ValueError(
+                "Shared audit chain schema is not initialized; run Alembic migrations first"
+            ) from exc
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.database_path, timeout=10)
@@ -38,10 +79,12 @@ class PersistentAuditTrail(AuditTrail):
         return connection
 
     def record(self, **kwargs: Any) -> AuditEvent:
-        # Reuse the in-memory implementation for input validation, defensive
-        # copies, and canonical JSON validation before opening a write txn.
         validator = AuditTrail()
         event = validator.record(**kwargs)
+        if self._engine is not None:
+            self._record_shared(event)
+            return event
+
         with self._lock, observed_sqlite_connection(self._connect, "audit_events") as connection:
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
@@ -55,12 +98,85 @@ class PersistentAuditTrail(AuditTrail):
             )
         return event
 
+    def _record_shared(self, event: AuditEvent) -> None:
+        assert self._engine is not None
+        dialect = self._engine.dialect.name
+        if dialect == "mysql":
+            with self._engine.begin() as connection:
+                self._append_with_locked_head(connection, event, " FOR UPDATE")
+            return
+        if dialect == "sqlite":
+            with self._engine.connect() as connection:
+                connection.exec_driver_sql("BEGIN IMMEDIATE")
+                try:
+                    self._append_with_locked_head(connection, event, "")
+                    connection.commit()
+                except Exception:
+                    connection.rollback()
+                    raise
+            return
+        raise ValueError(f"Unsupported shared audit dialect: {dialect}")
+
+    def _append_with_locked_head(self, connection, event: AuditEvent, lock_clause: str) -> None:
+        state = connection.execute(
+            text(
+                "SELECT last_sequence, last_hash FROM audit_chain_state "
+                "WHERE singleton_id = 1" + lock_clause
+            )
+        ).mappings().one()
+        tail = connection.execute(
+            text(
+                "SELECT sequence, event_hash FROM audit_events "
+                "ORDER BY sequence DESC LIMIT 1"
+            )
+        ).mappings().first()
+        expected_sequence = int(tail["sequence"]) if tail is not None else 0
+        expected_hash = str(tail["event_hash"]) if tail is not None else ""
+        if (
+            int(state["last_sequence"]) != expected_sequence
+            or state["last_hash"] != expected_hash
+        ):
+            raise RuntimeError("Audit chain head metadata is inconsistent")
+
+        sequence = expected_sequence + 1
+        event_json = self._canonical_event(event).decode("utf-8")
+        event_hash = self._calculate_hash(expected_hash, event)
+        connection.execute(
+            text(
+                "INSERT INTO audit_events (sequence, event_json, event_hash) "
+                "VALUES (:sequence, :event_json, :event_hash)"
+            ),
+            {
+                "sequence": sequence,
+                "event_json": event_json,
+                "event_hash": event_hash,
+            },
+        )
+        connection.execute(
+            text(
+                "UPDATE audit_chain_state SET last_sequence = :sequence, "
+                "last_hash = :event_hash WHERE singleton_id = 1"
+            ),
+            {"sequence": sequence, "event_hash": event_hash},
+        )
+
+    def _shared_rows(self, statement: str):
+        assert self._engine is not None
+        with self._engine.connect() as connection:
+            return connection.execute(text(statement)).mappings().all()
+
     def get_events(self, action_id: str | None = None) -> list[AuditEvent]:
-        with observed_sqlite_connection(self._connect, "audit_events") as connection:
-            rows = connection.execute(
+        if self._engine is not None:
+            rows = self._shared_rows(
                 "SELECT event_json FROM audit_events ORDER BY sequence"
-            ).fetchall()
-        events = [self._event_from_json(row["event_json"]) for row in rows]
+            )
+            events = [self._event_from_json(row["event_json"]) for row in rows]
+        else:
+            with observed_sqlite_connection(self._connect, "audit_events") as connection:
+                rows = connection.execute(
+                    "SELECT event_json FROM audit_events ORDER BY sequence"
+                ).fetchall()
+            events = [self._event_from_json(row["event_json"]) for row in rows]
         return events if action_id is None else [
             event for event in events if event.action_id == action_id
         ]
@@ -71,10 +187,15 @@ class PersistentAuditTrail(AuditTrail):
         return AuditEvent(**data)
 
     def get_integrity_diagnostics(self) -> AuditIntegrityResult:
-        with self._lock, observed_sqlite_connection(self._connect, "audit_events") as connection:
-            rows = connection.execute(
+        if self._engine is not None:
+            rows = self._shared_rows(
                 "SELECT event_json, event_hash FROM audit_events ORDER BY sequence"
-            ).fetchall()
+            )
+        else:
+            with self._lock, observed_sqlite_connection(self._connect, "audit_events") as connection:
+                rows = connection.execute(
+                    "SELECT event_json, event_hash FROM audit_events ORDER BY sequence"
+                ).fetchall()
         previous_hash = ""
         for index, row in enumerate(rows):
             try:
@@ -93,11 +214,17 @@ class PersistentAuditTrail(AuditTrail):
         return AuditIntegrityResult(True, len(rows), None)
 
     def get_verifiable_export(self) -> dict[str, Any]:
-        """Return a full ordered chain snapshot suitable for offline verification."""
-        with self._lock, observed_sqlite_connection(self._connect, "audit_events") as connection:
-            rows = connection.execute(
-                "SELECT sequence, event_json, event_hash FROM audit_events ORDER BY sequence"
-            ).fetchall()
+        if self._engine is not None:
+            rows = self._shared_rows(
+                "SELECT sequence, event_json, event_hash "
+                "FROM audit_events ORDER BY sequence"
+            )
+        else:
+            with self._lock, observed_sqlite_connection(self._connect, "audit_events") as connection:
+                rows = connection.execute(
+                    "SELECT sequence, event_json, event_hash "
+                    "FROM audit_events ORDER BY sequence"
+                ).fetchall()
         events = []
         previous_hash = ""
         for index, row in enumerate(rows):
@@ -137,6 +264,47 @@ class PersistentAuditTrail(AuditTrail):
         return result.valid, result.event_count
 
     def clear(self) -> None:
+        if self._engine is not None:
+            dialect = self._engine.dialect.name
+            if dialect == "mysql":
+                with self._engine.begin() as connection:
+                    connection.execute(
+                        text(
+                            "SELECT singleton_id FROM audit_chain_state "
+                            "WHERE singleton_id = 1 FOR UPDATE"
+                        )
+                    ).one()
+                    connection.execute(text("DELETE FROM audit_events"))
+                    connection.execute(
+                        text(
+                            "UPDATE audit_chain_state SET last_sequence = 0, "
+                            "last_hash = '' WHERE singleton_id = 1"
+                        )
+                    )
+                return
+            if dialect == "sqlite":
+                with self._engine.connect() as connection:
+                    connection.exec_driver_sql("BEGIN IMMEDIATE")
+                    try:
+                        connection.execute(text("DELETE FROM audit_events"))
+                        connection.execute(
+                            text(
+                                "UPDATE audit_chain_state SET last_sequence = 0, "
+                                "last_hash = '' WHERE singleton_id = 1"
+                            )
+                        )
+                        connection.commit()
+                    except Exception:
+                        connection.rollback()
+                        raise
+                return
+            raise ValueError(f"Unsupported shared audit dialect: {dialect}")
+
         with self._lock, observed_sqlite_connection(self._connect, "audit_events") as connection:
             connection.execute("DELETE FROM audit_events")
             connection.execute("DELETE FROM sqlite_sequence WHERE name = 'audit_events'")
+
+    def close(self) -> None:
+        if self._engine is not None:
+            self._engine.dispose()
+            self._engine = None

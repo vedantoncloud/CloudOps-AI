@@ -21,7 +21,8 @@ router = APIRouter(
 )
 
 audit_trail = PersistentAuditTrail(
-    os.environ.get("CLOUDOPS_AUDIT_EVENTS_DB", "cloudops_audit_events.db")
+    os.environ.get("CLOUDOPS_DATABASE_URL")
+    or os.environ.get("CLOUDOPS_AUDIT_EVENTS_DB", "cloudops_audit_events.db")
 )
 
 
@@ -87,6 +88,11 @@ def export_verifiable_audit_chain(request: Request) -> dict[str, Any]:
 def _download_sqlite_backup(request: Request, store_name: str, source_database: str | Path) -> StreamingResponse:
     """Download a consistent online SQLite snapshot for offline recovery."""
     require_role(request.state.principal, "admin")
+    if "://" in str(source_database):
+        raise HTTPException(
+            status_code=503,
+            detail="Shared database backups must be managed by the configured database provider",
+        )
     snapshot_path: str | None = None
     try:
         source_path = Path(source_database).resolve(strict=True)
