@@ -124,6 +124,92 @@ class PersistentAuditIdempotencyStore:
             default=str,
         )
 
+    @property
+    def uses_shared_database(self) -> bool:
+        return self._engine is not None
+
+    def mark_emitted_with_audit(
+        self,
+        run_id: str,
+        event_type: str,
+        claim_token: str,
+        audit_trail,
+        audit_kwargs: dict[str, Any],
+    ) -> bool:
+        """Append the audit event and finalize its claim in one SQL transaction."""
+        run_id = (run_id or "").strip()
+        event_type = (event_type or "").strip()
+        claim_token = (claim_token or "").strip()
+        if not run_id:
+            raise ValueError("run_id is required")
+        if not event_type:
+            raise ValueError("event_type is required")
+        if not claim_token:
+            raise ValueError("claim_token is required")
+        if self._engine is None or not getattr(audit_trail, "uses_shared_database", False):
+            raise RuntimeError("atomic audit finalization requires shared SQL stores")
+        if not hasattr(audit_trail, "record_with_connection"):
+            raise TypeError("audit trail does not support caller-owned transactions")
+        if audit_trail._engine.url != self._engine.url:
+            raise ValueError("idempotency store and audit trail must share one database URL")
+
+        dialect = self._engine.dialect.name
+        if dialect == "mysql":
+            with self._engine.begin() as connection:
+                return self._mark_emitted_with_audit_locked(
+                    connection, run_id, event_type, claim_token, audit_trail, audit_kwargs, " FOR UPDATE"
+                )
+        if dialect == "sqlite":
+            with self._engine.connect() as connection:
+                connection.exec_driver_sql("BEGIN IMMEDIATE")
+                try:
+                    marked = self._mark_emitted_with_audit_locked(
+                        connection, run_id, event_type, claim_token, audit_trail, audit_kwargs, ""
+                    )
+                    connection.commit()
+                    return marked
+                except Exception:
+                    connection.rollback()
+                    raise
+        raise ValueError(f"Unsupported shared persistence dialect: {dialect}")
+
+    @staticmethod
+    def _mark_emitted_with_audit_locked(
+        connection,
+        run_id: str,
+        event_type: str,
+        claim_token: str,
+        audit_trail,
+        audit_kwargs: dict[str, Any],
+        lock_clause: str,
+    ) -> bool:
+        row = connection.execute(
+            text(
+                "SELECT status, claim_token FROM audit_idempotency "
+                "WHERE run_id = :run_id AND event_type = :event_type" + lock_clause
+            ),
+            {"run_id": run_id, "event_type": event_type},
+        ).mappings().first()
+        if row is None or row["status"] != "pending" or row["claim_token"] != claim_token:
+            return False
+
+        audit_trail.record_with_connection(connection, **audit_kwargs)
+        result = connection.execute(
+            text(
+                "UPDATE audit_idempotency SET status = 'emitted' "
+                "WHERE run_id = :run_id AND event_type = :event_type "
+                "AND status = 'pending' AND claim_token = :claim_token"
+            ),
+            {
+                "run_id": run_id,
+                "event_type": event_type,
+                "claim_token": claim_token,
+            },
+        )
+        if result.rowcount != 1:
+            raise RuntimeError("Persistent audit claim could not be marked emitted")
+        return True
+
     def claim(
         self,
         run_id: str,

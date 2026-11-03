@@ -63,29 +63,52 @@ class IdempotentFailureAuditBridge:
                 claim = None
 
             audit_kwargs = self._audit_kwargs(event_type, event_evidence)
-            try:
-                self._record_audit_event(
-                    event_type,
-                    event_evidence,
-                    audit_kwargs,
-                )
-            except Exception:
-                # A persistent claim remains pending. The store's lease allows
-                # a later process/run to reclaim it after the audit write fails.
-                raise
-
-            if self.idempotency_store is not None:
-                marked = self.idempotency_store.mark_emitted(
+            atomic_shared = (
+                self.idempotency_store is not None
+                and getattr(self.idempotency_store, "uses_shared_database", False)
+                and getattr(self.audit_trail, "uses_shared_database", False)
+                and hasattr(self.idempotency_store, "mark_emitted_with_audit")
+                and hasattr(self.audit_trail, "record_with_connection")
+            )
+            if atomic_shared:
+                # The audit append and token-fenced claim finalization commit
+                # together. A crash cannot leave an emitted event with a
+                # reclaimable pending claim (or the reverse).
+                marked = self.idempotency_store.mark_emitted_with_audit(
                     run_id,
                     event_type,
                     claim.claim_token,
+                    self.audit_trail,
+                    audit_kwargs,
                 )
                 if not marked:
                     raise RuntimeError(
                         "Persistent audit claim could not be marked emitted"
                     )
             else:
-                self._emitted[key] = dict(event_evidence)
+                try:
+                    self._record_audit_event(
+                        event_type,
+                        event_evidence,
+                        audit_kwargs,
+                    )
+                except Exception:
+                    # A persistent claim remains pending. Its lease allows a
+                    # later process to reclaim it after an audit write failure.
+                    raise
+
+                if self.idempotency_store is not None:
+                    marked = self.idempotency_store.mark_emitted(
+                        run_id,
+                        event_type,
+                        claim.claim_token,
+                    )
+                    if not marked:
+                        raise RuntimeError(
+                            "Persistent audit claim could not be marked emitted"
+                        )
+                else:
+                    self._emitted[key] = dict(event_evidence)
 
             emitted.append(event_type)
 
