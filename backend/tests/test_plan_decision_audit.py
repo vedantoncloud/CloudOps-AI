@@ -38,7 +38,7 @@ def test_plan_decision_writes_durable_actor_and_tenant_audit(
 ):
     plan = _plan()
     monkeypatch.setattr(api, "_get_plan", lambda action_id, request: plan)
-    monkeypatch.setattr(api, "_persist_plan", lambda action, audit_event=None: None)
+    monkeypatch.setattr(api, "_persist_plan", lambda action, audit_event=None: api.audit_trail.record(**audit_event))
     recorded = []
 
     class Trail:
