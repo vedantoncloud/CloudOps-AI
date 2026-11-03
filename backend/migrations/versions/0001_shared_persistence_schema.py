@@ -6,6 +6,7 @@ Revises:
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import mysql
 
 revision = "0001_shared_persistence"
 down_revision = None
@@ -15,11 +16,12 @@ depends_on = None
 
 def upgrade() -> None:
     sequence_type = sa.BigInteger().with_variant(sa.Integer(), "sqlite")
+    payload_type = sa.Text().with_variant(mysql.LONGTEXT(), "mysql")
 
     op.create_table(
         "audit_events",
         sa.Column("sequence", sequence_type, primary_key=True, autoincrement=True),
-        sa.Column("event_json", sa.Text(), nullable=False),
+        sa.Column("event_json", payload_type, nullable=False),
         sa.Column("event_hash", sa.String(length=64), nullable=False),
         mysql_engine="InnoDB",
         mysql_charset="utf8mb4",
@@ -30,10 +32,10 @@ def upgrade() -> None:
         "audit_idempotency",
         sa.Column("run_id", sa.String(length=255), nullable=False),
         sa.Column("event_type", sa.String(length=255), nullable=False),
-        sa.Column("evidence_json", sa.Text(), nullable=False),
+        sa.Column("evidence_json", payload_type, nullable=False),
         sa.Column("status", sa.String(length=32), nullable=False, server_default="pending"),
         sa.Column("claim_token", sa.String(length=64), nullable=False, server_default=""),
-        sa.Column("claimed_at", sa.Float(), nullable=False, server_default="0"),
+        sa.Column("claimed_at", sa.Double(), nullable=False, server_default="0"),
         sa.PrimaryKeyConstraint("run_id", "event_type", name="pk_audit_idempotency"),
         mysql_engine="InnoDB",
         mysql_charset="utf8mb4",
@@ -49,7 +51,7 @@ def upgrade() -> None:
         "action_plans",
         sa.Column("action_id", sa.String(length=255), primary_key=True),
         sa.Column("tenant_id", sa.String(length=255), nullable=True),
-        sa.Column("payload", sa.Text(), nullable=False),
+        sa.Column("payload", payload_type, nullable=False),
         sa.Column("created_order", sa.BigInteger(), nullable=False),
         mysql_engine="InnoDB",
         mysql_charset="utf8mb4",
