@@ -129,7 +129,7 @@ def _download_sqlite_backup(request: Request, store_name: str, source_database: 
                 os.unlink(snapshot_path)
             except OSError:
                 pass
-        display_name = {"audit": "Audit", "action-plans": "Action plan", "gitops": "GitOps"}[store_name]
+        display_name = {"audit": "Audit", "idempotency": "Audit idempotency", "action-plans": "Action plan", "gitops": "GitOps"}[store_name]
         raise HTTPException(status_code=503, detail=f"{display_name} database backup unavailable") from exc
 
 
@@ -152,6 +152,11 @@ def download_operational_database_backup(store_name: str, request: Request) -> S
         source = registry.database_path
         if source is None:
             raise HTTPException(status_code=503, detail="GitOps database backup unavailable")
+    elif store_name == "idempotency":
+        source = (
+            os.getenv("CLOUDOPS_DATABASE_URL")
+            or os.getenv("CLOUDOPS_AUDIT_IDEMPOTENCY_DB", "cloudops_audit_idempotency.db")
+        )
     else:
         raise HTTPException(status_code=404, detail="Unknown database backup store")
     return _download_sqlite_backup(request, store_name, source)
