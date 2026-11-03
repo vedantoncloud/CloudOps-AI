@@ -23,6 +23,7 @@ def upgrade() -> None:
         sa.Column("event_hash", sa.String(length=64), nullable=False),
         mysql_engine="InnoDB",
         mysql_charset="utf8mb4",
+        mysql_collate="utf8mb4_bin",
     )
 
     op.create_table(
@@ -36,6 +37,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("run_id", "event_type", name="pk_audit_idempotency"),
         mysql_engine="InnoDB",
         mysql_charset="utf8mb4",
+        mysql_collate="utf8mb4_bin",
     )
     op.create_index(
         "ix_audit_idempotency_status_claimed_at",
@@ -51,6 +53,7 @@ def upgrade() -> None:
         sa.Column("created_order", sa.BigInteger(), nullable=False),
         mysql_engine="InnoDB",
         mysql_charset="utf8mb4",
+        mysql_collate="utf8mb4_bin",
     )
     op.create_index(
         "ix_action_plans_tenant_created_order",
@@ -66,6 +69,7 @@ def upgrade() -> None:
         sa.Column("created_order", sa.BigInteger(), nullable=False),
         mysql_engine="InnoDB",
         mysql_charset="utf8mb4",
+        mysql_collate="utf8mb4_bin",
     )
     op.create_index(
         "ix_gitops_change_sets_tenant_created_order",
