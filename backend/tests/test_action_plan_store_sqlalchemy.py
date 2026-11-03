@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from alembic import command
 from alembic.config import Config
+from sqlalchemy import create_engine, text
 
 from autonomy.action_models import ActionPlan, ActionStatus, ActionTarget, RiskLevel
 from autonomy.action_plan_store import ActionPlanStore
@@ -80,10 +81,25 @@ def test_sqlalchemy_allocator_serializes_concurrent_creates(shared_database_url)
     try:
         plans = store.load_all()
         assert len(plans) == 16
-        assert [plan.action_id for plan, _ in plans] == [
+        assert {plan.action_id for plan, _ in plans} == {
             f"concurrent-{index}" for index in range(16)
-        ]
+        }
         assert all(tenant == "tenant-shared" for _, tenant in plans)
+        engine = create_engine(shared_database_url, future=True)
+        try:
+            with engine.connect() as connection:
+                rows = connection.execute(
+                    text(
+                        "SELECT action_id, created_order FROM action_plans "
+                        "ORDER BY created_order"
+                    )
+                ).all()
+            assert [plan.action_id for plan, _ in plans] == [
+                row.action_id for row in rows
+            ]
+            assert [row.created_order for row in rows] == list(range(1, 17))
+        finally:
+            engine.dispose()
     finally:
         store.close()
 
