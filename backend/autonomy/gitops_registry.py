@@ -251,14 +251,14 @@ class GitOpsChangeSetRegistry:
     ) -> None:
         row = connection.execute(
             text(
-                "SELECT payload FROM gitops_change_sets "
+                "SELECT payload, tenant_id FROM gitops_change_sets "
                 "WHERE change_id = :change_id" + lock_clause
             ),
             {"change_id": change_set.change_id},
         ).first()
         if row is None:
             raise KeyError(f"GitOps change set not found: {change_set.change_id}")
-        if row[0] != self._encode(previous):
+        if row[0] != self._encode(previous) or row[1] != self._tenant_id(previous):
             raise ValueError(
                 "GitOps change set was modified by another worker; reload and retry"
             )
