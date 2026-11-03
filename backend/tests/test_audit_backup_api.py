@@ -215,3 +215,54 @@ def test_shared_action_plan_database_backup_is_provider_managed(monkeypatch):
     assert response.status_code == 503
     assert "database provider" in response.json()["detail"]
     assert "private-password" not in response.text
+
+
+
+def test_idempotency_database_backup_is_admin_only_and_integrity_checked(tmp_path, monkeypatch):
+    from autonomy.persistent_audit_idempotency import PersistentAuditIdempotencyStore
+
+    source = tmp_path / "idempotency.db"
+    store = PersistentAuditIdempotencyStore(source)
+    claim = store.claim("run-backup", "failure", {"result": "failed"})
+    assert store.mark_emitted("run-backup", "failure", claim.claim_token)
+    store.close()
+    monkeypatch.delenv("CLOUDOPS_DATABASE_URL", raising=False)
+    monkeypatch.setenv("CLOUDOPS_AUDIT_IDEMPOTENCY_DB", str(source))
+    before = source.read_bytes()
+
+    denied = make_client("reader").get(
+        "/autonomy/audit/database/backup/idempotency",
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert denied.status_code == 403
+
+    response = make_client().get(
+        "/autonomy/audit/database/backup/idempotency",
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert response.status_code == 200
+    backup = tmp_path / "idempotency-backup.db"
+    backup.write_bytes(response.content)
+    with sqlite3.connect(backup) as connection:
+        assert connection.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+        row = connection.execute(
+            "SELECT run_id, event_type, status FROM audit_idempotency"
+        ).fetchone()
+    assert row == ("run-backup", "failure", "emitted")
+    assert source.read_bytes() == before
+
+
+def test_shared_idempotency_backup_is_provider_managed_and_sanitized(monkeypatch):
+    monkeypatch.setenv(
+        "CLOUDOPS_DATABASE_URL",
+        "mysql+pymysql://private-user:private-password@db.example/cloudops",
+    )
+    response = make_client().get(
+        "/autonomy/audit/database/backup/idempotency",
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 503
+    assert "database provider" in response.json()["detail"]
+    assert "private-password" not in response.text
+    assert "db.example" not in response.text
