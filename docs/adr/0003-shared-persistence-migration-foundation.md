@@ -13,7 +13,7 @@ Introduce Alembic-managed, versioned schema changes using the existing SQLAlchem
 - `action_plans`: action identity, nullable tenant ownership for legacy/global rows, serialized plan payload, and stable creation order.
 - `gitops_change_sets`: change identity, nullable tenant ownership, serialized change-set payload, and stable creation order.
 
-The schema uses InnoDB on MySQL, bounded key columns, text payloads, and indexes for tenant-scoped ordered reads and pending-claim inspection. SQLite remains supported as a migration-test dialect only; the application continues using its existing four SQLite stores.
+The schema uses InnoDB and binary UTF-8 collation on MySQL so identifiers retain SQLite's case-sensitive equality semantics. It uses bounded key columns, text payloads, and indexes for tenant-scoped ordered reads and pending-claim inspection. The migration framework is tested against SQLite, while the application continues using its existing four SQLite stores.
 
 ## Safety boundary
 
