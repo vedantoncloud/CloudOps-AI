@@ -1,4 +1,4 @@
-"""Local durable storage for action plans and their latest lifecycle state."""
+"""Durable action-plan storage with SQLite and opt-in shared SQL backends."""
 
 import json
 import os
@@ -7,6 +7,10 @@ from pathlib import Path
 import sqlite3
 from typing import Iterable
 
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine
+from sqlalchemy.exc import SQLAlchemyError
+
 from autonomy.action_models import ActionPlan, ActionStatus, ActionTarget, RiskLevel
 
 
@@ -14,9 +18,33 @@ DEFAULT_DB_PATH = Path(__file__).resolve().parents[1] / "action_plans.db"
 
 
 class ActionPlanStore:
-    """Persist plans in a dedicated SQLite file, separate from audit stores."""
+    """Persist plans while preserving tenant ownership and stable creation order.
 
-    def __init__(self, database_path: str | Path | None = None):
+    SQLite remains the default. An explicit database_url selects the shared
+    Alembic schema and serializes all writers on the singleton order row.
+    """
+
+    def __init__(
+        self,
+        database_path: str | Path | None = None,
+        *,
+        database_url: str | None = None,
+    ):
+        if database_url and database_path is not None:
+            raise ValueError("pass either database_path or database_url, not both")
+        self._engine: Engine | None = None
+        if database_url:
+            if not database_url.startswith(("mysql+pymysql://", "sqlite:///")):
+                raise ValueError("database_url must use mysql+pymysql or sqlite")
+            self.database_path: str | Path = database_url
+            self._engine = create_engine(
+                database_url,
+                pool_pre_ping=True,
+                future=True,
+            )
+            self._validate_shared_schema()
+            return
+
         configured_path = database_path or os.getenv("CLOUDOPS_ACTION_PLANS_DB_PATH")
         self.database_path = Path(configured_path or DEFAULT_DB_PATH)
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
@@ -29,6 +57,31 @@ class ActionPlanStore:
                     created_order INTEGER NOT NULL
                 )"""
             )
+
+    def _validate_shared_schema(self) -> None:
+        assert self._engine is not None
+        try:
+            with self._engine.connect() as connection:
+                connection.execute(
+                    text(
+                        "SELECT action_id, tenant_id, payload, created_order "
+                        "FROM action_plans LIMIT 0"
+                    )
+                )
+                state = connection.execute(
+                    text(
+                        "SELECT singleton_id, last_created_order "
+                        "FROM action_plan_state WHERE singleton_id = 1"
+                    )
+                ).first()
+                if state is None:
+                    raise ValueError("shared action-plan order row is missing")
+        except (SQLAlchemyError, ValueError) as exc:
+            self._engine.dispose()
+            self._engine = None
+            raise ValueError(
+                "Shared action-plan schema is not initialized; run Alembic migrations first"
+            ) from exc
 
     def _connect(self):
         connection = sqlite3.connect(self.database_path, timeout=5)
@@ -76,6 +129,11 @@ class ActionPlanStore:
         )
 
     def save_many(self, plans: Iterable[ActionPlan], tenant_id: str | None) -> None:
+        plans = list(plans)
+        if self._engine is not None:
+            self._save_many_shared(plans, tenant_id)
+            return
+
         with self._connect() as connection:
             for plan in plans:
                 connection.execute(
@@ -86,7 +144,93 @@ class ActionPlanStore:
                     (plan.action_id, tenant_id, self._encode(plan)),
                 )
 
+    def _save_many_shared(self, plans: list[ActionPlan], tenant_id: str | None) -> None:
+        assert self._engine is not None
+        dialect = self._engine.dialect.name
+        if dialect == "mysql":
+            with self._engine.begin() as connection:
+                self._save_many_locked(connection, plans, tenant_id, " FOR UPDATE")
+            return
+        if dialect == "sqlite":
+            with self._engine.connect() as connection:
+                connection.exec_driver_sql("BEGIN IMMEDIATE")
+                try:
+                    self._save_many_locked(connection, plans, tenant_id, "")
+                    connection.commit()
+                except Exception:
+                    connection.rollback()
+                    raise
+            return
+        raise ValueError(f"Unsupported shared action-plan dialect: {dialect}")
+
+    def _save_many_locked(self, connection, plans, tenant_id, lock_clause: str) -> None:
+        # Lock the allocator first so concurrent inserts and updates of the same
+        # action_id cannot race while assigning a new creation order.
+        state = connection.execute(
+            text(
+                "SELECT last_created_order FROM action_plan_state "
+                "WHERE singleton_id = 1" + lock_clause
+            )
+        ).mappings().one()
+        last_order = int(state["last_created_order"])
+
+        for plan in plans:
+            existing_order = connection.execute(
+                text(
+                    "SELECT created_order FROM action_plans "
+                    "WHERE action_id = :action_id" + lock_clause
+                ),
+                {"action_id": plan.action_id},
+            ).scalar_one_or_none()
+            payload = self._encode(plan)
+            if existing_order is None:
+                last_order += 1
+                connection.execute(
+                    text(
+                        "INSERT INTO action_plans "
+                        "(action_id, tenant_id, payload, created_order) "
+                        "VALUES (:action_id, :tenant_id, :payload, :created_order)"
+                    ),
+                    {
+                        "action_id": plan.action_id,
+                        "tenant_id": tenant_id,
+                        "payload": payload,
+                        "created_order": last_order,
+                    },
+                )
+            else:
+                connection.execute(
+                    text(
+                        "UPDATE action_plans SET tenant_id = :tenant_id, payload = :payload "
+                        "WHERE action_id = :action_id"
+                    ),
+                    {
+                        "action_id": plan.action_id,
+                        "tenant_id": tenant_id,
+                        "payload": payload,
+                    },
+                )
+
+        connection.execute(
+            text(
+                "UPDATE action_plan_state SET last_created_order = :last_order "
+                "WHERE singleton_id = 1"
+            ),
+            {"last_order": last_order},
+        )
+
     def get(self, action_id: str) -> tuple[ActionPlan, str | None] | None:
+        if self._engine is not None:
+            with self._engine.connect() as connection:
+                row = connection.execute(
+                    text(
+                        "SELECT payload, tenant_id FROM action_plans "
+                        "WHERE action_id = :action_id"
+                    ),
+                    {"action_id": action_id},
+                ).first()
+            return (self._decode(row[0]), row[1]) if row else None
+
         with self._connect() as connection:
             row = connection.execute(
                 "SELECT payload, tenant_id FROM action_plans WHERE action_id = ?",
@@ -95,8 +239,23 @@ class ActionPlanStore:
         return (self._decode(row[0]), row[1]) if row else None
 
     def load_all(self) -> list[tuple[ActionPlan, str | None]]:
+        if self._engine is not None:
+            with self._engine.connect() as connection:
+                rows = connection.execute(
+                    text(
+                        "SELECT payload, tenant_id FROM action_plans "
+                        "ORDER BY created_order"
+                    )
+                ).all()
+            return [(self._decode(payload), tenant_id) for payload, tenant_id in rows]
+
         with self._connect() as connection:
             rows = connection.execute(
                 "SELECT payload, tenant_id FROM action_plans ORDER BY created_order"
             ).fetchall()
         return [(self._decode(payload), tenant_id) for payload, tenant_id in rows]
+
+    def close(self) -> None:
+        if self._engine is not None:
+            self._engine.dispose()
+            self._engine = None
