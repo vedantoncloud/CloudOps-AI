@@ -101,13 +101,14 @@ def test_mysql_registry_serializes_concurrent_registrations(database_url):
     engine = create_engine(database_url, future=True)
     registry = GitOpsChangeSetRegistry(database_url=database_url)
     try:
-        rows = engine.connect().execute(
-            text(
-                "SELECT change_id, tenant_id, created_order FROM gitops_change_sets "
-                "WHERE change_id LIKE :prefix ORDER BY created_order"
-            ),
-            {"prefix": f"{identity}-%"},
-        ).all()
+        with engine.connect() as connection:
+            rows = connection.execute(
+                text(
+                    "SELECT change_id, tenant_id, created_order FROM gitops_change_sets "
+                    "WHERE change_id LIKE :prefix ORDER BY created_order"
+                ),
+                {"prefix": f"{identity}-%"},
+            ).all()
         assert len(rows) == 20
         orders = [row.created_order for row in rows]
         assert len(set(orders)) == 20
