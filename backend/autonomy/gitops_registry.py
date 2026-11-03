@@ -118,7 +118,9 @@ class GitOpsChangeSetRegistry:
     def _decode(payload: str, tenant_id: str | None = None) -> GitOpsChangeSet:
         value = json.loads(payload)
         metadata = value.get("metadata", {})
-        if tenant_id is not None and not isinstance(metadata.get("tenant_id"), str):
+        if tenant_id is not None:
+            if metadata.get("tenant_id") != tenant_id:
+                raise ValueError("persisted GitOps tenant ownership metadata is inconsistent")
             metadata = {**metadata, "tenant_id": tenant_id}
         return GitOpsChangeSet(
             change_id=value["change_id"],
