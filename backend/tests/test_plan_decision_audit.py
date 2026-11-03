@@ -38,7 +38,7 @@ def test_plan_decision_writes_durable_actor_and_tenant_audit(
 ):
     plan = _plan()
     monkeypatch.setattr(api, "_get_plan", lambda action_id, request: plan)
-    monkeypatch.setattr(api, "_persist_plan", lambda action: None)
+    monkeypatch.setattr(api, "_persist_plan", lambda action, audit_event=None: api.audit_trail.record(**audit_event))
     recorded = []
 
     class Trail:
@@ -81,7 +81,7 @@ def test_invalid_decision_does_not_write_audit_event(monkeypatch):
 def test_plan_evaluation_records_actor_and_tenant(monkeypatch):
     plan = _plan(ActionStatus.PLANNED)
     monkeypatch.setattr(api, "_get_plan", lambda action_id, request: plan)
-    monkeypatch.setattr(api, "_persist_plan", lambda action: None)
+    monkeypatch.setattr(api, "_persist_plan", lambda action, audit_event=None: api.audit_trail.record(**audit_event))
     recorded = []
 
     class Trail:
@@ -110,7 +110,7 @@ def test_plan_evaluation_persistence_failure_restores_policy_state(monkeypatch):
     plan = _plan(ActionStatus.PLANNED)
     plan.requires_approval = False
     monkeypatch.setattr(api, "_get_plan", lambda action_id, request: plan)
-    monkeypatch.setattr(api, "_persist_plan", lambda action: (_ for _ in ()).throw(OSError("disk full")))
+    monkeypatch.setattr(api, "_persist_plan", lambda action, audit_event=None: (_ for _ in ()).throw(OSError("disk full")))
 
     with pytest.raises(OSError, match="disk full"):
         api.evaluate_plan(plan.action_id, _request())

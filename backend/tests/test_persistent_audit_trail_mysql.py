@@ -98,5 +98,25 @@ def test_mysql_audit_chain_rejects_stale_or_tampered_head_metadata(database_url)
 
         with pytest.raises(RuntimeError, match="head metadata is inconsistent"):
             _record(trail, identity, 2)
+
+        # Restore the singleton head so this destructive integrity test cannot
+        # poison other MySQL integration modules sharing the CI database.
+        with engine.begin() as connection:
+            tail = connection.execute(
+                text(
+                    "SELECT sequence, event_hash FROM audit_events "
+                    "ORDER BY sequence DESC LIMIT 1"
+                )
+            ).mappings().first()
+            connection.execute(
+                text(
+                    "UPDATE audit_chain_state SET last_sequence = :sequence, "
+                    "last_hash = :event_hash WHERE singleton_id = 1"
+                ),
+                {
+                    "sequence": int(tail["sequence"]) if tail else 0,
+                    "event_hash": tail["event_hash"] if tail else "",
+                },
+            )
     finally:
         trail.close()

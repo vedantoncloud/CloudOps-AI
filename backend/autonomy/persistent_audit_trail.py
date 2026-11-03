@@ -78,6 +78,21 @@ class PersistentAuditTrail(AuditTrail):
         connection.row_factory = sqlite3.Row
         return connection
 
+    @property
+    def uses_shared_database(self) -> bool:
+        return self._engine is not None
+
+    def record_with_connection(self, connection, **kwargs: Any) -> AuditEvent:
+        """Append to the audit chain inside a caller-owned SQL transaction."""
+        if self._engine is None:
+            raise RuntimeError("audit trail is not configured for shared SQL storage")
+        if connection.engine.url != self._engine.url:
+            raise ValueError("audit trail and lifecycle store must share one database URL")
+        event = AuditTrail().record(**kwargs)
+        lock_clause = " FOR UPDATE" if connection.dialect.name == "mysql" else ""
+        self._append_with_locked_head(connection, event, lock_clause)
+        return event
+
     def record(self, **kwargs: Any) -> AuditEvent:
         validator = AuditTrail()
         event = validator.record(**kwargs)

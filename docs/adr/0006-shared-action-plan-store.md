@@ -10,7 +10,7 @@ The action-plan store now supports the shared Alembic schema through an explicit
 
 Migration 0003 adds a singleton `action_plan_state` row containing the last allocated `created_order`. The migration seeds it from the current maximum order so existing shared rows retain their relative ordering.
 
-All shared writes lock this allocator row before reading or modifying action IDs. New plans receive monotonically increasing order values inside the same transaction as their insert. Existing plans update tenant ownership and payload without changing their original order. A batch save is one transaction, so serialization or database errors roll back every plan in the batch. MySQL uses `SELECT ... FOR UPDATE`; the SQLAlchemy SQLite dialect uses `BEGIN IMMEDIATE`.
+All shared writes lock this allocator row before reading or modifying action IDs. New plans receive monotonically increasing order values inside the same transaction as their insert. Existing plans update tenant ownership and payload without changing their original order. A batch save is one transaction, so serialization or database errors roll back every plan in the batch. When the API and `PersistentAuditTrail` use the same shared database URL, plan writes and their audit events also commit in that same transaction (ADR 0008). MySQL uses `SELECT ... FOR UPDATE`; the SQLAlchemy SQLite dialect uses `BEGIN IMMEDIATE`.
 
 ## Safety and scope
 

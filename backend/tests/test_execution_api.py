@@ -89,7 +89,7 @@ def test_execute_records_attributed_audit_transition(monkeypatch):
     action = create_approved_action()
     events = []
     monkeypatch.setattr(autonomy_api.audit_trail, "record", lambda **event: events.append(event))
-    monkeypatch.setattr(autonomy_api, "_persist_plan", lambda plan: None)
+    monkeypatch.setattr(autonomy_api, "_persist_plan", lambda plan, audit_event=None: autonomy_api.audit_trail.record(**audit_event))
 
     response = client.post(f"/autonomy/plans/{action.action_id}/execute")
 

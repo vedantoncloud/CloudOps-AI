@@ -83,6 +83,10 @@ class ActionPlanStore:
                 "Shared action-plan schema is not initialized; run Alembic migrations first"
             ) from exc
 
+    @property
+    def uses_shared_database(self) -> bool:
+        return self._engine is not None
+
     def _connect(self):
         connection = sqlite3.connect(self.database_path, timeout=5)
         connection.execute("PRAGMA busy_timeout = 5000")
@@ -128,11 +132,20 @@ class ActionPlanStore:
             created_at=created_at,
         )
 
-    def save_many(self, plans: Iterable[ActionPlan], tenant_id: str | None) -> None:
+    def save_many(
+        self,
+        plans: Iterable[ActionPlan],
+        tenant_id: str | None,
+        *,
+        audit_trail=None,
+        audit_events: list[dict] | None = None,
+    ) -> None:
         plans = list(plans)
         if self._engine is not None:
-            self._save_many_shared(plans, tenant_id)
+            self._save_many_shared(plans, tenant_id, audit_trail, audit_events or [])
             return
+        if audit_events:
+            raise ValueError("atomic audit events require shared SQL action-plan storage")
 
         with self._connect() as connection:
             for plan in plans:
@@ -144,18 +157,28 @@ class ActionPlanStore:
                     (plan.action_id, tenant_id, self._encode(plan)),
                 )
 
-    def _save_many_shared(self, plans: list[ActionPlan], tenant_id: str | None) -> None:
+    def _save_many_shared(
+        self,
+        plans: list[ActionPlan],
+        tenant_id: str | None,
+        audit_trail,
+        audit_events: list[dict],
+    ) -> None:
         assert self._engine is not None
         dialect = self._engine.dialect.name
         if dialect == "mysql":
             with self._engine.begin() as connection:
-                self._save_many_locked(connection, plans, tenant_id, " FOR UPDATE")
+                self._save_many_locked(
+                    connection, plans, tenant_id, " FOR UPDATE", audit_trail, audit_events
+                )
             return
         if dialect == "sqlite":
             with self._engine.connect() as connection:
                 connection.exec_driver_sql("BEGIN IMMEDIATE")
                 try:
-                    self._save_many_locked(connection, plans, tenant_id, "")
+                    self._save_many_locked(
+                        connection, plans, tenant_id, "", audit_trail, audit_events
+                    )
                     connection.commit()
                 except Exception:
                     connection.rollback()
@@ -163,7 +186,15 @@ class ActionPlanStore:
             return
         raise ValueError(f"Unsupported shared action-plan dialect: {dialect}")
 
-    def _save_many_locked(self, connection, plans, tenant_id, lock_clause: str) -> None:
+    def _save_many_locked(
+        self,
+        connection,
+        plans,
+        tenant_id,
+        lock_clause: str,
+        audit_trail,
+        audit_events: list[dict],
+    ) -> None:
         # Lock the allocator first so concurrent inserts and updates of the same
         # action_id cannot race while assigning a new creation order.
         state = connection.execute(
@@ -218,6 +249,13 @@ class ActionPlanStore:
             ),
             {"last_order": last_order},
         )
+        if audit_events:
+            if audit_trail is None or not getattr(audit_trail, "uses_shared_database", False):
+                raise ValueError(
+                    "atomic action-plan audit requires a shared PersistentAuditTrail"
+                )
+            for audit_event in audit_events:
+                audit_trail.record_with_connection(connection, **audit_event)
 
     def get(self, action_id: str) -> tuple[ActionPlan, str | None] | None:
         if self._engine is not None:

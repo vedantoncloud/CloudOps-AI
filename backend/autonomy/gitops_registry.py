@@ -161,26 +161,42 @@ class GitOpsChangeSetRegistry:
             ).all()
         return [self._decode(payload, tenant_id) for payload, tenant_id in rows]
 
-    def _persist_new_shared(self, change_set: GitOpsChangeSet) -> None:
+    def _record_audit_on_connection(self, connection, audit_event: dict | None) -> bool:
+        if not audit_event or not getattr(self.audit_trail, "uses_shared_database", False):
+            return False
+        self.audit_trail.record_with_connection(connection, **audit_event)
+        return True
+
+    def _persist_new_shared(
+        self,
+        change_set: GitOpsChangeSet,
+        audit_event: dict | None = None,
+    ) -> bool:
         assert self._engine is not None
         dialect = self._engine.dialect.name
         if dialect == "mysql":
             with self._engine.begin() as connection:
-                self._insert_shared_locked(connection, change_set, " FOR UPDATE")
-            return
+                return self._insert_shared_locked(
+                    connection, change_set, " FOR UPDATE", audit_event
+                )
         if dialect == "sqlite":
             with self._engine.connect() as connection:
                 connection.exec_driver_sql("BEGIN IMMEDIATE")
                 try:
-                    self._insert_shared_locked(connection, change_set, "")
+                    atomic_audit = self._insert_shared_locked(
+                        connection, change_set, "", audit_event
+                    )
                     connection.commit()
+                    return atomic_audit
                 except Exception:
                     connection.rollback()
                     raise
             return
         raise ValueError(f"Unsupported shared GitOps dialect: {dialect}")
 
-    def _insert_shared_locked(self, connection, change_set, lock_clause: str) -> None:
+    def _insert_shared_locked(
+        self, connection, change_set, lock_clause: str, audit_event: dict | None
+    ) -> bool:
         state = connection.execute(
             text(
                 "SELECT last_created_order FROM gitops_state "
@@ -218,24 +234,30 @@ class GitOpsChangeSetRegistry:
             ),
             {"next_order": next_order},
         )
+        return self._record_audit_on_connection(connection, audit_event)
 
     def _persist_shared_change(
         self,
         change_set: GitOpsChangeSet,
         previous: GitOpsChangeSet,
-    ) -> None:
+        audit_event: dict | None = None,
+    ) -> bool:
         assert self._engine is not None
         dialect = self._engine.dialect.name
         if dialect == "mysql":
             with self._engine.begin() as connection:
-                self._update_shared_locked(connection, change_set, previous, " FOR UPDATE")
-            return
+                return self._update_shared_locked(
+                    connection, change_set, previous, " FOR UPDATE", audit_event
+                )
         if dialect == "sqlite":
             with self._engine.connect() as connection:
                 connection.exec_driver_sql("BEGIN IMMEDIATE")
                 try:
-                    self._update_shared_locked(connection, change_set, previous, "")
+                    atomic_audit = self._update_shared_locked(
+                        connection, change_set, previous, "", audit_event
+                    )
                     connection.commit()
+                    return atomic_audit
                 except Exception:
                     connection.rollback()
                     raise
@@ -248,7 +270,8 @@ class GitOpsChangeSetRegistry:
         change_set: GitOpsChangeSet,
         previous: GitOpsChangeSet,
         lock_clause: str,
-    ) -> None:
+        audit_event: dict | None,
+    ) -> bool:
         row = connection.execute(
             text(
                 "SELECT payload, tenant_id FROM gitops_change_sets "
@@ -273,17 +296,21 @@ class GitOpsChangeSetRegistry:
                 "payload": self._encode(change_set),
             },
         )
+        return self._record_audit_on_connection(connection, audit_event)
 
     def _persist_change(
-        self, change_set: GitOpsChangeSet, previous: GitOpsChangeSet | None = None
-    ) -> None:
+        self,
+        change_set: GitOpsChangeSet,
+        previous: GitOpsChangeSet | None = None,
+        audit_event: dict | None = None,
+    ) -> bool:
         """Restore live state if its durable write fails."""
         previous = previous or copy.deepcopy(change_set)
         try:
             if self._engine is not None:
-                self._persist_shared_change(change_set, previous)
-            else:
-                self._persist(change_set)
+                return self._persist_shared_change(change_set, previous, audit_event)
+            self._persist(change_set)
+            return False
         except Exception:
             change_set.__dict__.clear()
             change_set.__dict__.update(previous.__dict__)
@@ -320,27 +347,29 @@ class GitOpsChangeSetRegistry:
                 raise ValueError(
                     f"change set already registered: {change_set.change_id}"
                 )
-            if self._engine is not None:
-                self._persist_new_shared(change_set)
-            else:
-                self._persist_change(change_set)
-            self._changes[change_set.change_id] = change_set
-
-            self.audit_trail.record(
-                action_id=change_set.source_action_id,
-                action_type="gitops_change_registered",
-                resource_type="gitops_change_set",
-                resource_id=change_set.change_id,
-                event="gitops_change_registered",
-                old_status="none",
-                new_status=change_set.status.value,
-                details={
+            audit_event = {
+                "action_id": change_set.source_action_id,
+                "action_type": "gitops_change_registered",
+                "resource_type": "gitops_change_set",
+                "resource_id": change_set.change_id,
+                "event": "gitops_change_registered",
+                "old_status": "none",
+                "new_status": change_set.status.value,
+                "details": {
                     "change_count": change_set.change_count,
                     **({"tenant_id": change_set.metadata["tenant_id"]}
                        if isinstance(change_set.metadata.get("tenant_id"), str) else {}),
                 },
-                actor_id=actor_id,
-            )
+                "actor_id": actor_id,
+            }
+            if self._engine is not None:
+                atomic_audit = self._persist_new_shared(change_set, audit_event)
+            else:
+                self._persist_change(change_set)
+                atomic_audit = False
+            self._changes[change_set.change_id] = change_set
+            if not atomic_audit:
+                self.audit_trail.record(**audit_event)
 
         return change_set
 
@@ -405,23 +434,24 @@ class GitOpsChangeSetRegistry:
             old_status = change_set.status.value
             previous = copy.deepcopy(change_set)
             engine.approve(change_set, approved_by)
-            self._persist_change(change_set, previous)
-
-            self.audit_trail.record(
-                action_id=change_set.source_action_id,
-                action_type="gitops_change_approved",
-                resource_type="gitops_change_set",
-                resource_id=change_id,
-                event="gitops_change_approved",
-                old_status=old_status,
-                new_status=change_set.status.value,
-                details={
+            audit_event = {
+                "action_id": change_set.source_action_id,
+                "action_type": "gitops_change_approved",
+                "resource_type": "gitops_change_set",
+                "resource_id": change_id,
+                "event": "gitops_change_approved",
+                "old_status": old_status,
+                "new_status": change_set.status.value,
+                "details": {
                     "approved_by": approved_by,
                     **({"tenant_id": change_set.metadata["tenant_id"]}
                        if isinstance(change_set.metadata.get("tenant_id"), str) else {}),
                 },
-                actor_id=actor_id,
-            )
+                "actor_id": actor_id,
+            }
+            atomic_audit = self._persist_change(change_set, previous, audit_event)
+            if not atomic_audit:
+                self.audit_trail.record(**audit_event)
             return change_set
 
     def reject(
@@ -443,24 +473,25 @@ class GitOpsChangeSetRegistry:
             old_status = change_set.status.value
             previous = copy.deepcopy(change_set)
             engine.reject(change_set, rejected_by, reason)
-            self._persist_change(change_set, previous)
-
-            self.audit_trail.record(
-                action_id=change_set.source_action_id,
-                action_type="gitops_change_rejected",
-                resource_type="gitops_change_set",
-                resource_id=change_id,
-                event="gitops_change_rejected",
-                old_status=old_status,
-                new_status=change_set.status.value,
-                details={
+            audit_event = {
+                "action_id": change_set.source_action_id,
+                "action_type": "gitops_change_rejected",
+                "resource_type": "gitops_change_set",
+                "resource_id": change_id,
+                "event": "gitops_change_rejected",
+                "old_status": old_status,
+                "new_status": change_set.status.value,
+                "details": {
                     "rejected_by": rejected_by,
                     "reason": reason,
                     **({"tenant_id": change_set.metadata["tenant_id"]}
                        if isinstance(change_set.metadata.get("tenant_id"), str) else {}),
                 },
-                actor_id=actor_id,
-            )
+                "actor_id": actor_id,
+            }
+            atomic_audit = self._persist_change(change_set, previous, audit_event)
+            if not atomic_audit:
+                self.audit_trail.record(**audit_event)
             return change_set
 
     def apply(
@@ -481,22 +512,21 @@ class GitOpsChangeSetRegistry:
             old_status = change_set.status.value
             previous = copy.deepcopy(change_set)
             result = engine.apply(change_set, dry_run=dry_run)
-            self._persist_change(change_set, previous)
 
             event_name = (
                 "gitops_change_applied"
                 if result.success
                 else "gitops_apply_failed"
             )
-            self.audit_trail.record(
-                action_id=change_set.source_action_id,
-                action_type=event_name,
-                resource_type="gitops_change_set",
-                resource_id=change_id,
-                event=event_name,
-                old_status=old_status,
-                new_status=change_set.status.value,
-                details={
+            audit_event = {
+                "action_id": change_set.source_action_id,
+                "action_type": event_name,
+                "resource_type": "gitops_change_set",
+                "resource_id": change_id,
+                "event": event_name,
+                "old_status": old_status,
+                "new_status": change_set.status.value,
+                "details": {
                     "dry_run": dry_run,
                     "success": result.success,
                     "applied_changes": result.applied_changes,
@@ -504,8 +534,11 @@ class GitOpsChangeSetRegistry:
                     **({"tenant_id": change_set.metadata["tenant_id"]}
                        if isinstance(change_set.metadata.get("tenant_id"), str) else {}),
                 },
-                actor_id=actor_id,
-            )
+                "actor_id": actor_id,
+            }
+            atomic_audit = self._persist_change(change_set, previous, audit_event)
+            if not atomic_audit:
+                self.audit_trail.record(**audit_event)
             return result
 
     def verify(
@@ -526,29 +559,31 @@ class GitOpsChangeSetRegistry:
             old_status = change_set.status.value
             previous = copy.deepcopy(change_set)
             verified = engine.verify(change_set, observed_values=observed_values)
-            self._persist_change(change_set, previous)
 
             event_name = (
                 "gitops_change_verified"
                 if verified
                 else "gitops_verification_failed"
             )
-            self.audit_trail.record(
-                action_id=change_set.source_action_id,
-                action_type=event_name,
-                resource_type="gitops_change_set",
-                resource_id=change_id,
-                event=event_name,
-                old_status=old_status,
-                new_status=change_set.status.value,
-                details={
+            audit_event = {
+                "action_id": change_set.source_action_id,
+                "action_type": event_name,
+                "resource_type": "gitops_change_set",
+                "resource_id": change_id,
+                "event": event_name,
+                "old_status": old_status,
+                "new_status": change_set.status.value,
+                "details": {
                     "verified": verified,
                     "observed_values_provided": observed_values is not None,
                     **({"tenant_id": change_set.metadata["tenant_id"]}
                        if isinstance(change_set.metadata.get("tenant_id"), str) else {}),
                 },
-                actor_id=actor_id,
-            )
+                "actor_id": actor_id,
+            }
+            atomic_audit = self._persist_change(change_set, previous, audit_event)
+            if not atomic_audit:
+                self.audit_trail.record(**audit_event)
             return verified
 
     def clear(self) -> None:
