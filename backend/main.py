@@ -7,6 +7,8 @@ import re
 import sqlite3
 from urllib.parse import urlsplit
 
+from sqlalchemy import create_engine, text
+
 from auth import AccessControlMiddleware, require_role
 from observability import RequestObservabilityMiddleware, aws_operation_metrics, database_operation_metrics, request_metrics
 from rate_limit import RateLimitMiddleware
@@ -74,6 +76,54 @@ def _sqlite_store_ready(database_path: str | Path) -> bool:
         return True
     except (OSError, sqlite3.Error, ValueError):
         return False
+
+
+def _shared_database_ready(database_url: str) -> bool:
+    """Check shared persistence connectivity and the complete migrated schema."""
+    engine = None
+    try:
+        engine = create_engine(database_url, pool_pre_ping=True, future=True)
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+            revision = connection.execute(
+                text("SELECT version_num FROM alembic_version")
+            ).scalar_one_or_none()
+            if not revision:
+                return False
+
+            required_queries = (
+                "SELECT sequence, event_json, event_hash FROM audit_events LIMIT 0",
+                "SELECT run_id, event_type, evidence_json, status, claim_token, claimed_at "
+                "FROM audit_idempotency LIMIT 0",
+                "SELECT action_id, tenant_id, payload, created_order FROM action_plans LIMIT 0",
+                "SELECT singleton_id, last_created_order FROM action_plan_state "
+                "WHERE singleton_id = 1",
+                "SELECT change_id, tenant_id, payload, created_order "
+                "FROM gitops_change_sets LIMIT 0",
+                "SELECT singleton_id, last_created_order FROM gitops_state "
+                "WHERE singleton_id = 1",
+                "SELECT singleton_id, last_sequence, last_hash FROM audit_chain_state "
+                "WHERE singleton_id = 1",
+            )
+            for statement in required_queries:
+                result = connection.execute(text(statement))
+                if "WHERE singleton_id = 1" in statement and result.first() is None:
+                    return False
+        return True
+    except Exception:
+        # Readiness must fail closed without disclosing credentials or driver errors.
+        return False
+    finally:
+        if engine is not None:
+            engine.dispose()
+
+
+def _store_ready(database_path: str | Path) -> bool:
+    """Probe either a legacy SQLite file or the explicitly configured shared DB."""
+    configured_path = str(database_path)
+    if "://" in configured_path:
+        return _shared_database_ready(configured_path)
+    return _sqlite_store_ready(database_path)
 
 
 @app.get("/")
@@ -146,18 +196,18 @@ def readiness_check():
     aws_ready = isinstance(result, dict) and result.get("status") == "connected"
     persistence = {
         "audit_events": (
-            "healthy" if _sqlite_store_ready(audit_trail.database_path) else "unhealthy"
+            "healthy" if _store_ready(audit_trail.database_path) else "unhealthy"
         ),
         "audit_idempotency": (
-            "healthy" if _sqlite_store_ready(DEFAULT_DB_PATH) else "unhealthy"
+            "healthy" if _store_ready(os.getenv("CLOUDOPS_DATABASE_URL") or DEFAULT_DB_PATH) else "unhealthy"
         ),
         "action_plans": (
-            "healthy" if _sqlite_store_ready(action_plan_store.database_path) else "unhealthy"
+            "healthy" if _store_ready(action_plan_store.database_path) else "unhealthy"
         ),
         "gitops_changes": (
             "healthy"
             if gitops_registry.database_path is None
-            or _sqlite_store_ready(gitops_registry.database_path)
+            or _store_ready(gitops_registry.database_path)
             else "unhealthy"
         ),
     }
