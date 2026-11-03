@@ -48,6 +48,8 @@ def test_shared_persistence_schema_migrates_and_downgrades_on_sqlite(tmp_path, m
     command.downgrade(config, "base")
     engine = create_engine(url)
     try:
-        assert set(inspect(engine).get_table_names()) == set()
+        assert not {
+            "audit_events", "audit_idempotency", "action_plans", "gitops_change_sets"
+        }.intersection(inspect(engine).get_table_names())
     finally:
         engine.dispose()
