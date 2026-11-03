@@ -77,7 +77,8 @@ def test_restore_drill_rejects_inconsistent_idempotency_backup(tmp_path):
         connection.execute(
             "INSERT INTO audit_idempotency "
             "(run_id, event_type, evidence_json, status, claim_token, claimed_at) "
-            "VALUES ('run-bad', 'failure', '{\\"ok\\":true}', 'unknown', '', 0)"
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            ("run-bad", "failure", '{"ok":true}', "unknown", "", 0),
         )
 
     with pytest.raises(ValueError, match="inconsistent claims"):
