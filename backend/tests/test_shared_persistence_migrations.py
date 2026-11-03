@@ -56,6 +56,7 @@ def test_shared_persistence_schema_migrates_and_downgrades_on_sqlite(tmp_path, m
             "action_plan_state",
             "gitops_change_sets",
             "gitops_state",
+            "persistence_import_runs",
         }
         assert {column["name"] for column in inspector.get_columns("audit_idempotency")} == {
             "run_id", "event_type", "evidence_json", "status", "claim_token", "claimed_at"
