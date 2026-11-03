@@ -81,7 +81,7 @@ def test_invalid_decision_does_not_write_audit_event(monkeypatch):
 def test_plan_evaluation_records_actor_and_tenant(monkeypatch):
     plan = _plan(ActionStatus.PLANNED)
     monkeypatch.setattr(api, "_get_plan", lambda action_id, request: plan)
-    monkeypatch.setattr(api, "_persist_plan", lambda action, audit_event=None: None)
+    monkeypatch.setattr(api, "_persist_plan", lambda action, audit_event=None: api.audit_trail.record(**audit_event))
     recorded = []
 
     class Trail:
