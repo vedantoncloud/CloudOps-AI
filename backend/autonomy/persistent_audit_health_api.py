@@ -15,6 +15,7 @@ DEFAULT_DB_PATH = os.getenv(
     "CLOUDOPS_AUDIT_IDEMPOTENCY_DB",
     "cloudops_audit_idempotency.db",
 )
+SHARED_DATABASE_URL = os.getenv("CLOUDOPS_DATABASE_URL")
 
 
 class AuditHealthEvidence(BaseModel):
@@ -74,7 +75,9 @@ class AuditPendingResponse(BaseModel):
 
 
 def _checker() -> PersistentAuditHealthChecker:
-    return PersistentAuditHealthChecker(Path(DEFAULT_DB_PATH))
+    return PersistentAuditHealthChecker(
+        SHARED_DATABASE_URL or Path(DEFAULT_DB_PATH)
+    )
 
 
 def _store_unavailable(exc: Exception) -> HTTPException:
