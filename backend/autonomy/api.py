@@ -66,7 +66,7 @@ def _store_plans(plans, tenant_id=None, audit_events=None):
     with _registry_lock:
         atomic_audit = (
             bool(audit_events)
-            and action_plan_store.uses_shared_database
+            and getattr(action_plan_store, "uses_shared_database", False)
             and getattr(audit_trail, "uses_shared_database", False)
         )
         if atomic_audit:
