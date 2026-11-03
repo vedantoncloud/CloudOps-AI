@@ -78,6 +78,7 @@ def test_sqlalchemy_health_and_reconciliation_remain_read_only(shared_database_u
         assert before.total_claims == 2
         assert before.pending_claims == 1
         assert before.emitted_claims == 1
+        assert before.path == "shared-database"
         assert before.evidence["store"] == "sqlite"
         assert before.evidence["read_only"] is True
         assert [item["run_id"] for item in listed] == ["run-health"]
