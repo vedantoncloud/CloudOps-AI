@@ -26,6 +26,15 @@ def test_shared_persistence_schema_migrates_and_downgrades_on_sqlite(tmp_path, m
             ),
             {"event": "{}", "hash": "1" * 64},
         )
+    command.upgrade(config, "0002_audit_chain_head_lock")
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO action_plans "
+                "(action_id, tenant_id, payload, created_order) "
+                "VALUES ('legacy-plan', 'tenant-a', '{}', 7)"
+            )
+        )
     command.upgrade(config, "head")
     try:
         inspector = inspect(engine)
