@@ -14,8 +14,9 @@ from autonomy.persistent_audit_trail import PersistentAuditTrail
 
 
 @pytest.fixture
-def shared_database_url(tmp_path):
+def shared_database_url(tmp_path, monkeypatch):
     url = f"sqlite:///{tmp_path / 'atomic-idempotent-audit.db'}"
+    monkeypatch.setenv("CLOUDOPS_DATABASE_URL", url)
     config = Config("backend/alembic.ini")
     config.set_section_option("alembic", "sqlalchemy.url", url.replace("%", "%%"))
     command.upgrade(config, "head")
