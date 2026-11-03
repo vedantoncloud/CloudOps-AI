@@ -67,7 +67,7 @@ def upgrade() -> None:
         "gitops_change_sets",
         sa.Column("change_id", sa.String(length=255), primary_key=True),
         sa.Column("tenant_id", sa.String(length=255), nullable=True),
-        sa.Column("payload", sa.Text(), nullable=False),
+        sa.Column("payload", payload_type, nullable=False),
         sa.Column("created_order", sa.BigInteger(), nullable=False),
         mysql_engine="InnoDB",
         mysql_charset="utf8mb4",
