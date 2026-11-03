@@ -27,6 +27,7 @@ def test_shared_persistence_schema_upgrades_and_downgrades_on_mysql():
             "action_plan_state",
             "gitops_change_sets",
             "gitops_state",
+            "persistence_import_runs",
             "alembic_version",
         }.issubset(set(inspector.get_table_names()))
         with engine.connect() as connection:
@@ -91,7 +92,7 @@ def test_shared_persistence_schema_upgrades_and_downgrades_on_mysql():
     engine = create_engine(url)
     try:
         assert not {
-            "audit_events", "audit_chain_state", "audit_idempotency", "action_plans", "action_plan_state", "gitops_change_sets", "gitops_state"
+            "audit_events", "audit_chain_state", "audit_idempotency", "action_plans", "action_plan_state", "gitops_change_sets", "gitops_state", "persistence_import_runs"
         }.intersection(inspect(engine).get_table_names())
     finally:
         engine.dispose()
