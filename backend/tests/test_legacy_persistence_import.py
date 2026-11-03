@@ -5,7 +5,9 @@ import sqlite3
 
 from alembic import command
 from alembic.config import Config
+import pytest
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import IntegrityError
 
 from autonomy.persistent_audit_idempotency import PersistentAuditIdempotencyStore
 from autonomy.persistent_audit_trail import PersistentAuditTrail
@@ -206,3 +208,51 @@ def test_import_manifest_changes_when_any_source_record_changes(tmp_path, monkey
         )
     second = run_import(paths, url)
     assert first["manifest_sha256"] != second["manifest_sha256"]
+
+
+
+def test_import_rolls_back_every_store_and_state_when_a_late_insert_fails(
+    tmp_path, monkeypatch
+):
+    paths = _make_sources(tmp_path)
+    url = _migrate_target(tmp_path, monkeypatch)
+    engine = create_engine(url)
+    try:
+        # Fail after audit events and idempotency claims have already been
+        # inserted, proving the importer keeps all four stores and state heads
+        # inside one transaction.
+        with engine.begin() as connection:
+            connection.execute(text("""
+                CREATE TRIGGER reject_action_plan_import
+                BEFORE INSERT ON action_plans
+                BEGIN
+                    SELECT RAISE(ABORT, 'injected importer failure');
+                END
+            """))
+
+        with pytest.raises(IntegrityError, match="injected importer failure"):
+            run_import(paths, url, apply=True)
+
+        with engine.connect() as connection:
+            for table in (
+                "audit_events",
+                "audit_idempotency",
+                "action_plans",
+                "gitops_change_sets",
+                "persistence_import_runs",
+            ):
+                assert connection.execute(
+                    text(f"SELECT COUNT(*) FROM {table}")
+                ).scalar_one() == 0
+
+            assert tuple(connection.execute(
+                text("SELECT last_sequence, last_hash FROM audit_chain_state")
+            ).one()) == (0, "")
+            assert connection.execute(
+                text("SELECT last_created_order FROM action_plan_state")
+            ).scalar_one() == 0
+            assert connection.execute(
+                text("SELECT last_created_order FROM gitops_state")
+            ).scalar_one() == 0
+    finally:
+        engine.dispose()
