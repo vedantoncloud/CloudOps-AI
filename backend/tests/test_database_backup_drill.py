@@ -83,3 +83,26 @@ def test_restore_drill_rejects_inconsistent_idempotency_backup(tmp_path):
 
     with pytest.raises(ValueError, match="inconsistent claims"):
         verify_backup("idempotency", backup)
+
+
+@pytest.mark.parametrize(
+    ("store", "table", "columns"),
+    [
+        ("audit", "audit_events", ("event_json", "event_hash")),
+        (
+            "idempotency",
+            "audit_idempotency",
+            ("run_id", "event_type", "evidence_json", "status", "claimed_at"),
+        ),
+        ("action-plans", "action_plans", ("action_id", "payload", "created_order")),
+        ("gitops", "gitops_change_sets", ("change_id", "payload")),
+    ],
+)
+def test_restore_drill_rejects_incomplete_store_schema(tmp_path, store, table, columns):
+    backup = tmp_path / f"incomplete-{store}.db"
+    column_sql = ", ".join(f"{column} TEXT" for column in columns)
+    with sqlite3.connect(backup) as connection:
+        connection.execute(f"CREATE TABLE {table} ({column_sql})")
+
+    with pytest.raises(ValueError, match="schema is incomplete"):
+        verify_backup(store, backup)
