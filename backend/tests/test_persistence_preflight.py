@@ -154,7 +154,7 @@ import pytest
             ('["not", "an", "object"]',),
         ),
         (
-            "UPDATE audit_idempotency SET claim_token = '' WHERE run_id = 'run-1'",
+            "UPDATE audit_idempotency SET status = 'pending', claim_token = '' WHERE run_id = 'run-1'",
             (),
         ),
         (
