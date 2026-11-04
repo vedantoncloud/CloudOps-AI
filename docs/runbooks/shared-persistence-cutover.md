@@ -49,7 +49,7 @@ python verify_database_backup.py action-plans <action-plans-backup.db>
 python verify_database_backup.py gitops <gitops-backup.db>
 ```
 
-Expected result: each command exits `0` and reports `status: ok`. Keep snapshots encrypted, access-controlled, and read-only. Never place them in the repository.
+Expected result: each command exits `0` and reports `status: ok`. The restore drill checks SQLite integrity, required store columns, and application-level readability in an isolated temporary copy; it does not modify the supplied backup. Keep snapshots encrypted, access-controlled, and read-only. Never place them in the repository.
 
 ## 4. Provision and migrate an isolated target
 
