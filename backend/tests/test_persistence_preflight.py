@@ -181,3 +181,64 @@ def test_preflight_rejects_claims_that_importer_cannot_accept(
         "status": "invalid",
         "reason": "claim_consistency_failed",
     }
+
+
+def test_preflight_rejects_action_plan_payload_primary_key_drift(tmp_path):
+    paths = _build_stores(tmp_path)
+    payload = {
+        "action_id": "payload-plan-id",
+        "action_type": "scale",
+        "target": {"resource_type": "instance", "resource_id": "i-1", "metadata": {}},
+        "reason": "capacity",
+        "risk": "low",
+        "requires_approval": False,
+        "rollback_available": True,
+        "status": "pending",
+        "decision_by": None,
+        "decision_reason": None,
+        "created_at": "2026-11-03T10:00:00+00:00",
+    }
+    with sqlite3.connect(paths["action_plans"]) as connection:
+        connection.execute(
+            "INSERT INTO action_plans VALUES (?, ?, ?, ?)",
+            ("database-plan-id", "tenant-a", json.dumps(payload), 1),
+        )
+
+    report = preflight(paths)
+
+    assert report["status"] == "not_ready"
+    store = next(item for item in report["stores"] if item["store"] == "action_plans")
+    assert store == {
+        "store": "action_plans",
+        "status": "invalid",
+        "reason": "application_validation_failed",
+    }
+
+
+def test_preflight_rejects_gitops_payload_primary_key_drift(tmp_path):
+    paths = _build_stores(tmp_path)
+    payload = {
+        "change_id": "payload-change-id",
+        "source_action_id": "plan-1",
+        "changes": [],
+        "status": "pending",
+        "requires_approval": True,
+        "approved_by": None,
+        "commit_message": "test migration",
+        "metadata": {"tenant_id": "tenant-a"},
+    }
+    with sqlite3.connect(paths["gitops_changes"]) as connection:
+        connection.execute(
+            "INSERT INTO gitops_change_sets VALUES (?, ?, ?)",
+            ("database-change-id", json.dumps(payload), 1),
+        )
+
+    report = preflight(paths)
+
+    assert report["status"] == "not_ready"
+    store = next(item for item in report["stores"] if item["store"] == "gitops_changes")
+    assert store == {
+        "store": "gitops_changes",
+        "status": "invalid",
+        "reason": "application_validation_failed",
+    }
