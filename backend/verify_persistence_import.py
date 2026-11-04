@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import hmac
 import json
 import os
 from pathlib import Path
@@ -108,6 +109,42 @@ def _target_rows(connection, table: str, order_by: str) -> list[dict[str, Any]]:
     ]
 
 
+
+def _audit_source_chain_valid(rows: list[dict[str, Any]]) -> bool:
+    """Independently verify contiguous sequences and persisted event hashes."""
+    previous_hash = ""
+    for expected_sequence, row in enumerate(rows, start=1):
+        if row.get("sequence") != expected_sequence:
+            return False
+        stored_hash = row.get("event_hash")
+        if (
+            not isinstance(stored_hash, str)
+            or len(stored_hash) != 64
+            or any(character not in "0123456789abcdef" for character in stored_hash)
+        ):
+            return False
+        try:
+            event = json.loads(row["event_json"])
+            if not isinstance(event, dict):
+                return False
+            canonical_event = json.dumps(
+                event,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+                allow_nan=False,
+            ).encode("utf-8")
+            expected_hash = hashlib.sha256(
+                previous_hash.encode("ascii") + b"\0" + canonical_event
+            ).hexdigest()
+        except (KeyError, TypeError, ValueError, UnicodeError):
+            return False
+        if not hmac.compare_digest(expected_hash, stored_hash):
+            return False
+        previous_hash = stored_hash
+    return True
+
+
 def reconcile(paths: dict[str, Path], database_url: str) -> dict[str, Any]:
     if not database_url.startswith(("mysql+pymysql://", "sqlite:///")):
         raise ValueError("target must use mysql+pymysql or sqlite")
@@ -118,6 +155,8 @@ def reconcile(paths: dict[str, Path], database_url: str) -> dict[str, Any]:
         name: _read_source(paths[name], table, order_by)
         for name, (table, order_by) in SOURCE_TABLES.items()
     }
+    if not _audit_source_chain_valid(source["audit_events"]):
+        raise ValueError("audit source hash chain is invalid")
     manifest, summary = _source_manifest(source)
     engine = create_engine(database_url, pool_pre_ping=True, future=True)
     mismatches: list[str] = []

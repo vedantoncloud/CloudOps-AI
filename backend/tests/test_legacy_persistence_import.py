@@ -285,3 +285,22 @@ def test_independent_import_reconciliation_detects_target_drift(tmp_path, monkey
     drifted = reconcile(paths, url)
     assert drifted["status"] == "mismatch"
     assert "action_plans_records" in drifted["mismatches"]
+
+
+def test_independent_reconciliation_rejects_tampered_source_audit_chain(
+    tmp_path, monkeypatch
+):
+    from verify_persistence_import import reconcile
+
+    paths = _make_sources(tmp_path)
+    url = _migrate_target(tmp_path, monkeypatch)
+    run_import(paths, url, apply=True)
+
+    with sqlite3.connect(paths["audit_events"]) as connection:
+        connection.execute(
+            "UPDATE audit_events SET event_json = ? WHERE sequence = 1",
+            ('{"action_id":"tampered"}',),
+        )
+
+    with pytest.raises(ValueError, match="audit source hash chain is invalid"):
+        reconcile(paths, url)
