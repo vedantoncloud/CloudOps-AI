@@ -121,6 +121,38 @@ def _inspect_store(store_name: str, source: Path) -> dict[str, Any]:
                         "status": "invalid",
                         "reason": "pending_claim_count_mismatch",
                     }
+                with sqlite3.connect(
+                    f"{isolated_copy.resolve().as_uri()}?mode=ro", uri=True, timeout=5
+                ) as connection:
+                    claims = connection.execute(
+                        "SELECT run_id, event_type, evidence_json, status, claim_token "
+                        "FROM audit_idempotency"
+                    ).fetchall()
+                for run_id, event_type, evidence_json, status, claim_token in claims:
+                    try:
+                        evidence = json.loads(evidence_json)
+                    except (TypeError, ValueError):
+                        return {
+                            "store": store_name,
+                            "status": "invalid",
+                            "reason": "claim_consistency_failed",
+                        }
+                    if (
+                        not isinstance(run_id, str)
+                        or not isinstance(event_type, str)
+                        or len(run_id) > 255
+                        or len(event_type) > 255
+                        or status not in {"pending", "emitted"}
+                        or not isinstance(claim_token, str)
+                        or len(claim_token) > 64
+                        or not isinstance(evidence, dict)
+                        or (status == "pending" and not claim_token)
+                    ):
+                        return {
+                            "store": store_name,
+                            "status": "invalid",
+                            "reason": "claim_consistency_failed",
+                        }
                 return {
                     "store": store_name,
                     "status": "ok",
