@@ -331,3 +331,56 @@ def test_independent_reconciliation_detects_target_audit_chain_tampering(
     assert result["target_audit_chain_valid"] is False
     assert "audit_events_hash_chain" in result["mismatches"]
     assert "audit_events_records" in result["mismatches"]
+
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected_mismatch"),
+    [
+        (
+            "UPDATE audit_idempotency SET evidence_json = '{\"reason\":\"tampered\"}' "
+            "WHERE run_id = 'run-emitted'",
+            "audit_idempotency_records",
+        ),
+        (
+            "UPDATE gitops_change_sets SET tenant_id = 'tenant-drifted'",
+            "gitops_tenant_attribution",
+        ),
+        (
+            "UPDATE audit_chain_state SET last_sequence = 99 WHERE singleton_id = 1",
+            "audit_chain_head",
+        ),
+        (
+            "UPDATE action_plan_state SET last_created_order = 99 WHERE singleton_id = 1",
+            "action_plan_order_head",
+        ),
+        (
+            "UPDATE gitops_state SET last_created_order = 99 WHERE singleton_id = 1",
+            "gitops_order_head",
+        ),
+        (
+            "UPDATE persistence_import_runs SET report_json = '{}' ",
+            "import_ledger_report",
+        ),
+    ],
+)
+def test_independent_reconciliation_detects_each_persistence_drift_class(
+    tmp_path, monkeypatch, mutation, expected_mismatch
+):
+    from verify_persistence_import import reconcile
+
+    paths = _make_sources(tmp_path)
+    url = _migrate_target(tmp_path, monkeypatch)
+    run_import(paths, url, apply=True)
+
+    engine = create_engine(url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(text(mutation))
+    finally:
+        engine.dispose()
+
+    result = reconcile(paths, url)
+    assert result["status"] == "mismatch"
+    assert expected_mismatch in result["mismatches"]
+    assert result["read_only"] is True
