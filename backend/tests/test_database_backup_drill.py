@@ -106,3 +106,19 @@ def test_restore_drill_rejects_incomplete_store_schema(tmp_path, store, table, c
 
     with pytest.raises(ValueError, match="schema is incomplete"):
         verify_backup(store, backup)
+
+
+def test_restore_drill_rejects_non_contiguous_audit_event_sequences(tmp_path):
+    from autonomy.persistent_audit_trail import PersistentAuditTrail
+
+    backup = tmp_path / "audit-sequence-gap.db"
+    trail = PersistentAuditTrail(backup)
+    trail.record(
+        action_id="a1", action_type="inspect", resource_type="instance", resource_id="i-1",
+        old_status="running", new_status="running", event="inspection_completed",
+    )
+    with sqlite3.connect(backup) as connection:
+        connection.execute("UPDATE audit_events SET sequence = 2 WHERE sequence = 1")
+
+    with pytest.raises(ValueError, match="sequence is not contiguous"):
+        verify_backup("audit", backup)
