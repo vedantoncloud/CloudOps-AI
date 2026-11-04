@@ -269,6 +269,7 @@ def test_independent_import_reconciliation_detects_target_drift(tmp_path, monkey
     verified = reconcile(paths, url)
     assert verified["status"] == "ok"
     assert verified["read_only"] is True
+    assert verified["target_audit_chain_valid"] is True
     assert verified["pending_claims"] == 1
     assert verified["emitted_claims"] == 1
     assert verified["mismatches"] == []
@@ -304,3 +305,29 @@ def test_independent_reconciliation_rejects_tampered_source_audit_chain(
 
     with pytest.raises(ValueError, match="audit source hash chain is invalid"):
         reconcile(paths, url)
+
+
+def test_independent_reconciliation_detects_target_audit_chain_tampering(
+    tmp_path, monkeypatch
+):
+    from verify_persistence_import import reconcile
+
+    paths = _make_sources(tmp_path)
+    url = _migrate_target(tmp_path, monkeypatch)
+    run_import(paths, url, apply=True)
+
+    engine = create_engine(url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text("UPDATE audit_events SET event_json = :payload WHERE sequence = 1"),
+                {"payload": '{"action_id":"target-tampered"}'},
+            )
+    finally:
+        engine.dispose()
+
+    result = reconcile(paths, url)
+    assert result["status"] == "mismatch"
+    assert result["target_audit_chain_valid"] is False
+    assert "audit_events_hash_chain" in result["mismatches"]
+    assert "audit_events_records" in result["mismatches"]
