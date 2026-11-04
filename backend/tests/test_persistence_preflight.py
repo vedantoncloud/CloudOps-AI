@@ -140,3 +140,44 @@ def test_preflight_inspects_idempotency_health_from_one_isolated_snapshot(
     assert len(observed_paths) == 1
     assert observed_paths[0] != paths["audit_idempotency"]
     assert paths["audit_idempotency"].read_bytes() == before
+
+
+
+import pytest
+
+
+@pytest.mark.parametrize(
+    ("sql", "params"),
+    [
+        (
+            "UPDATE audit_idempotency SET evidence_json = ? WHERE run_id = 'run-1'",
+            ('["not", "an", "object"]',),
+        ),
+        (
+            "UPDATE audit_idempotency SET claim_token = '' WHERE run_id = 'run-1'",
+            (),
+        ),
+        (
+            "UPDATE audit_idempotency SET run_id = ? WHERE run_id = 'run-1'",
+            ("r" * 256,),
+        ),
+    ],
+)
+def test_preflight_rejects_claims_that_importer_cannot_accept(
+    tmp_path, sql, params
+):
+    paths = _build_stores(tmp_path)
+    with sqlite3.connect(paths["audit_idempotency"]) as connection:
+        connection.execute(sql, params)
+
+    report = preflight(paths)
+
+    assert report["status"] == "not_ready"
+    store = next(
+        item for item in report["stores"] if item["store"] == "audit_idempotency"
+    )
+    assert store == {
+        "store": "audit_idempotency",
+        "status": "invalid",
+        "reason": "claim_consistency_failed",
+    }
