@@ -94,7 +94,7 @@ This importer is a migration primitive, not an approval to import production dat
 Run the independent, read-only source-to-target reconciliation after import and before any application writer is connected. Use the same frozen snapshots and target URL:
 
 ```bash
-python verify_persistence_import.py \\
+python verify_persistence_import.py \
   --audit-events /secure/audit-events.db \\
   --audit-idempotency /secure/audit-idempotency.db \\
   --action-plans /secure/action-plans.db \\
