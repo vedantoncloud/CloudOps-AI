@@ -110,7 +110,7 @@ def _target_rows(connection, table: str, order_by: str) -> list[dict[str, Any]]:
 
 
 
-def _audit_source_chain_valid(rows: list[dict[str, Any]]) -> bool:
+def _audit_chain_valid(rows: list[dict[str, Any]]) -> bool:
     """Independently verify contiguous sequences and persisted event hashes."""
     previous_hash = ""
     for expected_sequence, row in enumerate(rows, start=1):
@@ -155,7 +155,7 @@ def reconcile(paths: dict[str, Path], database_url: str) -> dict[str, Any]:
         name: _read_source(paths[name], table, order_by)
         for name, (table, order_by) in SOURCE_TABLES.items()
     }
-    if not _audit_source_chain_valid(source["audit_events"]):
+    if not _audit_chain_valid(source["audit_events"]):
         raise ValueError("audit source hash chain is invalid")
     manifest, summary = _source_manifest(source)
     engine = create_engine(database_url, pool_pre_ping=True, future=True)
@@ -175,7 +175,7 @@ def reconcile(paths: dict[str, Path], database_url: str) -> dict[str, Any]:
             for name, (target_table, order_by) in SOURCE_TABLES.items():
                 actual = _target_rows(connection, target_table, order_by)
                 expected = source[name]
-                if name == "audit_events" and not _audit_source_chain_valid(actual):
+                if name == "audit_events" and not _audit_chain_valid(actual):
                     target_audit_chain_valid = False
                     mismatches.append("audit_events_hash_chain")
                 if name == "gitops":
