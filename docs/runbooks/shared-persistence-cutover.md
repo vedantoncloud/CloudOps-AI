@@ -91,6 +91,18 @@ After the dry-run report has been reviewed and the database/application owners h
 
 This importer is a migration primitive, not an approval to import production data. Keep the target isolated from application writers until the import and independent reconciliation are complete.
 
+Run the independent, read-only source-to-target reconciliation after import and before any application writer is connected. Use the same frozen snapshots and target URL:
+
+```bash
+python verify_persistence_import.py \\
+  --audit-events /secure/audit-events.db \\
+  --audit-idempotency /secure/audit-idempotency.db \\
+  --action-plans /secure/action-plans.db \\
+  --gitops /secure/gitops.db
+```
+
+Expected result: exit code `0`, JSON `status: ok`, and an empty `mismatches` list. The verifier independently compares every source record with its target counterpart, checks GitOps tenant attribution, all three allocator heads, the import manifest/ledger, and pending/emitted idempotency counts. It performs no writes. Any `mismatch` or `not_ready` result is a hard stop: keep the target isolated, investigate, and do not proceed to deployment or cutover.
+
 ## 6. Future cutover sequence (only after importer approval)
 
 1. Announce maintenance and pause all writers on the source deployment.

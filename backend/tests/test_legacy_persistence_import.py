@@ -256,3 +256,32 @@ def test_import_rolls_back_every_store_and_state_when_a_late_insert_fails(
             ).scalar_one() == 0
     finally:
         engine.dispose()
+
+
+
+def test_independent_import_reconciliation_detects_target_drift(tmp_path, monkeypatch):
+    from verify_persistence_import import reconcile
+
+    paths = _make_sources(tmp_path)
+    url = _migrate_target(tmp_path, monkeypatch)
+    run_import(paths, url, apply=True)
+
+    verified = reconcile(paths, url)
+    assert verified["status"] == "ok"
+    assert verified["read_only"] is True
+    assert verified["pending_claims"] == 1
+    assert verified["emitted_claims"] == 1
+    assert verified["mismatches"] == []
+
+    engine = create_engine(url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text("UPDATE action_plans SET tenant_id = 'tenant-drifted'")
+            )
+    finally:
+        engine.dispose()
+
+    drifted = reconcile(paths, url)
+    assert drifted["status"] == "mismatch"
+    assert "action_plans_records" in drifted["mismatches"]
