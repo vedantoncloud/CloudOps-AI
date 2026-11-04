@@ -95,13 +95,13 @@ Run the independent, read-only source-to-target reconciliation after import and 
 
 ```bash
 python verify_persistence_import.py \
-  --audit-events /secure/audit-events.db \\
-  --audit-idempotency /secure/audit-idempotency.db \\
-  --action-plans /secure/action-plans.db \\
+  --audit-events /secure/audit-events.db \
+  --audit-idempotency /secure/audit-idempotency.db \
+  --action-plans /secure/action-plans.db \
   --gitops /secure/gitops.db
 ```
 
-Expected result: exit code `0`, JSON `status: ok`, and an empty `mismatches` list. The verifier independently compares every source record with its target counterpart, checks GitOps tenant attribution, all three allocator heads, the import manifest/ledger, and pending/emitted idempotency counts. It performs no writes. Any `mismatch` or `not_ready` result is a hard stop: keep the target isolated, investigate, and do not proceed to deployment or cutover.
+Expected result: exit code `0`, JSON `status: ok`, and an empty `mismatches` list. The verifier independently compares every source record with its target counterpart, recomputes both source and target audit hash chains (`target_audit_chain_valid` must be `true`), checks GitOps tenant attribution, all three allocator heads, the import manifest/ledger, and pending/emitted idempotency counts. It performs no writes. Any `mismatch` or `not_ready` result is a hard stop: keep the target isolated, investigate, and do not proceed to deployment or cutover.
 
 ## 6. Future cutover sequence (only after importer approval)
 
