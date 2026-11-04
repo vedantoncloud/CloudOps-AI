@@ -16,6 +16,7 @@ import sys
 from typing import Any
 
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import SQLAlchemyError
 
 
 SOURCE_TABLES = {
@@ -217,10 +218,16 @@ def main(argv: list[str] | None = None) -> int:
     }
     try:
         result = reconcile(paths, database_url)
-    except Exception as exc:
+    except SQLAlchemyError:
         print(json.dumps({
             "status": "not_ready",
-            "reason": str(exc),
+            "reason": "target_database_operation_failed",
+        }, sort_keys=True), file=sys.stderr)
+        return 1
+    except (OSError, sqlite3.Error, ValueError, TypeError, KeyError) as exc:
+        print(json.dumps({
+            "status": "not_ready",
+            "reason": type(exc).__name__,
         }, sort_keys=True), file=sys.stderr)
         return 1
     print(json.dumps(result, sort_keys=True))
