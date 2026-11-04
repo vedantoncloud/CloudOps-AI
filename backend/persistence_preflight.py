@@ -96,30 +96,38 @@ def _inspect_store(store_name: str, source: Path) -> dict[str, Any]:
         _validate_sqlite_file(store_name, resolved)
 
         if store_name == "audit_idempotency":
-            health = PersistentAuditHealthChecker(resolved).inspect()
-            if (
-                not health.evidence.get("consistent")
-                or health.evidence.get("malformed_evidence_claims", 0) > 0
-            ):
+            # Inspect one immutable point-in-time snapshot so the health summary
+            # and pending-claim listing cannot observe different writer states.
+            with tempfile.TemporaryDirectory(
+                prefix="cloudops-persistence-preflight-"
+            ) as directory:
+                isolated_copy = Path(directory) / "store.db"
+                _snapshot_read_only(resolved, isolated_copy)
+                checker = PersistentAuditHealthChecker(isolated_copy)
+                health = checker.inspect()
+                if (
+                    not health.evidence.get("consistent")
+                    or health.evidence.get("malformed_evidence_claims", 0) > 0
+                ):
+                    return {
+                        "store": store_name,
+                        "status": "invalid",
+                        "reason": "claim_consistency_failed",
+                    }
+                pending = checker.list_pending()
+                if len(pending) != health.pending_claims:
+                    return {
+                        "store": store_name,
+                        "status": "invalid",
+                        "reason": "pending_claim_count_mismatch",
+                    }
                 return {
                     "store": store_name,
-                    "status": "invalid",
-                    "reason": "claim_consistency_failed",
+                    "status": "ok",
+                    "records": health.total_claims,
+                    "pending": health.pending_claims,
+                    "emitted": health.emitted_claims,
                 }
-            pending = PersistentAuditHealthChecker(resolved).list_pending()
-            if len(pending) != health.pending_claims:
-                return {
-                    "store": store_name,
-                    "status": "invalid",
-                    "reason": "pending_claim_count_mismatch",
-                }
-            return {
-                "store": store_name,
-                "status": "ok",
-                "records": health.total_claims,
-                "pending": health.pending_claims,
-                "emitted": health.emitted_claims,
-            }
 
         with tempfile.TemporaryDirectory(prefix="cloudops-persistence-preflight-") as directory:
             isolated_copy = Path(directory) / "store.db"
