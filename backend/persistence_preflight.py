@@ -87,6 +87,50 @@ def _validate_sqlite_file(store_name: str, path: Path) -> None:
                 raise ValueError("required columns are missing")
 
 
+
+def _validate_import_identity_fields(store_name: str, path: Path) -> None:
+    """Reject source rows whose payload identity or tenant cannot be imported."""
+    table, key_column = {
+        "action_plans": ("action_plans", "action_id"),
+        "gitops_changes": ("gitops_change_sets", "change_id"),
+    }[store_name]
+    with sqlite3.connect(
+        f"{path.resolve().as_uri()}?mode=ro", uri=True, timeout=5
+    ) as connection:
+        if store_name == "action_plans":
+            rows = connection.execute(
+                f"SELECT {key_column}, tenant_id, payload FROM {table}"
+            ).fetchall()
+        else:
+            rows = connection.execute(
+                f"SELECT {key_column}, payload FROM {table}"
+            ).fetchall()
+    for row in rows:
+        record_id = row[0]
+        tenant_id = row[1] if store_name == "action_plans" else None
+        payload_text = row[2] if store_name == "action_plans" else row[1]
+        payload = json.loads(payload_text)
+        if not isinstance(record_id, str) or len(record_id) > 255:
+            raise ValueError("persistence identifier is invalid for the shared schema")
+        if not isinstance(payload, dict) or payload.get(
+            "action_id" if store_name == "action_plans" else "change_id"
+        ) != record_id:
+            raise ValueError("persistence payload identifier does not match its primary key")
+        if store_name == "action_plans":
+            if tenant_id is not None and (
+                not isinstance(tenant_id, str) or len(tenant_id) > 255
+            ):
+                raise ValueError("action-plan tenant exceeds the shared schema contract")
+        else:
+            metadata = payload.get("metadata") or {}
+            if not isinstance(metadata, dict):
+                raise ValueError("GitOps metadata is invalid")
+            tenant = metadata.get("tenant_id")
+            if tenant is not None and (
+                not isinstance(tenant, str) or len(tenant) > 255
+            ):
+                raise ValueError("GitOps tenant exceeds the shared schema contract")
+
 def _inspect_store(store_name: str, source: Path) -> dict[str, Any]:
     if not source.is_file():
         return {"store": store_name, "status": "missing"}
@@ -189,6 +233,7 @@ def _inspect_store(store_name: str, source: Path) -> dict[str, Any]:
                 store = ActionPlanStore(isolated_copy)
                 try:
                     plans = store.load_all()
+                    _validate_import_identity_fields(store_name, isolated_copy)
                     return {
                         "store": store_name,
                         "status": "ok",
@@ -201,6 +246,7 @@ def _inspect_store(store_name: str, source: Path) -> dict[str, Any]:
             registry = GitOpsChangeSetRegistry(database_path=isolated_copy)
             try:
                 changes = registry.list_all()
+                _validate_import_identity_fields(store_name, isolated_copy)
                 return {
                     "store": store_name,
                     "status": "ok",
