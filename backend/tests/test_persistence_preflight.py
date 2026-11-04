@@ -108,3 +108,35 @@ def test_preflight_reports_missing_source_without_creating_it(tmp_path):
     gitops = next(item for item in report["stores"] if item["store"] == "gitops_changes")
     assert gitops == {"store": "gitops_changes", "status": "missing"}
     assert not paths["gitops_changes"].exists()
+
+
+
+def test_preflight_inspects_idempotency_health_from_one_isolated_snapshot(
+    tmp_path, monkeypatch
+):
+    import persistence_preflight
+
+    paths = _build_stores(tmp_path)
+    original_checker = persistence_preflight.PersistentAuditHealthChecker
+    observed_paths = []
+
+    class RecordingHealthChecker(original_checker):
+        def __init__(self, database_path):
+            observed_paths.append(Path(database_path))
+            super().__init__(database_path)
+
+    from pathlib import Path
+
+    monkeypatch.setattr(
+        persistence_preflight,
+        "PersistentAuditHealthChecker",
+        RecordingHealthChecker,
+    )
+
+    before = paths["audit_idempotency"].read_bytes()
+    report = persistence_preflight.preflight(paths)
+
+    assert report["status"] == "ready"
+    assert len(observed_paths) == 1
+    assert observed_paths[0] != paths["audit_idempotency"]
+    assert paths["audit_idempotency"].read_bytes() == before
