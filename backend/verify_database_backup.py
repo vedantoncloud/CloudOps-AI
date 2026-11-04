@@ -24,6 +24,15 @@ TABLES = {
     "gitops": "gitops_change_sets",
 }
 
+REQUIRED_COLUMNS = {
+    "audit": {"sequence", "event_json", "event_hash"},
+    "idempotency": {
+        "run_id", "event_type", "evidence_json", "status", "claim_token", "claimed_at"
+    },
+    "action-plans": {"action_id", "tenant_id", "payload", "created_order"},
+    "gitops": {"change_id", "payload", "created_order"},
+}
+
 
 def _load_copy(store: str, path: Path) -> int:
     if store == "audit":
@@ -55,6 +64,12 @@ def verify_backup(store: str, backup: Path) -> dict[str, int | str]:
         tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         if TABLES[store] not in tables:
             raise ValueError(f"Backup does not contain the expected {store} store")
+        columns = {
+            row[1]
+            for row in connection.execute(f"PRAGMA table_info({TABLES[store]})")
+        }
+        if not REQUIRED_COLUMNS[store].issubset(columns):
+            raise ValueError(f"Backup {store} store schema is incomplete")
 
     with tempfile.TemporaryDirectory(prefix="cloudops-restore-drill-") as temporary:
         isolated_copy = Path(temporary) / "restore.db"
