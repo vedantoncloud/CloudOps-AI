@@ -160,6 +160,7 @@ def reconcile(paths: dict[str, Path], database_url: str) -> dict[str, Any]:
     manifest, summary = _source_manifest(source)
     engine = create_engine(database_url, pool_pre_ping=True, future=True)
     mismatches: list[str] = []
+    target_audit_chain_valid = True
     try:
         with engine.connect() as connection:
             if engine.dialect.name == "mysql":
@@ -174,6 +175,9 @@ def reconcile(paths: dict[str, Path], database_url: str) -> dict[str, Any]:
             for name, (target_table, order_by) in SOURCE_TABLES.items():
                 actual = _target_rows(connection, target_table, order_by)
                 expected = source[name]
+                if name == "audit_events" and not _audit_source_chain_valid(actual):
+                    target_audit_chain_valid = False
+                    mismatches.append("audit_events_hash_chain")
                 if name == "gitops":
                     normalized = []
                     for row in actual:
@@ -230,6 +234,7 @@ def reconcile(paths: dict[str, Path], database_url: str) -> dict[str, Any]:
                 "manifest_sha256": manifest,
                 "counts": summary["counts"],
                 "audit_final_hash": summary["audit_final_hash"],
+                "target_audit_chain_valid": target_audit_chain_valid,
                 "pending_claims": pending,
                 "emitted_claims": emitted,
                 "mismatches": sorted(set(mismatches)),
