@@ -36,6 +36,15 @@ REQUIRED_COLUMNS = {
 
 def _load_copy(store: str, path: Path) -> int:
     if store == "audit":
+        with sqlite3.connect(path) as connection:
+            sequences = [
+                row[0]
+                for row in connection.execute(
+                    "SELECT sequence FROM audit_events ORDER BY sequence"
+                )
+            ]
+        if sequences != list(range(1, len(sequences) + 1)):
+            raise ValueError("Audit backup event sequence is not contiguous from one")
         restored = PersistentAuditTrail(path)
         integrity = restored.get_integrity_diagnostics()
         if not integrity.valid:
