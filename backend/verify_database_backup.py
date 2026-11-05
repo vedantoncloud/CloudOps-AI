@@ -34,7 +34,54 @@ REQUIRED_COLUMNS = {
 }
 
 
+def _validate_persistence_records(store: str, path: Path) -> None:
+    """Apply importer-grade identity and ordering checks to restored plan stores."""
+    if store not in {"action-plans", "gitops"}:
+        return
+    if store == "action-plans":
+        query = "SELECT action_id, tenant_id, payload, created_order FROM action_plans"
+    else:
+        query = "SELECT change_id, payload, created_order FROM gitops_change_sets"
+    with sqlite3.connect(path) as connection:
+        rows = connection.execute(query).fetchall()
+    seen_orders: set[int] = set()
+    for row in rows:
+        if store == "action-plans":
+            record_id, tenant_id, payload_text, order = row
+        else:
+            record_id, payload_text, order = row
+            tenant_id = None
+        if isinstance(order, bool) or not isinstance(order, int) or order <= 0:
+            raise ValueError("Persistence creation order must be a positive integer")
+        if order in seen_orders:
+            raise ValueError("Persistence creation order contains duplicates")
+        seen_orders.add(order)
+        if not isinstance(record_id, str) or len(record_id) > 255:
+            raise ValueError("Persistence identifier is invalid for the shared schema")
+        payload = json.loads(payload_text)
+        expected_key = "action_id" if store == "action-plans" else "change_id"
+        if not isinstance(payload, dict) or payload.get(expected_key) != record_id:
+            raise ValueError("Persistence payload identifier does not match its primary key")
+        if store == "action-plans":
+            if tenant_id is not None and (
+                not isinstance(tenant_id, str) or len(tenant_id) > 255
+            ):
+                raise ValueError("Action-plan tenant exceeds the shared schema contract")
+        else:
+            metadata = payload.get("metadata", {})
+            if metadata is None:
+                metadata = {}
+            if not isinstance(metadata, dict):
+                raise ValueError("GitOps metadata is invalid")
+            tenant = metadata.get("tenant_id")
+            if tenant is not None and (
+                not isinstance(tenant, str) or len(tenant) > 255
+            ):
+                raise ValueError("GitOps tenant exceeds the shared schema contract")
+
+
 def _load_copy(store: str, path: Path) -> int:
+    _validate_persistence_records(store, path)
     if store == "audit":
         with sqlite3.connect(path) as connection:
             sequences = [
