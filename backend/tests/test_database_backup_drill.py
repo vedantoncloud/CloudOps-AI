@@ -1,3 +1,4 @@
+import json
 import sqlite3
 
 import pytest
@@ -122,3 +123,70 @@ def test_restore_drill_rejects_non_contiguous_audit_event_sequences(tmp_path):
 
     with pytest.raises(ValueError, match="sequence is not contiguous"):
         verify_backup("audit", backup)
+
+
+@pytest.mark.parametrize(
+    ("store", "invalid_kind", "expected_error"),
+    [
+        ("action-plans", "zero_order", "positive integer"),
+        ("action-plans", "duplicate_order", "contains duplicates"),
+        ("action-plans", "identity_drift", "does not match its primary key"),
+        ("gitops", "negative_order", "positive integer"),
+        ("gitops", "duplicate_order", "contains duplicates"),
+        ("gitops", "identity_drift", "does not match its primary key"),
+        ("gitops", "invalid_metadata", "metadata is invalid"),
+    ],
+)
+def test_restore_drill_rejects_import_invalid_plan_and_gitops_records(
+    tmp_path, store, invalid_kind, expected_error
+):
+    backup = tmp_path / f"invalid-{store}-{invalid_kind}.db"
+    if store == "action-plans":
+        ActionPlanStore(backup)
+        table = "action_plans"
+        key_column = "action_id"
+        base_payload = {"action_id": "plan-1"}
+        insert = (
+            "INSERT INTO action_plans (action_id, tenant_id, payload, created_order) "
+            "VALUES (?, ?, ?, ?)"
+        )
+        first = ("plan-1", "tenant-1", json.dumps(base_payload), 1)
+        second = ("plan-2", "tenant-1", json.dumps({"action_id": "plan-2"}), 2)
+    else:
+        GitOpsChangeSetRegistry(database_path=backup)
+        table = "gitops_change_sets"
+        key_column = "change_id"
+        base_payload = {"change_id": "change-1", "metadata": {}}
+        insert = (
+            "INSERT INTO gitops_change_sets (change_id, payload, created_order) "
+            "VALUES (?, ?, ?)"
+        )
+        first = ("change-1", json.dumps(base_payload), 1)
+        second = ("change-2", json.dumps({"change_id": "change-2", "metadata": {}}), 2)
+
+    if invalid_kind == "identity_drift":
+        if store == "action-plans":
+            first = (first[0], first[1], json.dumps({"action_id": "different"}), first[3])
+        else:
+            first = (first[0], json.dumps({"change_id": "different", "metadata": {}}), first[2])
+    elif invalid_kind == "invalid_metadata":
+        first = (first[0], json.dumps({"change_id": "change-1", "metadata": []}), first[2])
+    elif invalid_kind == "zero_order":
+        first = (first[0], first[1], first[2], 0)
+    elif invalid_kind == "negative_order":
+        first = (first[0], first[1], -1)
+    elif invalid_kind == "duplicate_order":
+        if store == "action-plans":
+            second = (second[0], second[1], second[2], 1)
+        else:
+            second = (second[0], second[1], 1)
+
+    with sqlite3.connect(backup) as connection:
+        connection.execute(insert, first)
+        if invalid_kind == "duplicate_order":
+            connection.execute(insert, second)
+
+    original = backup.read_bytes()
+    with pytest.raises(ValueError, match=expected_error):
+        verify_backup(store, backup)
+    assert backup.read_bytes() == original
