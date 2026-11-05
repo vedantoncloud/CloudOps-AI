@@ -100,12 +100,34 @@ class ExecutionVerificationBridge:
         )
 
         if execution_hook is not None:
-            execution_hook(action, execution_result)
+            try:
+                execution_hook(action, execution_result)
+            except Exception as exc:
+                self._record_verification_failure(
+                    action,
+                    old_status=executing_status,
+                    event="action_execution_hook_failed",
+                    error=exc,
+                    actor_id=actor_id,
+                    tenant_id=tenant_id,
+                )
+                raise
 
-        verified_action = self.verifier.verify(
-            action,
-            execution_result,
-        )
+        try:
+            verified_action = self.verifier.verify(
+                action,
+                execution_result,
+            )
+        except Exception as exc:
+            self._record_verification_failure(
+                action,
+                old_status=executing_status,
+                event="action_verification_failed",
+                error=exc,
+                actor_id=actor_id,
+                tenant_id=tenant_id,
+            )
+            raise
 
         new_status = verified_action.status.value
         verified = verified_action.status == ActionStatus.SUCCEEDED
@@ -177,10 +199,21 @@ class ExecutionVerificationBridge:
 
         old_status = action.status.value
 
-        verified_action = self.verifier.verify(
-            action,
-            execution_result,
-        )
+        try:
+            verified_action = self.verifier.verify(
+                action,
+                execution_result,
+            )
+        except Exception as exc:
+            self._record_verification_failure(
+                action,
+                old_status=old_status,
+                event="action_verification_failed",
+                error=exc,
+                actor_id=actor_id,
+                tenant_id=tenant_id,
+            )
+            raise
 
         new_status = verified_action.status.value
         verified = verified_action.status == ActionStatus.SUCCEEDED
@@ -235,6 +268,51 @@ class ExecutionVerificationBridge:
                 "execution_successful": execution_result.successful,
                 "audit_event_count": len(events),
             },
+        )
+
+    def _record_verification_failure(
+        self,
+        action: ActionPlan,
+        *,
+        old_status: str,
+        event: str,
+        error: Exception,
+        actor_id: str | None,
+        tenant_id: str | None,
+    ) -> None:
+        """Leave an executing action in an explicit recovery state on failure.
+
+        This records a rollback requirement only; it never performs a rollback
+        or infrastructure mutation. Exception text is deliberately omitted
+        from the audit payload to avoid leaking provider credentials/details.
+        """
+        if action.status != ActionStatus.EXECUTING:
+            return
+
+        action.status = (
+            ActionStatus.ROLLBACK_REQUIRED
+            if action.rollback_available
+            else ActionStatus.FAILED
+        )
+        details = {
+            "failure_stage": event,
+            "exception_type": type(error).__name__,
+            "rollback_required": action.status == ActionStatus.ROLLBACK_REQUIRED,
+            "message": "Lifecycle verification failed; inspect protected application logs.",
+        }
+        if tenant_id is not None:
+            details["tenant_id"] = tenant_id
+
+        self.audit_trail.record(
+            action_id=action.action_id,
+            action_type=action.action_type,
+            resource_type=action.target.resource_type,
+            resource_id=action.target.resource_id,
+            old_status=old_status,
+            new_status=action.status.value,
+            event=event,
+            details=details,
+            actor_id=actor_id,
         )
 
     def _validate_action(self, action: ActionPlan) -> None:
