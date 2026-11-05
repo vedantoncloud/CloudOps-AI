@@ -133,7 +133,9 @@ def _validate_import_identity_fields(store_name: str, path: Path) -> None:
             ):
                 raise ValueError("action-plan tenant exceeds the shared schema contract")
         else:
-            metadata = payload.get("metadata") or {}
+            metadata = payload.get("metadata", {})
+            if metadata is None:
+                metadata = {}
             if not isinstance(metadata, dict):
                 raise ValueError("GitOps metadata is invalid")
             tenant = metadata.get("tenant_id")
