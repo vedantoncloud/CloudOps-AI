@@ -115,21 +115,31 @@ def _validate_sources(paths: dict[str, Path]) -> dict[str, list[dict[str, Any]]]
             raise ValueError("idempotency claim token is invalid for the shared schema")
     for row in rows["action_plans"]:
         payload = json.loads(row["payload"])
-        if payload.get("action_id") != row["action_id"]:
-            raise ValueError("action-plan payload ID does not match its primary key")
+        if not isinstance(payload, dict):
+            raise ValueError("action-plan payload must be an object")
         if not isinstance(row["action_id"], str) or (
             row["tenant_id"] is not None and not isinstance(row["tenant_id"], str)
         ):
             raise ValueError("action-plan identifier or tenant must be a string")
+        if payload.get("action_id") != row["action_id"]:
+            raise ValueError("action-plan payload ID does not match its primary key")
         if len(row["action_id"]) > 255 or (
             row["tenant_id"] is not None and len(row["tenant_id"]) > 255
         ):
             raise ValueError("action-plan identifier or tenant exceeds the shared schema length limit")
     for row in rows["gitops"]:
         payload = json.loads(row["payload"])
+        if not isinstance(row["change_id"], str):
+            raise ValueError("GitOps identifier must be a string")
+        if not isinstance(payload, dict):
+            raise ValueError("GitOps payload must be an object")
         if payload.get("change_id") != row["change_id"]:
             raise ValueError("GitOps payload ID does not match its primary key")
-        metadata = payload.get("metadata") or {}
+        metadata = payload.get("metadata", {})
+        if metadata is None:
+            metadata = {}
+        if not isinstance(metadata, dict):
+            raise ValueError("GitOps metadata must be an object")
         tenant = metadata.get("tenant_id")
         if tenant is not None and not isinstance(tenant, str):
             raise ValueError("GitOps tenant ownership metadata is invalid")

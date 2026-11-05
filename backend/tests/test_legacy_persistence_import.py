@@ -384,3 +384,42 @@ def test_independent_reconciliation_detects_each_persistence_drift_class(
     assert result["status"] == "mismatch"
     assert expected_mismatch in result["mismatches"]
     assert result["read_only"] is True
+
+
+
+@pytest.mark.parametrize(
+    ("store_name", "payload", "expected_error"),
+    [
+        ("action_plans", [], "action-plan payload must be an object"),
+        ("gitops", [], "GitOps payload must be an object"),
+        (
+            "gitops",
+            {
+                "change_id": "change-001",
+                "source_action_id": "plan-001",
+                "changes": [],
+                "status": "pending",
+                "requires_approval": True,
+                "approved_by": None,
+                "commit_message": "test migration",
+                "metadata": ["not", "an", "object"],
+            },
+            "GitOps metadata must be an object",
+        ),
+    ],
+)
+def test_import_rejects_non_object_persistence_payload_shapes(
+    tmp_path, store_name, payload, expected_error
+):
+    paths = _make_sources(tmp_path)
+    table = "action_plans" if store_name == "action_plans" else "gitops_change_sets"
+    key_column = "action_id" if store_name == "action_plans" else "change_id"
+    source_path = paths[store_name]
+    with sqlite3.connect(source_path) as connection:
+        connection.execute(
+            f"UPDATE {table} SET payload = ? WHERE {key_column} = ?",
+            (json.dumps(payload), "plan-001" if store_name == "action_plans" else "change-001"),
+        )
+
+    with pytest.raises(ValueError, match=expected_error):
+        run_import(paths, "sqlite:///unused-target.db")
