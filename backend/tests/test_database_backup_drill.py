@@ -82,7 +82,7 @@ def test_restore_drill_rejects_inconsistent_idempotency_backup(tmp_path):
             ("run-bad", "failure", '{"ok":true}', "unknown", "", 0),
         )
 
-    with pytest.raises(ValueError, match="inconsistent claims"):
+    with pytest.raises(ValueError, match="invalid claims"):
         verify_backup("idempotency", backup)
 
 

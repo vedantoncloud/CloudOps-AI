@@ -351,3 +351,101 @@ def test_mismatched_execution_result_creates_no_audit_event():
         assert "does not match" in str(exc)
 
     assert audit.get_events(action.action_id) == []
+
+
+
+def test_verifier_exception_marks_action_for_recovery_and_audits_failure():
+    class BrokenVerifier:
+        def verify(self, action, execution_result):
+            raise RuntimeError("provider secret detail")
+
+    audit = AuditTrail()
+    bridge = ExecutionVerificationBridge(
+        executor=FakeExecutor(),
+        verifier=BrokenVerifier(),
+        audit_trail=audit,
+    )
+    action = make_action()
+
+    try:
+        bridge.execute_and_verify(
+            action,
+            actor_id="operator-17",
+            tenant_id="tenant-a",
+        )
+        assert False, "Expected RuntimeError"
+    except RuntimeError as exc:
+        assert "provider secret detail" in str(exc)
+
+    assert action.status == ActionStatus.ROLLBACK_REQUIRED
+    events = audit.get_events(action.action_id)
+    failure = events[-1]
+    assert failure.event == "action_verification_failed"
+    assert failure.old_status == ActionStatus.EXECUTING.value
+    assert failure.new_status == ActionStatus.ROLLBACK_REQUIRED.value
+    assert failure.actor_id == "operator-17"
+    assert failure.details["tenant_id"] == "tenant-a"
+    assert failure.details["exception_type"] == "RuntimeError"
+    assert "provider secret detail" not in str(failure.details)
+
+
+def test_execution_hook_exception_marks_action_for_recovery_and_audits_failure():
+    audit = AuditTrail()
+    bridge = ExecutionVerificationBridge(
+        executor=FakeExecutor(),
+        audit_trail=audit,
+    )
+    action = make_action()
+
+    def broken_hook(current_action, execution_result):
+        raise TimeoutError("sensitive provider response")
+
+    try:
+        bridge.execute_and_verify(
+            action,
+            execution_hook=broken_hook,
+            actor_id="operator-17",
+            tenant_id="tenant-a",
+        )
+        assert False, "Expected TimeoutError"
+    except TimeoutError:
+        pass
+
+    assert action.status == ActionStatus.ROLLBACK_REQUIRED
+    events = audit.get_events(action.action_id)
+    assert [event.event for event in events] == [
+        "action_execution_completed",
+        "action_execution_hook_failed",
+    ]
+    failure = events[-1]
+    assert failure.new_status == ActionStatus.ROLLBACK_REQUIRED.value
+    assert failure.actor_id == "operator-17"
+    assert failure.details["tenant_id"] == "tenant-a"
+    assert failure.details["exception_type"] == "TimeoutError"
+    assert "sensitive provider response" not in str(failure.details)
+
+
+def test_verification_exception_without_rollback_support_marks_action_failed():
+    class BrokenVerifier:
+        def verify(self, action, execution_result):
+            raise RuntimeError("verification unavailable")
+
+    audit = AuditTrail()
+    bridge = ExecutionVerificationBridge(
+        executor=FakeExecutor(),
+        verifier=BrokenVerifier(),
+        audit_trail=audit,
+    )
+    action = make_action()
+    action.rollback_available = False
+
+    try:
+        bridge.execute_and_verify(action)
+        assert False, "Expected RuntimeError"
+    except RuntimeError:
+        pass
+
+    assert action.status == ActionStatus.FAILED
+    failure = audit.get_events(action.action_id)[-1]
+    assert failure.new_status == ActionStatus.FAILED.value
+    assert failure.details["rollback_required"] is False
