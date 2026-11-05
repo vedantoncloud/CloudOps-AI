@@ -127,6 +127,9 @@ def _validate_sources(paths: dict[str, Path]) -> dict[str, list[dict[str, Any]]]
             row["tenant_id"] is not None and len(row["tenant_id"]) > 255
         ):
             raise ValueError("action-plan identifier or tenant exceeds the shared schema length limit")
+    _validate_creation_orders("action plans", rows["action_plans"])
+    _validate_creation_orders("GitOps", rows["gitops"])
+
     for row in rows["gitops"]:
         payload = json.loads(row["payload"])
         if not isinstance(row["change_id"], str):
@@ -146,6 +149,18 @@ def _validate_sources(paths: dict[str, Path]) -> dict[str, list[dict[str, Any]]]
         if len(row["change_id"]) > 255 or (tenant is not None and len(tenant) > 255):
             raise ValueError("GitOps identifier or tenant exceeds the shared schema length limit")
     return rows
+
+
+def _validate_creation_orders(store_name: str, records: list[dict[str, Any]]) -> None:
+    """Require stable, unique positive creation-order values before import."""
+    orders = []
+    for row in records:
+        order = row["created_order"]
+        if isinstance(order, bool) or not isinstance(order, int) or order <= 0:
+            raise ValueError(f"{store_name} creation order must be a positive integer")
+        orders.append(order)
+    if len(orders) != len(set(orders)):
+        raise ValueError(f"{store_name} creation order contains duplicates")
 
 
 def _canonical_manifest(rows: dict[str, list[dict[str, Any]]]) -> tuple[str, dict[str, Any]]:
