@@ -99,16 +99,27 @@ def _validate_import_identity_fields(store_name: str, path: Path) -> None:
     ) as connection:
         if store_name == "action_plans":
             rows = connection.execute(
-                f"SELECT {key_column}, tenant_id, payload FROM {table}"
+                f"SELECT {key_column}, tenant_id, payload, created_order FROM {table}"
             ).fetchall()
         else:
             rows = connection.execute(
-                f"SELECT {key_column}, payload FROM {table}"
+                f"SELECT {key_column}, payload, created_order FROM {table}"
             ).fetchall()
+    creation_orders = set()
     for row in rows:
         record_id = row[0]
         tenant_id = row[1] if store_name == "action_plans" else None
         payload_text = row[2] if store_name == "action_plans" else row[1]
+        creation_order = row[3] if store_name == "action_plans" else row[2]
+        if (
+            isinstance(creation_order, bool)
+            or not isinstance(creation_order, int)
+            or creation_order <= 0
+        ):
+            raise ValueError("persistence creation order must be a positive integer")
+        if creation_order in creation_orders:
+            raise ValueError("persistence creation order contains duplicates")
+        creation_orders.add(creation_order)
         payload = json.loads(payload_text)
         if not isinstance(record_id, str) or len(record_id) > 255:
             raise ValueError("persistence identifier is invalid for the shared schema")
