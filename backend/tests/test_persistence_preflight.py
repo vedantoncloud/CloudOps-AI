@@ -243,3 +243,104 @@ def test_preflight_rejects_gitops_payload_primary_key_drift(tmp_path):
         "status": "invalid",
         "reason": "application_validation_failed",
     }
+
+
+@pytest.mark.parametrize("store_name", ["action_plans", "gitops_changes"])
+@pytest.mark.parametrize("invalid_order", [0, -1, "not-an-integer"])
+def test_preflight_rejects_invalid_creation_order_values(
+    tmp_path, store_name, invalid_order
+):
+    paths = _build_stores(tmp_path)
+    if store_name == "action_plans":
+        table, key_column, record_id = "action_plans", "action_id", "plan-1"
+        payload = {
+            "action_id": record_id,
+            "action_type": "scale",
+            "target": {"resource_type": "instance", "resource_id": "i-1", "metadata": {}},
+            "reason": "capacity",
+            "risk": "low",
+            "requires_approval": False,
+            "rollback_available": True,
+            "status": "pending",
+            "decision_by": None,
+            "decision_reason": None,
+            "created_at": "2026-11-03T10:00:00+00:00",
+        }
+        values = (record_id, "tenant-a", json.dumps(payload), invalid_order)
+        sql = f"INSERT INTO {table} VALUES (?, ?, ?, ?)"
+    else:
+        table, key_column, record_id = "gitops_change_sets", "change_id", "change-1"
+        payload = {
+            "change_id": record_id,
+            "source_action_id": "plan-1",
+            "changes": [],
+            "status": "pending",
+            "requires_approval": True,
+            "approved_by": None,
+            "commit_message": "preflight order test",
+            "metadata": {"tenant_id": "tenant-a"},
+        }
+        values = (record_id, json.dumps(payload), invalid_order)
+        sql = f"INSERT INTO {table} VALUES (?, ?, ?)"
+    with sqlite3.connect(paths[store_name]) as connection:
+        connection.execute(sql, values)
+
+    report = preflight(paths)
+
+    assert report["status"] == "not_ready"
+    store = next(item for item in report["stores"] if item["store"] == store_name)
+    assert store == {
+        "store": store_name,
+        "status": "invalid",
+        "reason": "application_validation_failed",
+    }
+
+
+@pytest.mark.parametrize("store_name", ["action_plans", "gitops_changes"])
+def test_preflight_rejects_duplicate_creation_order_values(tmp_path, store_name):
+    paths = _build_stores(tmp_path)
+    if store_name == "action_plans":
+        payload = {
+            "action_type": "scale",
+            "target": {"resource_type": "instance", "resource_id": "i-1", "metadata": {}},
+            "reason": "capacity",
+            "risk": "low",
+            "requires_approval": False,
+            "rollback_available": True,
+            "status": "pending",
+            "decision_by": None,
+            "decision_reason": None,
+            "created_at": "2026-11-03T10:00:00+00:00",
+        }
+        with sqlite3.connect(paths[store_name]) as connection:
+            for record_id in ("plan-1", "plan-2"):
+                connection.execute(
+                    "INSERT INTO action_plans VALUES (?, ?, ?, ?)",
+                    (record_id, "tenant-a", json.dumps({**payload, "action_id": record_id}), 7),
+                )
+    else:
+        payload = {
+            "source_action_id": "plan-1",
+            "changes": [],
+            "status": "pending",
+            "requires_approval": True,
+            "approved_by": None,
+            "commit_message": "preflight order test",
+            "metadata": {"tenant_id": "tenant-a"},
+        }
+        with sqlite3.connect(paths[store_name]) as connection:
+            for record_id in ("change-1", "change-2"):
+                connection.execute(
+                    "INSERT INTO gitops_change_sets VALUES (?, ?, ?)",
+                    (record_id, json.dumps({**payload, "change_id": record_id}), 7),
+                )
+
+    report = preflight(paths)
+
+    assert report["status"] == "not_ready"
+    store = next(item for item in report["stores"] if item["store"] == store_name)
+    assert store == {
+        "store": store_name,
+        "status": "invalid",
+        "reason": "application_validation_failed",
+    }
