@@ -68,7 +68,9 @@ def _validate_persistence_records(store: str, path: Path) -> None:
             ):
                 raise ValueError("Action-plan tenant exceeds the shared schema contract")
         else:
-            metadata = payload.get("metadata") or {}
+            metadata = payload.get("metadata", {})
+            if metadata is None:
+                metadata = {}
             if not isinstance(metadata, dict):
                 raise ValueError("GitOps metadata is invalid")
             tenant = metadata.get("tenant_id")
