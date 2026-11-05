@@ -423,3 +423,87 @@ def test_import_rejects_non_object_persistence_payload_shapes(
 
     with pytest.raises(ValueError, match=expected_error):
         run_import(paths, "sqlite:///unused-target.db")
+
+
+@pytest.mark.parametrize(
+    ("store_name", "table", "key_column", "record_id"),
+    [
+        ("action_plans", "action_plans", "action_id", "plan-001"),
+        ("GitOps", "gitops_change_sets", "change_id", "change-001"),
+    ],
+)
+@pytest.mark.parametrize("invalid_order", [0, -1, "not-an-integer"])
+def test_import_rejects_invalid_creation_order_values(
+    tmp_path, store_name, table, key_column, record_id, invalid_order
+):
+    paths = _make_sources(tmp_path)
+    with sqlite3.connect(paths["action_plans" if store_name == "action_plans" else "gitops"]) as connection:
+        connection.execute(
+            f"UPDATE {table} SET created_order = ? WHERE {key_column} = ?",
+            (invalid_order, record_id),
+        )
+
+    with pytest.raises(ValueError, match="creation order must be a positive integer"):
+        run_import(paths, "sqlite:///unused-target.db")
+
+
+@pytest.mark.parametrize(
+    ("store_name", "table", "key_column", "record_id", "payload"),
+    [
+        (
+            "action_plans",
+            "action_plans",
+            "action_id",
+            "plan-002",
+            {
+                "action_id": "plan-002",
+                "action_type": "scale",
+                "target": {"resource_type": "instance", "resource_id": "i-002", "metadata": {}},
+                "reason": "capacity",
+                "risk": "low",
+                "requires_approval": False,
+                "rollback_available": True,
+                "status": "pending",
+                "decision_by": None,
+                "decision_reason": None,
+                "created_at": "2026-11-03T10:01:00+00:00",
+            },
+        ),
+        (
+            "GitOps",
+            "gitops_change_sets",
+            "change_id",
+            "change-002",
+            {
+                "change_id": "change-002",
+                "source_action_id": "plan-001",
+                "changes": [],
+                "status": "pending",
+                "requires_approval": True,
+                "approved_by": None,
+                "commit_message": "second migration record",
+                "metadata": {"tenant_id": "tenant-b"},
+            },
+        ),
+    ],
+)
+def test_import_rejects_duplicate_creation_order_values(
+    tmp_path, store_name, table, key_column, record_id, payload
+):
+    paths = _make_sources(tmp_path)
+    source_name = "action_plans" if store_name == "action_plans" else "gitops"
+    with sqlite3.connect(paths[source_name]) as connection:
+        connection.execute(
+            f"INSERT INTO {table} ({key_column}, payload, created_order"
+            + (", tenant_id" if store_name == "action_plans" else "")
+            + ") VALUES (?, ?, ?" + (", ?" if store_name == "action_plans" else "") + ")",
+            (
+                record_id,
+                json.dumps(payload),
+                9 if store_name == "action_plans" else 12,
+                *(["tenant-a"] if store_name == "action_plans" else []),
+            ),
+        )
+
+    with pytest.raises(ValueError, match="creation order contains duplicates"):
+        run_import(paths, "sqlite:///unused-target.db")
