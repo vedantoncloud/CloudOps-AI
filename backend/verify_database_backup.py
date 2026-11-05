@@ -80,6 +80,30 @@ def _validate_persistence_records(store: str, path: Path) -> None:
                 raise ValueError("GitOps tenant exceeds the shared schema contract")
 
 
+def _validate_idempotency_records(path: Path) -> None:
+    """Reject idempotency backup rows that the legacy importer cannot accept."""
+    with sqlite3.connect(path) as connection:
+        rows = connection.execute(
+            "SELECT run_id, event_type, evidence_json, status, claim_token "
+            "FROM audit_idempotency"
+        ).fetchall()
+    for run_id, event_type, evidence_text, status, claim_token in rows:
+        if (
+            not isinstance(run_id, str)
+            or not isinstance(event_type, str)
+            or len(run_id) > 255
+            or len(event_type) > 255
+            or status not in {"pending", "emitted"}
+            or not isinstance(claim_token, str)
+            or len(claim_token) > 64
+            or (status == "pending" and not claim_token)
+        ):
+            raise ValueError("Audit idempotency backup contains invalid claims")
+        evidence = json.loads(evidence_text)
+        if not isinstance(evidence, dict):
+            raise ValueError("Audit idempotency evidence must be an object")
+
+
 def _load_copy(store: str, path: Path) -> int:
     _validate_persistence_records(store, path)
     if store == "audit":
@@ -98,6 +122,7 @@ def _load_copy(store: str, path: Path) -> int:
             raise ValueError(f"Audit hash chain failed at event {integrity.first_invalid_index}")
         return integrity.event_count
     if store == "idempotency":
+        _validate_idempotency_records(path)
         health = PersistentAuditHealthChecker(path).inspect()
         if not health.evidence.get("consistent") or health.evidence.get("malformed_evidence_claims", 0):
             raise ValueError("Audit idempotency backup contains inconsistent claims")

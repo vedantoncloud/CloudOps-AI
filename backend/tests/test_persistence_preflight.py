@@ -344,3 +344,35 @@ def test_preflight_rejects_duplicate_creation_order_values(tmp_path, store_name)
         "status": "invalid",
         "reason": "application_validation_failed",
     }
+
+
+@pytest.mark.parametrize("invalid_metadata", [[], "", 0, False])
+def test_preflight_rejects_non_object_gitops_metadata_even_when_empty(
+    tmp_path, invalid_metadata
+):
+    paths = _build_stores(tmp_path)
+    payload = {
+        "change_id": "change-invalid-metadata",
+        "source_action_id": "plan-1",
+        "changes": [],
+        "status": "pending",
+        "requires_approval": True,
+        "approved_by": None,
+        "commit_message": "invalid metadata test",
+        "metadata": invalid_metadata,
+    }
+    with sqlite3.connect(paths["gitops_changes"]) as connection:
+        connection.execute(
+            "INSERT INTO gitops_change_sets VALUES (?, ?, ?)",
+            ("change-invalid-metadata", json.dumps(payload), 1),
+        )
+
+    report = preflight(paths)
+
+    assert report["status"] == "not_ready"
+    store = next(item for item in report["stores"] if item["store"] == "gitops_changes")
+    assert store == {
+        "store": "gitops_changes",
+        "status": "invalid",
+        "reason": "application_validation_failed",
+    }

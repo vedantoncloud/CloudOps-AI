@@ -190,3 +190,45 @@ def test_restore_drill_rejects_import_invalid_plan_and_gitops_records(
     with pytest.raises(ValueError, match=expected_error):
         verify_backup(store, backup)
     assert backup.read_bytes() == original
+
+
+@pytest.mark.parametrize(
+    ("column_update", "params", "expected_error"),
+    [
+        (
+            "UPDATE audit_idempotency SET evidence_json = ?",
+            ('["not", "an", "object"]',),
+            "evidence must be an object",
+        ),
+        (
+            "UPDATE audit_idempotency SET status = ?",
+            ("unknown",),
+            "invalid claims",
+        ),
+        (
+            "UPDATE audit_idempotency SET status = 'pending', claim_token = ?",
+            ("",),
+            "invalid claims",
+        ),
+        (
+            "UPDATE audit_idempotency SET run_id = ?",
+            ("r" * 256,),
+            "invalid claims",
+        ),
+    ],
+)
+def test_restore_drill_rejects_idempotency_records_import_would_reject(
+    tmp_path, column_update, params, expected_error
+):
+    backup = tmp_path / "invalid-idempotency.db"
+    store = PersistentAuditIdempotencyStore(backup)
+    claim = store.claim("run-1", "failure", {"result": "failed"})
+    assert store.mark_emitted("run-1", "failure", claim.claim_token)
+    store.close()
+    with sqlite3.connect(backup) as connection:
+        connection.execute(column_update, params)
+
+    original = backup.read_bytes()
+    with pytest.raises(ValueError, match=expected_error):
+        verify_backup("idempotency", backup)
+    assert backup.read_bytes() == original
