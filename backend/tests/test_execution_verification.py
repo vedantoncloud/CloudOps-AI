@@ -449,3 +449,57 @@ def test_verification_exception_without_rollback_support_marks_action_failed():
     failure = audit.get_events(action.action_id)[-1]
     assert failure.new_status == ActionStatus.FAILED.value
     assert failure.details["rollback_required"] is False
+
+
+class FailingAuditTrail(AuditTrail):
+    def __init__(self, *, fail_on_call):
+        super().__init__()
+        self.fail_on_call = fail_on_call
+        self.record_calls = 0
+
+    def record(self, **kwargs):
+        self.record_calls += 1
+        if self.record_calls == self.fail_on_call:
+            raise OSError("audit storage unavailable")
+        return super().record(**kwargs)
+
+
+def test_execution_audit_persistence_failure_marks_action_for_recovery():
+    audit = FailingAuditTrail(fail_on_call=1)
+    bridge = ExecutionVerificationBridge(
+        executor=FakeExecutor(),
+        audit_trail=audit,
+    )
+    action = make_action()
+
+    try:
+        bridge.execute_and_verify(action)
+        assert False, "Expected audit persistence error"
+    except OSError as exc:
+        assert "audit storage unavailable" in str(exc)
+
+    assert action.status == ActionStatus.ROLLBACK_REQUIRED
+    # The recovery audit write also fails, but must not mask the original error.
+    assert audit.record_calls == 2
+    assert audit.get_events(action.action_id) == []
+
+
+def test_verification_audit_persistence_failure_marks_success_for_recovery():
+    audit = FailingAuditTrail(fail_on_call=2)
+    bridge = ExecutionVerificationBridge(
+        executor=FakeExecutor(),
+        audit_trail=audit,
+    )
+    action = make_action()
+
+    try:
+        bridge.execute_and_verify(action)
+        assert False, "Expected audit persistence error"
+    except OSError as exc:
+        assert "audit storage unavailable" in str(exc)
+
+    assert action.status == ActionStatus.ROLLBACK_REQUIRED
+    events = audit.get_events(action.action_id)
+    assert len(events) == 1
+    assert events[0].event == "action_execution_completed"
+    assert audit.record_calls == 3
