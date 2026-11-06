@@ -138,28 +138,42 @@ class GitOpsChangeSetRegistry:
         value = change_set.metadata.get("tenant_id")
         return value if isinstance(value, str) else None
 
-    def _load_shared_one(self, change_id: str) -> GitOpsChangeSet | None:
+    def _load_shared_one(
+        self,
+        change_id: str,
+        tenant_id: str | None = None,
+        *,
+        tenant_scoped: bool = False,
+    ) -> GitOpsChangeSet | None:
         assert self._engine is not None
+        statement = (
+            "SELECT payload, tenant_id FROM gitops_change_sets "
+            "WHERE change_id = :change_id"
+        )
+        parameters = {"change_id": change_id}
+        if tenant_scoped:
+            statement += " AND tenant_id = :tenant_id"
+            parameters["tenant_id"] = tenant_id
         with self._engine.connect() as connection:
-            row = connection.execute(
-                text(
-                    "SELECT payload, tenant_id FROM gitops_change_sets "
-                    "WHERE change_id = :change_id"
-                ),
-                {"change_id": change_id},
-            ).first()
+            row = connection.execute(text(statement), parameters).first()
         return self._decode(row[0], row[1]) if row else None
 
-    def _load_shared_all(self) -> list[GitOpsChangeSet]:
+    def _load_shared_all(
+        self,
+        tenant_id: str | None = None,
+        *,
+        tenant_scoped: bool = False,
+    ) -> list[GitOpsChangeSet]:
         assert self._engine is not None
+        statement = "SELECT payload, tenant_id FROM gitops_change_sets"
+        parameters = {}
+        if tenant_scoped:
+            statement += " WHERE tenant_id = :tenant_id"
+            parameters["tenant_id"] = tenant_id
+        statement += " ORDER BY created_order"
         with self._engine.connect() as connection:
-            rows = connection.execute(
-                text(
-                    "SELECT payload, tenant_id FROM gitops_change_sets "
-                    "ORDER BY created_order"
-                )
-            ).all()
-        return [self._decode(payload, tenant_id) for payload, tenant_id in rows]
+            rows = connection.execute(text(statement), parameters).all()
+        return [self._decode(payload, stored_tenant) for payload, stored_tenant in rows]
 
     def _record_audit_on_connection(self, connection, audit_event: dict | None) -> bool:
         if not audit_event or not getattr(self.audit_trail, "uses_shared_database", False):
@@ -373,19 +387,43 @@ class GitOpsChangeSetRegistry:
 
         return change_set
 
-    def get(self, change_id: str) -> GitOpsChangeSet | None:
+    def get(
+        self,
+        change_id: str,
+        tenant_id: str | None = None,
+        *,
+        tenant_scoped: bool = False,
+    ) -> GitOpsChangeSet | None:
         with self._lock:
             if self._engine is not None:
-                change_set = self._load_shared_one(change_id)
-                if change_set is None:
-                    self._changes.pop(change_id, None)
-                else:
-                    self._changes[change_id] = change_set
+                change_set = self._load_shared_one(
+                    change_id, tenant_id, tenant_scoped=tenant_scoped
+                )
+                if not tenant_scoped:
+                    if change_set is None:
+                        self._changes.pop(change_id, None)
+                    else:
+                        self._changes[change_id] = change_set
                 return change_set
-            return self._changes.get(change_id)
+            change_set = self._changes.get(change_id)
+            if (
+                tenant_scoped
+                and change_set is not None
+                and change_set.metadata.get("tenant_id") != tenant_id
+            ):
+                return None
+            return change_set
 
-    def require(self, change_id: str) -> GitOpsChangeSet:
-        change_set = self.get(change_id)
+    def require(
+        self,
+        change_id: str,
+        tenant_id: str | None = None,
+        *,
+        tenant_scoped: bool = False,
+    ) -> GitOpsChangeSet:
+        change_set = self.get(
+            change_id, tenant_id, tenant_scoped=tenant_scoped
+        )
         if change_set is None:
             raise KeyError(f"GitOps change set not found: {change_id}")
         return change_set
@@ -396,23 +434,43 @@ class GitOpsChangeSetRegistry:
         tenant_id: str | None,
         tenant_scoped: bool,
     ) -> GitOpsChangeSet:
-        change_set = self.require(change_id)
-        if tenant_scoped and change_set.metadata.get("tenant_id") != tenant_id:
-            raise KeyError(f"GitOps change set not found: {change_id}")
-        return change_set
+        return self.require(
+            change_id, tenant_id, tenant_scoped=tenant_scoped
+        )
 
-    def list_all(self) -> list[GitOpsChangeSet]:
+    def list_all(
+        self,
+        tenant_id: str | None = None,
+        *,
+        tenant_scoped: bool = False,
+    ) -> list[GitOpsChangeSet]:
         with self._lock:
             if self._engine is not None:
-                changes = self._load_shared_all()
-                self._changes = {item.change_id: item for item in changes}
+                changes = self._load_shared_all(
+                    tenant_id, tenant_scoped=tenant_scoped
+                )
+                if not tenant_scoped:
+                    self._changes = {item.change_id: item for item in changes}
                 return changes
-            return list(self._changes.values())
+            changes = list(self._changes.values())
+            if tenant_scoped:
+                changes = [
+                    item for item in changes
+                    if item.metadata.get("tenant_id") == tenant_id
+                ]
+            return changes
 
-    def list_pending(self) -> list[GitOpsChangeSet]:
+    def list_pending(
+        self,
+        tenant_id: str | None = None,
+        *,
+        tenant_scoped: bool = False,
+    ) -> list[GitOpsChangeSet]:
         return [
             change_set
-            for change_set in self.list_all()
+            for change_set in self.list_all(
+                tenant_id, tenant_scoped=tenant_scoped
+            )
             if change_set.status == GitOpsChangeStatus.PENDING_APPROVAL
         ]
 
