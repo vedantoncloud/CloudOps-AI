@@ -449,3 +449,41 @@ def test_runner_value_error_becomes_bad_request():
 
     assert response.status_code == 400
     assert response.json()["detail"] == "resource rejected"
+
+
+def test_token_authenticated_reviewer_identity_overrides_forged_claims():
+    fake = FakeRunner("completed")
+    client = make_tenant_client(fake)
+    headers = {"Authorization": "Bearer tenant-token"}
+
+    approved_payload = payload("run-api-token-approved")
+    approved_payload["approved_by"] = "forged-admin"
+    approved = client.post(
+        "/autonomy/run",
+        headers=headers,
+        json=approved_payload,
+    )
+
+    rejected_payload = payload("run-api-token-rejected")
+    rejected_payload.update(
+        {
+            "rejected_by": "forged-reviewer",
+            "rejection_reason": "Risk is too high",
+        }
+    )
+    rejected = client.post(
+        "/autonomy/run",
+        headers=headers,
+        json=rejected_payload,
+    )
+
+    assert approved.status_code == 200
+    assert rejected.status_code == 200
+    assert len(fake.calls) == 2
+    assert fake.calls[0]["approved_by"] == "shared-subject"
+    assert fake.calls[0]["rejected_by"] is None
+    assert fake.calls[1]["approved_by"] is None
+    assert fake.calls[1]["rejected_by"] == "shared-subject"
+    assert all(call["actor_id"] == "shared-subject" for call in fake.calls)
+    assert all(call["tenant_id"] == "tenant-a" for call in fake.calls)
+    assert fake.calls[1]["rejection_reason"] == "Risk is too high"
