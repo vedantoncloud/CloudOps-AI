@@ -246,7 +246,7 @@ def test_tenant_trace_uses_repository_scoped_gitops_read(monkeypatch):
     app.add_middleware(
         AccessControlMiddleware,
         mode="token",
-        tokens={"operator-token": __import__("auth").Principal("alice", "operator", "account-a")},
+        tokens={"operator-token": Principal("alice", "operator", "account-a")},
     )
     app.include_router(router)
     response = TestClient(app).get(
