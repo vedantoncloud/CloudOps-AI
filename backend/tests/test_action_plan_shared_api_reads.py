@@ -3,6 +3,7 @@
 from types import SimpleNamespace
 
 import pytest
+from fastapi import HTTPException
 from alembic import command
 from alembic.config import Config
 
