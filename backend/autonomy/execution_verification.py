@@ -80,24 +80,35 @@ class ExecutionVerificationBridge:
 
         executing_status = action.status.value
 
-        self.audit_trail.record(
-            action_id=action.action_id,
-            action_type=action.action_type,
-            resource_type=action.target.resource_type,
-            resource_id=action.target.resource_id,
-            old_status=old_status,
-            new_status=executing_status,
-            event="action_execution_completed",
-            actor_id=actor_id,
-            details={
-                "dry_run": execution_result.dry_run,
-                "executed": execution_result.executed,
-                "successful": execution_result.successful,
-                "message": execution_result.message,
-                **dict(execution_result.details),
-                **({"tenant_id": tenant_id} if tenant_id is not None else {}),
-            },
-        )
+        try:
+            self.audit_trail.record(
+                action_id=action.action_id,
+                action_type=action.action_type,
+                resource_type=action.target.resource_type,
+                resource_id=action.target.resource_id,
+                old_status=old_status,
+                new_status=executing_status,
+                event="action_execution_completed",
+                actor_id=actor_id,
+                details={
+                    "dry_run": execution_result.dry_run,
+                    "executed": execution_result.executed,
+                    "successful": execution_result.successful,
+                    "message": execution_result.message,
+                    **dict(execution_result.details),
+                    **({"tenant_id": tenant_id} if tenant_id is not None else {}),
+                },
+            )
+        except Exception as exc:
+            self._record_verification_failure(
+                action,
+                old_status=executing_status,
+                event="action_execution_audit_failed",
+                error=exc,
+                actor_id=actor_id,
+                tenant_id=tenant_id,
+            )
+            raise
 
         if execution_hook is not None:
             try:
@@ -147,17 +158,28 @@ class ExecutionVerificationBridge:
         if verification_details:
             details.update(verification_details)
 
-        self.audit_trail.record(
-            action_id=action.action_id,
-            action_type=action.action_type,
-            resource_type=action.target.resource_type,
-            resource_id=action.target.resource_id,
-            old_status=executing_status,
-            new_status=new_status,
-            event="action_verification_completed",
-            details={**details, **({"tenant_id": tenant_id} if tenant_id is not None else {})},
-            actor_id=actor_id,
-        )
+        try:
+            self.audit_trail.record(
+                action_id=action.action_id,
+                action_type=action.action_type,
+                resource_type=action.target.resource_type,
+                resource_id=action.target.resource_id,
+                old_status=executing_status,
+                new_status=new_status,
+                event="action_verification_completed",
+                details={**details, **({"tenant_id": tenant_id} if tenant_id is not None else {})},
+                actor_id=actor_id,
+            )
+        except Exception as exc:
+            self._record_verification_failure(
+                action,
+                old_status=new_status,
+                event="action_verification_audit_failed",
+                error=exc,
+                actor_id=actor_id,
+                tenant_id=tenant_id,
+            )
+            raise
 
         events = self.audit_trail.get_events(action.action_id)
 
@@ -233,17 +255,28 @@ class ExecutionVerificationBridge:
         if verification_details:
             details.update(verification_details)
 
-        self.audit_trail.record(
-            action_id=action.action_id,
-            action_type=action.action_type,
-            resource_type=action.target.resource_type,
-            resource_id=action.target.resource_id,
-            old_status=old_status,
-            new_status=new_status,
-            event="action_verification_completed",
-            details={**details, **({"tenant_id": tenant_id} if tenant_id is not None else {})},
-            actor_id=actor_id,
-        )
+        try:
+            self.audit_trail.record(
+                action_id=action.action_id,
+                action_type=action.action_type,
+                resource_type=action.target.resource_type,
+                resource_id=action.target.resource_id,
+                old_status=old_status,
+                new_status=new_status,
+                event="action_verification_completed",
+                details={**details, **({"tenant_id": tenant_id} if tenant_id is not None else {})},
+                actor_id=actor_id,
+            )
+        except Exception as exc:
+            self._record_verification_failure(
+                action,
+                old_status=new_status,
+                event="action_verification_audit_failed",
+                error=exc,
+                actor_id=actor_id,
+                tenant_id=tenant_id,
+            )
+            raise
 
         events = self.audit_trail.get_events(action.action_id)
 
@@ -286,7 +319,11 @@ class ExecutionVerificationBridge:
         or infrastructure mutation. Exception text is deliberately omitted
         from the audit payload to avoid leaking provider credentials/details.
         """
-        if action.status != ActionStatus.EXECUTING:
+        if action.status not in {
+            ActionStatus.EXECUTING,
+            ActionStatus.SUCCEEDED,
+            ActionStatus.FAILED,
+        }:
             return
 
         action.status = (
@@ -303,17 +340,22 @@ class ExecutionVerificationBridge:
         if tenant_id is not None:
             details["tenant_id"] = tenant_id
 
-        self.audit_trail.record(
-            action_id=action.action_id,
-            action_type=action.action_type,
-            resource_type=action.target.resource_type,
-            resource_id=action.target.resource_id,
-            old_status=old_status,
-            new_status=action.status.value,
-            event=event,
-            details=details,
-            actor_id=actor_id,
-        )
+        try:
+            self.audit_trail.record(
+                action_id=action.action_id,
+                action_type=action.action_type,
+                resource_type=action.target.resource_type,
+                resource_id=action.target.resource_id,
+                old_status=old_status,
+                new_status=action.status.value,
+                event=event,
+                details=details,
+                actor_id=actor_id,
+            )
+        except Exception:
+            # Preserve the recovery state and original failure if audit storage
+            # is unavailable; reconciliation can repair the missing record.
+            pass
 
     def _validate_action(self, action: ActionPlan) -> None:
         if not action.action_id or not action.action_id.strip():
