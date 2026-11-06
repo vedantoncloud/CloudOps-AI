@@ -133,6 +133,10 @@ def _get_plan(action_id: str, request: Request | None = None):
 def _persist_plan(plan: ActionPlan, audit_event: dict | None = None) -> None:
     with _registry_lock:
         tenant_id = _plan_tenants.get(plan.action_id)
+        if audit_event is not None:
+            details = audit_event.get("details")
+            if isinstance(details, dict) and "tenant_id" in details:
+                tenant_id = details["tenant_id"]
         atomic_audit = (
             audit_event is not None
             and getattr(action_plan_store, "uses_shared_database", False)
