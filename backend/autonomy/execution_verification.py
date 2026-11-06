@@ -255,17 +255,28 @@ class ExecutionVerificationBridge:
         if verification_details:
             details.update(verification_details)
 
-        self.audit_trail.record(
-            action_id=action.action_id,
-            action_type=action.action_type,
-            resource_type=action.target.resource_type,
-            resource_id=action.target.resource_id,
-            old_status=old_status,
-            new_status=new_status,
-            event="action_verification_completed",
-            details={**details, **({"tenant_id": tenant_id} if tenant_id is not None else {})},
-            actor_id=actor_id,
-        )
+        try:
+            self.audit_trail.record(
+                action_id=action.action_id,
+                action_type=action.action_type,
+                resource_type=action.target.resource_type,
+                resource_id=action.target.resource_id,
+                old_status=old_status,
+                new_status=new_status,
+                event="action_verification_completed",
+                details={**details, **({"tenant_id": tenant_id} if tenant_id is not None else {})},
+                actor_id=actor_id,
+            )
+        except Exception as exc:
+            self._record_verification_failure(
+                action,
+                old_status=new_status,
+                event="action_verification_audit_failed",
+                error=exc,
+                actor_id=actor_id,
+                tenant_id=tenant_id,
+            )
+            raise
 
         events = self.audit_trail.get_events(action.action_id)
 
