@@ -85,8 +85,27 @@ def _store_plans(plans, tenant_id=None, audit_events=None):
             _plan_tenants[plan.action_id] = tenant_id
 
 
+def _refresh_shared_plan_registry_locked() -> None:
+    """Refresh API reads from the authoritative shared store across workers.
+
+    The in-memory dictionaries remain a compatibility cache for SQLite mode;
+    in shared mode they are replaced from one ordered database read before each
+    API lookup/list operation so another worker's writes become visible.
+    Caller must hold _registry_lock.
+    """
+    if not getattr(action_plan_store, "uses_shared_database", False):
+        return
+    stored_plans = action_plan_store.load_all()
+    _plan_registry.clear()
+    _plan_tenants.clear()
+    for stored_plan, stored_tenant in stored_plans:
+        _plan_registry[stored_plan.action_id] = stored_plan
+        _plan_tenants[stored_plan.action_id] = stored_tenant
+
+
 def _get_plan(action_id: str, request: Request | None = None):
     with _registry_lock:
+        _refresh_shared_plan_registry_locked()
         plan = _plan_registry.get(action_id)
         if plan is None:
             return None
@@ -311,6 +330,7 @@ def list_plans(
         raise HTTPException(status_code=422, detail="search must be at most 200 characters")
     normalized_search = search.strip().casefold() if search else ""
     with _registry_lock:
+        _refresh_shared_plan_registry_locked()
         plans = [
             plan for action_id, plan in _plan_registry.items()
             if (not getattr(request.state, "tenant_scoped", False)
@@ -361,6 +381,7 @@ def list_pending_approvals(
     if normalized_resource_type is not None and not normalized_resource_type:
         normalized_resource_type = None
     with _registry_lock:
+        _refresh_shared_plan_registry_locked()
         approvals = [
             plan for action_id, plan in _plan_registry.items()
             if plan.status == ActionStatus.PENDING_APPROVAL
