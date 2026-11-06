@@ -473,6 +473,36 @@ def test_foreign_gitops_change_cannot_be_mutated_and_actor_is_authenticated():
     assert approved.status_code == 200
     assert approved.json()["approved_by"] == "alice"
 
+    approval_events = [
+        event
+        for event in registry.audit_trail.get_events(action_id="action-api")
+        if event.resource_id == owned.change_id
+        and event.event == "gitops_change_approved"
+    ]
+    assert approval_events
+    assert approval_events[-1].actor_id == "alice"
+
+    rejected = make_change_set()
+    rejected.metadata["tenant_id"] = "tenant-a"
+    rejected.change_id = "change-rejected"
+    registry.register(rejected)
+    rejection = client.post(
+        f"/autonomy/gitops/changes/{rejected.change_id}/reject",
+        headers=headers,
+        json={"rejected_by": "forged", "reason": "Policy requirements not met"},
+    )
+    assert rejection.status_code == 200
+    assert rejection.json()["metadata"]["rejected_by"] == "alice"
+
+    rejection_events = [
+        event
+        for event in registry.audit_trail.get_events(action_id="action-api")
+        if event.resource_id == rejected.change_id
+        and event.event == "gitops_change_rejected"
+    ]
+    assert rejection_events
+    assert rejection_events[-1].actor_id == "alice"
+
 def test_gitops_csv_export_applies_search_status_and_tenant_scope():
     matching = make_change_set(reason="Resize production instance")
     matching.change_id = "change-matching"
