@@ -91,6 +91,9 @@ def test_shared_refresh_replaces_stale_cache_and_preserves_tenant_isolation(shar
 
     assert listed["total"] == 1
     assert [item["action_id"] for item in listed["plans"]] == ["owned-plan"]
+    # A tenant-scoped read must not replace the process-wide cache.
+    assert "stale-cache-only" in api._plan_registry
+    api.list_plans(_request())
     assert "stale-cache-only" not in api._plan_registry
     with pytest.raises(HTTPException) as error:
         api.get_plan("owned-plan", _request("tenant-b"))
@@ -135,3 +138,17 @@ def test_shared_store_load_all_applies_tenant_filter_in_repository(shared_stores
 
     assert [plan.action_id for plan, _tenant in tenant_a] == ["tenant-a-plan"]
     assert [plan.action_id for plan, _tenant in tenant_b] == ["tenant-b-plan"]
+
+
+def test_shared_tenant_reads_do_not_pollute_process_wide_cache(shared_stores):
+    writer, _reader = shared_stores
+    writer.save_many([_plan("visible-to-a")], "tenant-a")
+    writer.save_many([_plan("visible-to-b")], "tenant-b")
+
+    tenant_a = api.list_plans(_request("tenant-a"))
+    tenant_b = api.list_plans(_request("tenant-b"))
+
+    assert [item["action_id"] for item in tenant_a["plans"]] == ["visible-to-a"]
+    assert [item["action_id"] for item in tenant_b["plans"]] == ["visible-to-b"]
+    assert api._plan_registry == {}
+    assert api._plan_tenants == {}
