@@ -119,6 +119,7 @@ def test_shared_plan_lifecycle_write_rejects_stale_worker_and_returns_conflict(
             {
                 "old_status": ActionStatus.PENDING_APPROVAL.value,
                 "new_status": ActionStatus.APPROVED.value,
+                "details": {"tenant_id": "tenant-a"},
             },
         )
 
