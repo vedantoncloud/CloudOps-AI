@@ -201,3 +201,59 @@ def test_summary_limits_recent_audit_events():
     assert len(data["audit"]["recent_events"]) == 10
     assert data["audit"]["recent_events"][0]["action_id"] == "action-2"
     assert data["audit"]["recent_events"][-1]["action_id"] == "action-11"
+
+
+def test_tenant_trace_uses_repository_scoped_gitops_read(monkeypatch):
+    from auth import AccessControlMiddleware, Principal
+    from autonomy import control_plane_api
+
+    engine = GitOpsEngine()
+    change_set = engine.create_change_set(
+        source_action_id="action-tenant-trace",
+        changes=[
+            GitOpsChange(
+                resource_type="ec2",
+                resource_id="i-tenant-trace",
+                field="instance_type",
+                current_value="t3.small",
+                desired_value="t3.medium",
+            )
+        ],
+        requires_approval=True,
+    )
+    change_set.metadata["tenant_id"] = "account-a"
+    audit_trail.record(
+        action_id="action-tenant-trace",
+        action_type="gitops_change_registered",
+        resource_type="ec2",
+        resource_id="i-tenant-trace",
+        old_status="none",
+        new_status="pending_approval",
+        event="gitops_change_registered",
+        actor_id="alice",
+        details={"tenant_id": "account-a"},
+    )
+
+    calls = []
+
+    def scoped_list_all(tenant_id=None, *, tenant_scoped=False):
+        calls.append((tenant_id, tenant_scoped))
+        return [change_set]
+
+    monkeypatch.setattr(control_plane_api.gitops_registry, "list_all", scoped_list_all)
+
+    app = FastAPI()
+    app.add_middleware(
+        AccessControlMiddleware,
+        mode="token",
+        tokens={"operator-token": Principal("alice", "operator", "account-a")},
+    )
+    app.include_router(router)
+    response = TestClient(app).get(
+        "/autonomy/control-plane/actions/action-tenant-trace/trace",
+        headers={"Authorization": "Bearer operator-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["gitops"]["change_id"] == change_set.change_id
+    assert calls == [("account-a", True)]

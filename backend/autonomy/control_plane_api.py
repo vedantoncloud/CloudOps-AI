@@ -120,7 +120,10 @@ def get_action_trace(action_id: str, request: Request) -> ControlPlaneActionTrac
 
     changes = [
         change_set
-        for change_set in gitops_registry.list_all()
+        for change_set in gitops_registry.list_all(
+            tenant_id=tenant_id,
+            tenant_scoped=tenant_scoped,
+        )
         if change_set.source_action_id == action_id
         and (
             not tenant_scoped
