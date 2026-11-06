@@ -95,3 +95,31 @@ def test_shared_refresh_replaces_stale_cache_and_preserves_tenant_isolation(shar
     with pytest.raises(HTTPException) as error:
         api.get_plan("owned-plan", _request("tenant-b"))
     assert error.value.status_code == 404
+
+
+def test_shared_plan_lifecycle_write_rejects_stale_worker_and_returns_conflict(
+    shared_stores, monkeypatch
+):
+    writer, _reader = shared_stores
+    writer.save_many([_plan("stale-write")], "tenant-a")
+
+    # This API worker loads a pending snapshot before another worker commits
+    # the approval. Its later transition must not overwrite that decision.
+    stale_plan = api._get_plan("stale-write", _request("tenant-a"))
+    assert stale_plan.status == ActionStatus.PENDING_APPROVAL
+    writer.save_many([_plan("stale-write", ActionStatus.APPROVED)], "tenant-a")
+    monkeypatch.setattr(api, "audit_trail", SimpleNamespace(record=lambda **_event: None))
+
+    with pytest.raises(HTTPException) as error:
+        api._persist_plan(
+            stale_plan,
+            {
+                "old_status": ActionStatus.PENDING_APPROVAL.value,
+                "new_status": ActionStatus.APPROVED.value,
+            },
+        )
+
+    assert error.value.status_code == 409
+    persisted, tenant = writer.get("stale-write")
+    assert persisted.status == ActionStatus.APPROVED
+    assert tenant == "tenant-a"

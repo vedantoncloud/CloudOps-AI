@@ -123,17 +123,35 @@ def _persist_plan(plan: ActionPlan, audit_event: dict | None = None) -> None:
             and getattr(action_plan_store, "uses_shared_database", False)
             and getattr(audit_trail, "uses_shared_database", False)
         )
-        if atomic_audit:
-            action_plan_store.save_many(
-                [plan],
-                tenant_id,
-                audit_trail=audit_trail,
-                audit_events=[audit_event],
-            )
-        else:
-            action_plan_store.save_many([plan], tenant_id)
-            if audit_event is not None:
-                audit_trail.record(**audit_event)
+        expected_status = None
+        if (
+            audit_event is not None
+            and getattr(action_plan_store, "uses_shared_database", False)
+            and audit_event.get("old_status") in {status.value for status in ActionStatus}
+        ):
+            expected_status = ActionStatus(audit_event["old_status"])
+        try:
+            if atomic_audit:
+                action_plan_store.save_many(
+                    [plan],
+                    tenant_id,
+                    audit_trail=audit_trail,
+                    audit_events=[audit_event],
+                    expected_status=expected_status,
+                )
+            else:
+                action_plan_store.save_many(
+                    [plan], tenant_id, expected_status=expected_status
+                )
+                if audit_event is not None:
+                    audit_trail.record(**audit_event)
+        except ValueError as exc:
+            if "modified by another worker" in str(exc) or "ownership changed" in str(exc):
+                raise HTTPException(
+                    status_code=409,
+                    detail="Action plan changed in another worker; reload and retry.",
+                ) from exc
+            raise
 
 
 def _plan_response(plans, request: Request):

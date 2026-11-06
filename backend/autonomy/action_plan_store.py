@@ -139,10 +139,13 @@ class ActionPlanStore:
         *,
         audit_trail=None,
         audit_events: list[dict] | None = None,
+        expected_status: ActionStatus | None = None,
     ) -> None:
         plans = list(plans)
         if self._engine is not None:
-            self._save_many_shared(plans, tenant_id, audit_trail, audit_events or [])
+            self._save_many_shared(
+                plans, tenant_id, audit_trail, audit_events or [], expected_status
+            )
             return
         if audit_events:
             raise ValueError("atomic audit events require shared SQL action-plan storage")
@@ -163,13 +166,14 @@ class ActionPlanStore:
         tenant_id: str | None,
         audit_trail,
         audit_events: list[dict],
+        expected_status: ActionStatus | None,
     ) -> None:
         assert self._engine is not None
         dialect = self._engine.dialect.name
         if dialect == "mysql":
             with self._engine.begin() as connection:
                 self._save_many_locked(
-                    connection, plans, tenant_id, " FOR UPDATE", audit_trail, audit_events
+                    connection, plans, tenant_id, " FOR UPDATE", audit_trail, audit_events, expected_status
                 )
             return
         if dialect == "sqlite":
@@ -177,7 +181,7 @@ class ActionPlanStore:
                 connection.exec_driver_sql("BEGIN IMMEDIATE")
                 try:
                     self._save_many_locked(
-                        connection, plans, tenant_id, "", audit_trail, audit_events
+                        connection, plans, tenant_id, "", audit_trail, audit_events, expected_status
                     )
                     connection.commit()
                 except Exception:
@@ -194,6 +198,7 @@ class ActionPlanStore:
         lock_clause: str,
         audit_trail,
         audit_events: list[dict],
+        expected_status: ActionStatus | None,
     ) -> None:
         # Lock the allocator first so concurrent inserts and updates of the same
         # action_id cannot race while assigning a new creation order.
@@ -208,11 +213,11 @@ class ActionPlanStore:
         for plan in plans:
             existing_order = connection.execute(
                 text(
-                    "SELECT created_order FROM action_plans "
+                    "SELECT payload, tenant_id, created_order FROM action_plans "
                     "WHERE action_id = :action_id" + lock_clause
                 ),
                 {"action_id": plan.action_id},
-            ).scalar_one_or_none()
+            ).first()
             payload = self._encode(plan)
             if existing_order is None:
                 last_order += 1
@@ -230,6 +235,16 @@ class ActionPlanStore:
                     },
                 )
             else:
+                if expected_status is not None:
+                    stored_plan = self._decode(existing_order[0])
+                    if stored_plan.status != expected_status:
+                        raise ValueError(
+                            "Action plan was modified by another worker; reload and retry"
+                        )
+                    if existing_order[1] != tenant_id:
+                        raise ValueError(
+                            "Action plan tenant ownership changed; reload and retry"
+                        )
                 connection.execute(
                     text(
                         "UPDATE action_plans SET tenant_id = :tenant_id, payload = :payload "
