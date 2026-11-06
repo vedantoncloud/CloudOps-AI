@@ -123,3 +123,15 @@ def test_shared_plan_lifecycle_write_rejects_stale_worker_and_returns_conflict(
     persisted, tenant = writer.get("stale-write")
     assert persisted.status == ActionStatus.APPROVED
     assert tenant == "tenant-a"
+
+
+def test_shared_store_load_all_applies_tenant_filter_in_repository(shared_stores):
+    writer, reader = shared_stores
+    writer.save_many([_plan("tenant-a-plan")], "tenant-a")
+    writer.save_many([_plan("tenant-b-plan")], "tenant-b")
+
+    tenant_a = reader.load_all(tenant_id="tenant-a", tenant_scoped=True)
+    tenant_b = reader.load_all(tenant_id="tenant-b", tenant_scoped=True)
+
+    assert [plan.action_id for plan, _tenant in tenant_a] == ["tenant-a-plan"]
+    assert [plan.action_id for plan, _tenant in tenant_b] == ["tenant-b-plan"]
