@@ -479,9 +479,12 @@ def test_execution_audit_persistence_failure_marks_action_for_recovery():
         assert "audit storage unavailable" in str(exc)
 
     assert action.status == ActionStatus.ROLLBACK_REQUIRED
-    # The recovery audit write also fails, but must not mask the original error.
+    # The initial write fails; the best-effort recovery event is persisted.
     assert audit.record_calls == 2
-    assert audit.get_events(action.action_id) == []
+    events = audit.get_events(action.action_id)
+    assert len(events) == 1
+    assert events[0].event == "action_execution_audit_failed"
+    assert events[0].new_status == ActionStatus.ROLLBACK_REQUIRED.value
 
 
 def test_verification_audit_persistence_failure_marks_success_for_recovery():
@@ -500,8 +503,11 @@ def test_verification_audit_persistence_failure_marks_success_for_recovery():
 
     assert action.status == ActionStatus.ROLLBACK_REQUIRED
     events = audit.get_events(action.action_id)
-    assert len(events) == 1
-    assert events[0].event == "action_execution_completed"
+    assert [event.event for event in events] == [
+        "action_execution_completed",
+        "action_verification_audit_failed",
+    ]
+    assert events[-1].new_status == ActionStatus.ROLLBACK_REQUIRED.value
     assert audit.record_calls == 3
 
 
@@ -526,6 +532,9 @@ def test_standalone_verify_audit_failure_marks_action_for_recovery():
         assert "audit storage unavailable" in str(exc)
 
     assert action.status == ActionStatus.ROLLBACK_REQUIRED
-    # The recovery audit attempt also fails but does not mask the original.
+    # The best-effort recovery event is persisted after the first write fails.
     assert audit.record_calls == 2
-    assert audit.get_events(action.action_id) == []
+    events = audit.get_events(action.action_id)
+    assert len(events) == 1
+    assert events[0].event == "action_verification_audit_failed"
+    assert events[0].new_status == ActionStatus.ROLLBACK_REQUIRED.value
