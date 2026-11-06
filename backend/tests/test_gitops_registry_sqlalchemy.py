@@ -184,3 +184,33 @@ def test_shared_registry_checks_tenant_inside_transition(shared_database_url):
         assert registry.get(change_set.change_id).status == GitOpsChangeStatus.PENDING_APPROVAL
     finally:
         registry.close()
+
+
+
+def test_shared_registry_filters_tenant_reads_without_polluting_global_cache(shared_database_url):
+    writer = GitOpsChangeSetRegistry(database_url=shared_database_url)
+    reader = GitOpsChangeSetRegistry(database_url=shared_database_url)
+    tenant_a = _change_set("change-tenant-a")
+    tenant_b = _change_set("change-tenant-b")
+    tenant_b.metadata["tenant_id"] = "tenant-b"
+    try:
+        writer.register(tenant_a)
+        writer.register(tenant_b)
+
+        visible = reader.list_all("tenant-a", tenant_scoped=True)
+        pending = reader.list_pending("tenant-b", tenant_scoped=True)
+        detail = reader.get(
+            "change-tenant-a", "tenant-a", tenant_scoped=True
+        )
+        hidden = reader.get(
+            "change-tenant-b", "tenant-a", tenant_scoped=True
+        )
+
+        assert [item.change_id for item in visible] == ["change-tenant-a"]
+        assert [item.change_id for item in pending] == ["change-tenant-b"]
+        assert detail is not None and detail.change_id == "change-tenant-a"
+        assert hidden is None
+        assert reader._changes == {}
+    finally:
+        writer.close()
+        reader.close()
