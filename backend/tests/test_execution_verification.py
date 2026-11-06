@@ -503,3 +503,29 @@ def test_verification_audit_persistence_failure_marks_success_for_recovery():
     assert len(events) == 1
     assert events[0].event == "action_execution_completed"
     assert audit.record_calls == 3
+
+
+def test_standalone_verify_audit_failure_marks_action_for_recovery():
+    audit = FailingAuditTrail(fail_on_call=1)
+    bridge = ExecutionVerificationBridge(audit_trail=audit)
+    action = make_action(status=ActionStatus.EXECUTING)
+    execution = ExecutionResult(
+        action_id=action.action_id,
+        status=ActionStatus.EXECUTING,
+        dry_run=True,
+        executed=False,
+        successful=True,
+        message="completed",
+        details={},
+    )
+
+    try:
+        bridge.verify(action, execution)
+        assert False, "Expected audit persistence error"
+    except OSError as exc:
+        assert "audit storage unavailable" in str(exc)
+
+    assert action.status == ActionStatus.ROLLBACK_REQUIRED
+    # The recovery audit attempt also fails but does not mask the original.
+    assert audit.record_calls == 2
+    assert audit.get_events(action.action_id) == []
