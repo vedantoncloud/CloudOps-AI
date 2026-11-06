@@ -124,14 +124,14 @@ def _matching_changes(request: Request, status: str | None, search: str | None):
     if status is not None and status not in valid_statuses:
         raise HTTPException(status_code=400, detail="Invalid GitOps change status")
     normalized_search = search.strip().casefold() if search else ""
+    tenant_scoped = getattr(request.state, "tenant_scoped", False)
+    tenant_id = getattr(request.state, "tenant_id", None)
     return [
         change_set
-        for change_set in reversed(registry.list_all())
-        if (
-            not getattr(request.state, "tenant_scoped", False)
-            or change_set.metadata.get("tenant_id") == request.state.tenant_id
+        for change_set in reversed(
+            registry.list_all(tenant_id, tenant_scoped=tenant_scoped)
         )
-        and (status is None or change_set.status.value == status)
+        if (status is None or change_set.status.value == status)
         and (
             not normalized_search
             or normalized_search in " ".join((
@@ -208,9 +208,10 @@ def export_gitops_changes(
 def list_pending_gitops_changes(request: Request) -> list[GitOpsChangeResponse]:
     return [
         _serialize_change_set(change_set)
-        for change_set in registry.list_pending()
-        if not getattr(request.state, "tenant_scoped", False)
-        or change_set.metadata.get("tenant_id") == request.state.tenant_id
+        for change_set in registry.list_pending(
+            getattr(request.state, "tenant_id", None),
+            tenant_scoped=getattr(request.state, "tenant_scoped", False),
+        )
     ]
 
 
@@ -219,7 +220,11 @@ def list_pending_gitops_changes(request: Request) -> list[GitOpsChangeResponse]:
     response_model=GitOpsChangeResponse,
 )
 def get_gitops_change(change_id: str, request: Request) -> GitOpsChangeResponse:
-    change_set = registry.get(change_id)
+    change_set = registry.get(
+        change_id,
+        getattr(request.state, "tenant_id", None),
+        tenant_scoped=getattr(request.state, "tenant_scoped", False),
+    )
 
     if change_set is None:
         raise HTTPException(
@@ -240,7 +245,11 @@ def approve_gitops_change(
     http_request: Request,
 ) -> GitOpsChangeResponse:
     try:
-        _visible_change(registry.require(change_id), http_request)
+        registry.require(
+            change_id,
+            getattr(http_request.state, "tenant_id", None),
+            tenant_scoped=getattr(http_request.state, "tenant_scoped", False),
+        )
         change_set = registry.approve(
             change_id,
             _change_actor(http_request, request.approved_by),
@@ -355,7 +364,11 @@ def verify_gitops_change(
             tenant_scoped=getattr(http_request.state, "tenant_scoped", False),
         )
 
-        change_set = registry.require(change_id)
+        change_set = registry.require(
+            change_id,
+            getattr(http_request.state, "tenant_id", None),
+            tenant_scoped=getattr(http_request.state, "tenant_scoped", False),
+        )
 
         return VerifyResponse(
             change_id=change_id,
