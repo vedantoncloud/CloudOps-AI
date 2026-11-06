@@ -58,7 +58,9 @@ def test_shared_plan_detail_refreshes_from_another_worker(shared_stores):
 
     assert result["action"]["action_id"] == "cross-worker"
     assert result["action"]["status"] == ActionStatus.PENDING_APPROVAL.value
-    assert api._plan_tenants["cross-worker"] == "tenant-a"
+    # Tenant-scoped repository reads do not populate the process-wide cache.
+    assert "cross-worker" not in api._plan_registry
+    assert "cross-worker" not in api._plan_tenants
 
 
 def test_shared_plan_list_and_approval_queue_refresh_after_remote_transition(shared_stores):
