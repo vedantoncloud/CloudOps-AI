@@ -88,9 +88,10 @@ def test_shared_refresh_replaces_stale_cache_and_preserves_tenant_isolation(shar
     api._plan_tenants["stale-cache-only"] = "tenant-a"
 
     listed = api.list_plans(_request("tenant-a"))
-    hidden = api.get_plan("owned-plan", _request("tenant-b"))
 
     assert listed["total"] == 1
     assert [item["action_id"] for item in listed["plans"]] == ["owned-plan"]
     assert "stale-cache-only" not in api._plan_registry
-    with pytest.raises(Exception) as error:\n        api.get_plan("owned-plan", _request("tenant-b"))\n    assert getattr(error.value, "status_code", None) == 404
+    with pytest.raises(HTTPException) as error:
+        api.get_plan("owned-plan", _request("tenant-b"))
+    assert error.value.status_code == 404
