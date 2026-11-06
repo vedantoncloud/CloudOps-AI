@@ -283,7 +283,11 @@ def reject_gitops_change(
     http_request: Request,
 ) -> GitOpsChangeResponse:
     try:
-        _visible_change(registry.require(change_id), http_request)
+        registry.require(
+            change_id,
+            getattr(http_request.state, "tenant_id", None),
+            tenant_scoped=getattr(http_request.state, "tenant_scoped", False),
+        )
         change_set = registry.reject(
             change_id,
             _change_actor(http_request, request.rejected_by),
@@ -318,7 +322,11 @@ def apply_gitops_change(
     http_request: Request,
 ) -> ApplyResponse:
     try:
-        _visible_change(registry.require(change_id), http_request)
+        registry.require(
+            change_id,
+            getattr(http_request.state, "tenant_id", None),
+            tenant_scoped=getattr(http_request.state, "tenant_scoped", False),
+        )
         result = registry.apply(
             change_id,
             dry_run=request.dry_run,
@@ -354,7 +362,11 @@ def verify_gitops_change(
     http_request: Request,
 ) -> VerifyResponse:
     try:
-        _visible_change(registry.require(change_id), http_request)
+        registry.require(
+            change_id,
+            getattr(http_request.state, "tenant_id", None),
+            tenant_scoped=getattr(http_request.state, "tenant_scoped", False),
+        )
         verified = registry.verify(
             change_id,
             observed_values=request.observed_values,
