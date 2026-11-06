@@ -85,39 +85,58 @@ def _store_plans(plans, tenant_id=None, audit_events=None):
             _plan_tenants[plan.action_id] = tenant_id
 
 
-def _refresh_shared_plan_registry_locked() -> None:
-    """Refresh API reads from the authoritative shared store across workers.
+def _refresh_shared_plan_registry_locked(request: Request | None = None):
+    """Read authoritative shared state, caching only unscoped snapshots.
 
-    The in-memory dictionaries remain a compatibility cache for SQLite mode;
-    in shared mode they are replaced from one ordered database read before each
-    API lookup/list operation so another worker's writes become visible.
+    Tenant-scoped reads are returned to the caller without replacing the
+    process-wide cache, which may concurrently serve another tenant.
     Caller must hold _registry_lock.
     """
     if not getattr(action_plan_store, "uses_shared_database", False):
-        return
-    stored_plans = action_plan_store.load_all()
-    _plan_registry.clear()
-    _plan_tenants.clear()
-    for stored_plan, stored_tenant in stored_plans:
-        _plan_registry[stored_plan.action_id] = stored_plan
-        _plan_tenants[stored_plan.action_id] = stored_tenant
+        return None
+    tenant_scoped = bool(
+        request is not None and getattr(request.state, "tenant_scoped", False)
+    )
+    tenant_id = request.state.tenant_id if tenant_scoped else None
+    stored_plans = action_plan_store.load_all(
+        tenant_id=tenant_id, tenant_scoped=tenant_scoped
+    )
+    if not tenant_scoped:
+        _plan_registry.clear()
+        _plan_tenants.clear()
+        for stored_plan, stored_tenant in stored_plans:
+            _plan_registry[stored_plan.action_id] = stored_plan
+            _plan_tenants[stored_plan.action_id] = stored_tenant
+    return stored_plans
 
 
 def _get_plan(action_id: str, request: Request | None = None):
     with _registry_lock:
-        _refresh_shared_plan_registry_locked()
-        plan = _plan_registry.get(action_id)
+        stored_plans = _refresh_shared_plan_registry_locked(request)
+        if stored_plans is None:
+            plan = _plan_registry.get(action_id)
+            tenant_id = _plan_tenants.get(action_id)
+        else:
+            match = next(
+                ((plan, tenant) for plan, tenant in stored_plans
+                 if plan.action_id == action_id),
+                None,
+            )
+            plan, tenant_id = match if match is not None else (None, None)
         if plan is None:
             return None
         if request is not None and getattr(request.state, "tenant_scoped", False):
-            if _plan_tenants.get(action_id) != request.state.tenant_id:
+            if tenant_id != request.state.tenant_id:
                 return None
         return plan
-
 
 def _persist_plan(plan: ActionPlan, audit_event: dict | None = None) -> None:
     with _registry_lock:
         tenant_id = _plan_tenants.get(plan.action_id)
+        if audit_event is not None:
+            details = audit_event.get("details")
+            if isinstance(details, dict) and "tenant_id" in details:
+                tenant_id = details["tenant_id"]
         atomic_audit = (
             audit_event is not None
             and getattr(action_plan_store, "uses_shared_database", False)
@@ -348,11 +367,19 @@ def list_plans(
         raise HTTPException(status_code=422, detail="search must be at most 200 characters")
     normalized_search = search.strip().casefold() if search else ""
     with _registry_lock:
-        _refresh_shared_plan_registry_locked()
+        stored_plans = _refresh_shared_plan_registry_locked(request)
+        source_plans = (
+            stored_plans
+            if stored_plans is not None
+            else [
+                (plan, _plan_tenants.get(action_id))
+                for action_id, plan in _plan_registry.items()
+            ]
+        )
         plans = [
-            plan for action_id, plan in _plan_registry.items()
+            plan for plan, tenant_id in source_plans
             if (not getattr(request.state, "tenant_scoped", False)
-                or _plan_tenants.get(action_id) == request.state.tenant_id)
+                or tenant_id == request.state.tenant_id)
             and (status is None or plan.status == status)
             and (risk is None or plan.risk == risk)
             and (resource_type is None or plan.target.resource_type == resource_type)
@@ -399,17 +426,25 @@ def list_pending_approvals(
     if normalized_resource_type is not None and not normalized_resource_type:
         normalized_resource_type = None
     with _registry_lock:
-        _refresh_shared_plan_registry_locked()
+        stored_plans = _refresh_shared_plan_registry_locked(request)
+        source_plans = (
+            stored_plans
+            if stored_plans is not None
+            else [
+                (plan, _plan_tenants.get(action_id))
+                for action_id, plan in _plan_registry.items()
+            ]
+        )
         approvals = [
-            plan for action_id, plan in _plan_registry.items()
+            plan for plan, tenant_id in source_plans
             if plan.status == ActionStatus.PENDING_APPROVAL
             and (not getattr(request.state, "tenant_scoped", False)
-                 or _plan_tenants.get(action_id) == request.state.tenant_id)
+                 or tenant_id == request.state.tenant_id)
             and (risk is None or plan.risk == risk)
             and (normalized_resource_type is None
                  or plan.target.resource_type == normalized_resource_type)
             and (not normalized_search or normalized_search in " ".join((
-                action_id, plan.action_type, plan.target.resource_id, plan.reason,
+                plan.action_id, plan.action_type, plan.target.resource_id, plan.reason,
             )).casefold())
         ]
     dated = [plan for plan in approvals if plan.created_at is not None]

@@ -291,22 +291,36 @@ class ActionPlanStore:
             ).fetchone()
         return (self._decode(row[0]), row[1]) if row else None
 
-    def load_all(self) -> list[tuple[ActionPlan, str | None]]:
+    def load_all(
+        self,
+        tenant_id: str | None = None,
+        *,
+        tenant_scoped: bool = False,
+    ) -> list[tuple[ActionPlan, str | None]]:
+        """Load plans, applying tenant ownership in SQL when the caller is scoped."""
         if self._engine is not None:
+            statement = "SELECT payload, tenant_id FROM action_plans"
+            parameters = {}
+            if tenant_scoped:
+                statement += " WHERE tenant_id = :tenant_id"
+                parameters["tenant_id"] = tenant_id
+            statement += " ORDER BY created_order"
             with self._engine.connect() as connection:
-                rows = connection.execute(
-                    text(
-                        "SELECT payload, tenant_id FROM action_plans "
-                        "ORDER BY created_order"
-                    )
-                ).all()
-            return [(self._decode(payload), tenant_id) for payload, tenant_id in rows]
+                rows = connection.execute(text(statement), parameters).all()
+            return [(self._decode(payload), stored_tenant) for payload, stored_tenant in rows]
 
         with self._connect() as connection:
-            rows = connection.execute(
-                "SELECT payload, tenant_id FROM action_plans ORDER BY created_order"
-            ).fetchall()
-        return [(self._decode(payload), tenant_id) for payload, tenant_id in rows]
+            if tenant_scoped:
+                rows = connection.execute(
+                    "SELECT payload, tenant_id FROM action_plans "
+                    "WHERE tenant_id = ? ORDER BY created_order",
+                    (tenant_id,),
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    "SELECT payload, tenant_id FROM action_plans ORDER BY created_order"
+                ).fetchall()
+        return [(self._decode(payload), stored_tenant) for payload, stored_tenant in rows]
 
     def close(self) -> None:
         if self._engine is not None:

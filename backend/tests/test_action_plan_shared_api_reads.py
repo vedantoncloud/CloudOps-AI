@@ -58,7 +58,9 @@ def test_shared_plan_detail_refreshes_from_another_worker(shared_stores):
 
     assert result["action"]["action_id"] == "cross-worker"
     assert result["action"]["status"] == ActionStatus.PENDING_APPROVAL.value
-    assert api._plan_tenants["cross-worker"] == "tenant-a"
+    # Tenant-scoped repository reads do not populate the process-wide cache.
+    assert "cross-worker" not in api._plan_registry
+    assert "cross-worker" not in api._plan_tenants
 
 
 def test_shared_plan_list_and_approval_queue_refresh_after_remote_transition(shared_stores):
@@ -91,6 +93,9 @@ def test_shared_refresh_replaces_stale_cache_and_preserves_tenant_isolation(shar
 
     assert listed["total"] == 1
     assert [item["action_id"] for item in listed["plans"]] == ["owned-plan"]
+    # A tenant-scoped read must not replace the process-wide cache.
+    assert "stale-cache-only" in api._plan_registry
+    api.list_plans(_request())
     assert "stale-cache-only" not in api._plan_registry
     with pytest.raises(HTTPException) as error:
         api.get_plan("owned-plan", _request("tenant-b"))
@@ -116,6 +121,7 @@ def test_shared_plan_lifecycle_write_rejects_stale_worker_and_returns_conflict(
             {
                 "old_status": ActionStatus.PENDING_APPROVAL.value,
                 "new_status": ActionStatus.APPROVED.value,
+                "details": {"tenant_id": "tenant-a"},
             },
         )
 
@@ -123,3 +129,29 @@ def test_shared_plan_lifecycle_write_rejects_stale_worker_and_returns_conflict(
     persisted, tenant = writer.get("stale-write")
     assert persisted.status == ActionStatus.APPROVED
     assert tenant == "tenant-a"
+
+
+def test_shared_store_load_all_applies_tenant_filter_in_repository(shared_stores):
+    writer, reader = shared_stores
+    writer.save_many([_plan("tenant-a-plan")], "tenant-a")
+    writer.save_many([_plan("tenant-b-plan")], "tenant-b")
+
+    tenant_a = reader.load_all(tenant_id="tenant-a", tenant_scoped=True)
+    tenant_b = reader.load_all(tenant_id="tenant-b", tenant_scoped=True)
+
+    assert [plan.action_id for plan, _tenant in tenant_a] == ["tenant-a-plan"]
+    assert [plan.action_id for plan, _tenant in tenant_b] == ["tenant-b-plan"]
+
+
+def test_shared_tenant_reads_do_not_pollute_process_wide_cache(shared_stores):
+    writer, _reader = shared_stores
+    writer.save_many([_plan("visible-to-a")], "tenant-a")
+    writer.save_many([_plan("visible-to-b")], "tenant-b")
+
+    tenant_a = api.list_plans(_request("tenant-a"))
+    tenant_b = api.list_plans(_request("tenant-b"))
+
+    assert [item["action_id"] for item in tenant_a["plans"]] == ["visible-to-a"]
+    assert [item["action_id"] for item in tenant_b["plans"]] == ["visible-to-b"]
+    assert api._plan_registry == {}
+    assert api._plan_tenants == {}
