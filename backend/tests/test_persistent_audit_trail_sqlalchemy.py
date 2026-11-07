@@ -168,3 +168,11 @@ def test_sqlalchemy_audit_chain_scopes_tenant_reads_in_repository(shared_databas
         trail.close()
 
 
+
+def test_sqlalchemy_tenant_reads_fail_closed_without_tenant_identity(shared_database_url):
+    trail = PersistentAuditTrail(shared_database_url)
+    try:
+        _record(trail, 1)
+        assert trail.get_events(tenant_scoped=True) == []
+    finally:
+        trail.close()
