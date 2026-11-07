@@ -21,7 +21,7 @@ def upgrade() -> None:
     bind = op.get_bind()
     rows = bind.execute(
         sa.text("SELECT sequence, event_json FROM audit_events")
-    ).mappings()
+    ).mappings().all()
     for row in rows:
         try:
             event = json.loads(row["event_json"])
