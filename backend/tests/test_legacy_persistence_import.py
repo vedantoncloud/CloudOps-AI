@@ -344,6 +344,10 @@ def test_independent_reconciliation_detects_target_audit_chain_tampering(
             "audit_idempotency_records",
         ),
         (
+            "UPDATE audit_events SET tenant_id = 'tenant-drifted'",
+            "audit_tenant_attribution",
+        ),
+        (
             "UPDATE gitops_change_sets SET tenant_id = 'tenant-drifted'",
             "gitops_tenant_attribution",
         ),
