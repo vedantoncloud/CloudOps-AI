@@ -178,6 +178,24 @@ def reconcile(paths: dict[str, Path], database_url: str) -> dict[str, Any]:
                 if name == "audit_events" and not _audit_chain_valid(actual):
                     target_audit_chain_valid = False
                     mismatches.append("audit_events_hash_chain")
+                if name == "audit_events":
+                    normalized = []
+                    for row in actual:
+                        try:
+                            event = json.loads(row["event_json"])
+                            details = event.get("details", {})
+                            tenant = details.get("tenant_id") if isinstance(details, dict) else None
+                        except (TypeError, ValueError):
+                            tenant = None
+                        tenant = tenant if isinstance(tenant, str) else None
+                        if row.get("tenant_id") != tenant:
+                            mismatches.append("audit_tenant_attribution")
+                        normalized.append({
+                            "sequence": row["sequence"],
+                            "event_json": row["event_json"],
+                            "event_hash": row["event_hash"],
+                        })
+                    actual = normalized
                 if name == "gitops":
                     normalized = []
                     for row in actual:
