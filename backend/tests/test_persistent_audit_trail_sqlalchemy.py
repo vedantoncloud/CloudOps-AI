@@ -23,7 +23,7 @@ def shared_database_url(tmp_path, monkeypatch):
     command.downgrade(config, "base")
 
 
-def _record(trail, index):
+def _record(trail, index, tenant_id=None):
     return trail.record(
         action_id=f"action-{index}",
         action_type="test",
@@ -32,7 +32,7 @@ def _record(trail, index):
         old_status="pending",
         new_status="completed",
         event="test_completed",
-        details={"index": index},
+        details={"index": index, **({"tenant_id": tenant_id} if tenant_id else {})},
         actor_id="integration-test",
     )
 
@@ -137,3 +137,34 @@ def test_shared_audit_chain_requires_an_applied_schema(tmp_path):
     missing_url = f"sqlite:///{tmp_path / 'not-migrated.db'}"
     with pytest.raises(ValueError, match="run Alembic migrations first"):
         PersistentAuditTrail(missing_url)
+
+def test_sqlalchemy_audit_chain_scopes_tenant_reads_in_repository(shared_database_url):
+    trail = PersistentAuditTrail(shared_database_url)
+    try:
+        _record(trail, 1, tenant_id="tenant-a")
+        _record(trail, 2, tenant_id="tenant-b")
+        _record(trail, 3)
+
+        tenant_a = trail.get_events(tenant_id="tenant-a", tenant_scoped=True)
+        tenant_b = trail.get_events(tenant_id="tenant-b", tenant_scoped=True)
+        assert [event.action_id for event in tenant_a] == ["action-1"]
+        assert [event.action_id for event in tenant_b] == ["action-2"]
+
+        engine = create_engine(shared_database_url, future=True)
+        try:
+            with engine.connect() as connection:
+                rows = connection.execute(
+                    text(
+                        "SELECT tenant_id FROM audit_events "
+                        "WHERE tenant_id = :tenant_id ORDER BY sequence"
+                    ),
+                    {"tenant_id": "tenant-a"},
+                ).all()
+            assert [row.tenant_id for row in rows] == ["tenant-a"]
+        finally:
+            engine.dispose()
+        assert trail.get_integrity_diagnostics().valid
+    finally:
+        trail.close()
+
+
