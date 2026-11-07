@@ -228,13 +228,12 @@ class PersistentAuditTrail(AuditTrail):
         parameters = {}
         if tenant_scoped:
             if tenant_id is None:
-                clauses.append("tenant_id IS NULL")
-            else:
-                clauses.append("tenant_id = :tenant_id")
-                parameters["tenant_id"] = tenant_id
+                return []
+            clauses.append("tenant_id = :tenant_id")
+            parameters["tenant_id"] = tenant_id
         where = " WHERE " + " AND ".join(clauses) if clauses else ""
         statement = (
-            "SELECT event_json FROM audit_events" + where + " ORDER BY sequence"
+            "SELECT event_json, tenant_id FROM audit_events" + where + " ORDER BY sequence"
         )
         if self._engine is not None:
             assert self._engine is not None
@@ -245,7 +244,12 @@ class PersistentAuditTrail(AuditTrail):
             sqlite_parameters = tuple(parameters.values())
             with observed_sqlite_connection(self._connect, "audit_events") as connection:
                 rows = connection.execute(sqlite_statement, sqlite_parameters).fetchall()
-        events = [self._event_from_json(row["event_json"]) for row in rows]
+        events = []
+        for row in rows:
+            event = self._event_from_json(row["event_json"])
+            if self._event_tenant_id(event) != row["tenant_id"]:
+                continue
+            events.append(event)
         if action_id is not None:
             events = [event for event in events if event.action_id == action_id]
         return events
