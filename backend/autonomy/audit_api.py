@@ -182,11 +182,14 @@ def _filter_audit_events(
     if start is not None and end is not None and start > end:
         raise HTTPException(status_code=422, detail="start_time must be at or before end_time")
 
-    events = audit_trail.get_events(
-        action_id=action_id,
-        tenant_id=tenant_id,
-        tenant_scoped=tenant_scoped,
-    )
+    if tenant_scoped:
+        events = audit_trail.get_events(
+            action_id=action_id,
+            tenant_id=tenant_id,
+            tenant_scoped=True,
+        )
+    else:
+        events = audit_trail.get_events(action_id=action_id)
 
     if resource_id is not None:
         events = [item for item in events if item.resource_id == resource_id]
