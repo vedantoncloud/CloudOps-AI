@@ -127,6 +127,8 @@ class AuditTrail:
         if action_id is not None:
             events = [item for item in events if item.action_id == action_id]
         if tenant_scoped:
+            if tenant_id is None:
+                return []
             events = [
                 item for item in events
                 if item.details.get("tenant_id") == tenant_id
