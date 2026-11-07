@@ -226,9 +226,6 @@ class PersistentAuditTrail(AuditTrail):
     ) -> list[AuditEvent]:
         clauses = []
         parameters = {}
-        if action_id is not None:
-            clauses.append("action_id = :action_id")
-            parameters["action_id"] = action_id
         if tenant_scoped:
             if tenant_id is None:
                 clauses.append("tenant_id IS NULL")
@@ -248,7 +245,10 @@ class PersistentAuditTrail(AuditTrail):
             sqlite_parameters = tuple(parameters.values())
             with observed_sqlite_connection(self._connect, "audit_events") as connection:
                 rows = connection.execute(sqlite_statement, sqlite_parameters).fetchall()
-        return [self._event_from_json(row["event_json"]) for row in rows]
+        events = [self._event_from_json(row["event_json"]) for row in rows]
+        if action_id is not None:
+            events = [event for event in events if event.action_id == action_id]
+        return events
 
     @staticmethod
     def _event_from_json(payload: str) -> AuditEvent:
