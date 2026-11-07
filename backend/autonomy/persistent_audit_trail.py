@@ -55,20 +55,20 @@ class PersistentAuditTrail(AuditTrail):
                 }
                 if "tenant_id" not in columns:
                     connection.execute("ALTER TABLE audit_events ADD COLUMN tenant_id TEXT")
-                legacy_rows = connection.execute(
-                    "SELECT sequence, event_json FROM audit_events WHERE tenant_id IS NULL"
-                ).fetchall()
-                for row in legacy_rows:
-                    try:
-                        details = json.loads(row["event_json"]).get("details", {})
-                        tenant_id = details.get("tenant_id") if isinstance(details, dict) else None
-                        if isinstance(tenant_id, str):
-                            connection.execute(
-                                "UPDATE audit_events SET tenant_id = ? WHERE sequence = ?",
-                                (tenant_id, row["sequence"]),
-                            )
-                    except (TypeError, ValueError, json.JSONDecodeError):
-                        continue
+                    legacy_rows = connection.execute(
+                        "SELECT sequence, event_json FROM audit_events WHERE tenant_id IS NULL"
+                    ).fetchall()
+                    for row in legacy_rows:
+                        try:
+                            details = json.loads(row["event_json"]).get("details", {})
+                            tenant_id = details.get("tenant_id") if isinstance(details, dict) else None
+                            if isinstance(tenant_id, str):
+                                connection.execute(
+                                    "UPDATE audit_events SET tenant_id = ? WHERE sequence = ?",
+                                    (tenant_id, row["sequence"]),
+                                )
+                        except (TypeError, ValueError, json.JSONDecodeError):
+                            continue
                 connection.execute(
                     "CREATE INDEX IF NOT EXISTS ix_audit_events_tenant_sequence "
                     "ON audit_events (tenant_id, sequence)"
