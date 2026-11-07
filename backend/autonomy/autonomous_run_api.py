@@ -59,7 +59,14 @@ def list_autonomous_runs(
         raise HTTPException(status_code=401, detail="Authenticated principal required")
 
     grouped: dict[str, list[Any]] = {}
-    for event in audit_trail.get_events():
+    if tenant_scoped:
+        audit_events = audit_trail.get_events(
+            tenant_id=tenant_id,
+            tenant_scoped=True,
+        )
+    else:
+        audit_events = audit_trail.get_events()
+    for event in audit_events:
         if event.actor_id != actor_id or not event.event.startswith("autonomous_"):
             continue
         if tenant_scoped and event.details.get("tenant_id") != tenant_id:
@@ -122,8 +129,16 @@ def get_autonomous_run(action_id: str, request: Request) -> dict[str, Any]:
     if not actor_id:
         raise HTTPException(status_code=401, detail="Authenticated principal required")
 
+    if tenant_scoped:
+        audit_events = audit_trail.get_events(
+            action_id=action_id,
+            tenant_id=tenant_id,
+            tenant_scoped=True,
+        )
+    else:
+        audit_events = audit_trail.get_events(action_id=action_id)
     events = [
-        event for event in audit_trail.get_events(action_id=action_id)
+        event for event in audit_events
         if event.actor_id == actor_id and event.event.startswith("autonomous_")
         and (not tenant_scoped or event.details.get("tenant_id") == tenant_id)
     ]
