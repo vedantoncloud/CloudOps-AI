@@ -44,8 +44,34 @@ class PersistentAuditTrail(AuditTrail):
                     """CREATE TABLE IF NOT EXISTS audit_events (
                         sequence INTEGER PRIMARY KEY AUTOINCREMENT,
                         event_json TEXT NOT NULL,
-                        event_hash TEXT NOT NULL
+                        event_hash TEXT NOT NULL,
+                        tenant_id TEXT
                     )"""
+                )
+                columns = {
+                    row["name"] for row in connection.execute(
+                        "PRAGMA table_info(audit_events)"
+                    ).fetchall()
+                }
+                if "tenant_id" not in columns:
+                    connection.execute("ALTER TABLE audit_events ADD COLUMN tenant_id TEXT")
+                    legacy_rows = connection.execute(
+                        "SELECT sequence, event_json FROM audit_events WHERE tenant_id IS NULL"
+                    ).fetchall()
+                    for row in legacy_rows:
+                        try:
+                            details = json.loads(row["event_json"]).get("details", {})
+                            tenant_id = details.get("tenant_id") if isinstance(details, dict) else None
+                            if isinstance(tenant_id, str):
+                                connection.execute(
+                                    "UPDATE audit_events SET tenant_id = ? WHERE sequence = ?",
+                                    (tenant_id, row["sequence"]),
+                                )
+                        except (TypeError, ValueError, json.JSONDecodeError):
+                            continue
+                connection.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_audit_events_tenant_sequence "
+                    "ON audit_events (tenant_id, sequence)"
                 )
 
     def _validate_shared_schema(self) -> None:
@@ -54,7 +80,7 @@ class PersistentAuditTrail(AuditTrail):
             with self._engine.connect() as connection:
                 connection.execute(
                     text(
-                        "SELECT sequence, event_json, event_hash "
+                        "SELECT sequence, event_json, event_hash, tenant_id "
                         "FROM audit_events LIMIT 0"
                     )
                 )
@@ -108,8 +134,13 @@ class PersistentAuditTrail(AuditTrail):
             previous_hash = row["event_hash"] if row else ""
             event_hash = self._calculate_hash(previous_hash, event)
             connection.execute(
-                "INSERT INTO audit_events (event_json, event_hash) VALUES (?, ?)",
-                (self._canonical_event(event).decode("utf-8"), event_hash),
+                "INSERT INTO audit_events (event_json, event_hash, tenant_id) "
+                "VALUES (?, ?, ?)",
+                (
+                    self._canonical_event(event).decode("utf-8"),
+                    event_hash,
+                    self._event_tenant_id(event),
+                ),
             )
         return event
 
@@ -158,13 +189,14 @@ class PersistentAuditTrail(AuditTrail):
         event_hash = self._calculate_hash(expected_hash, event)
         connection.execute(
             text(
-                "INSERT INTO audit_events (sequence, event_json, event_hash) "
-                "VALUES (:sequence, :event_json, :event_hash)"
+                "INSERT INTO audit_events (sequence, event_json, event_hash, tenant_id) "
+                "VALUES (:sequence, :event_json, :event_hash, :tenant_id)"
             ),
             {
                 "sequence": sequence,
                 "event_json": event_json,
                 "event_hash": event_hash,
+                "tenant_id": self._event_tenant_id(event),
             },
         )
         connection.execute(
@@ -180,21 +212,47 @@ class PersistentAuditTrail(AuditTrail):
         with self._engine.connect() as connection:
             return connection.execute(text(statement)).mappings().all()
 
-    def get_events(self, action_id: str | None = None) -> list[AuditEvent]:
+    @staticmethod
+    def _event_tenant_id(event: AuditEvent) -> str | None:
+        value = event.details.get("tenant_id")
+        return value if isinstance(value, str) else None
+
+    def get_events(
+        self,
+        action_id: str | None = None,
+        *,
+        tenant_id: str | None = None,
+        tenant_scoped: bool = False,
+    ) -> list[AuditEvent]:
+        clauses = []
+        parameters = {}
+        if tenant_scoped:
+            if tenant_id is None:
+                return []
+            clauses.append("tenant_id = :tenant_id")
+            parameters["tenant_id"] = tenant_id
+        where = " WHERE " + " AND ".join(clauses) if clauses else ""
+        statement = (
+            "SELECT event_json, tenant_id FROM audit_events" + where + " ORDER BY sequence"
+        )
         if self._engine is not None:
-            rows = self._shared_rows(
-                "SELECT event_json FROM audit_events ORDER BY sequence"
-            )
-            events = [self._event_from_json(row["event_json"]) for row in rows]
+            assert self._engine is not None
+            with self._engine.connect() as connection:
+                rows = connection.execute(text(statement), parameters).mappings().all()
         else:
+            sqlite_statement = statement.replace(":action_id", "?").replace(":tenant_id", "?")
+            sqlite_parameters = tuple(parameters.values())
             with observed_sqlite_connection(self._connect, "audit_events") as connection:
-                rows = connection.execute(
-                    "SELECT event_json FROM audit_events ORDER BY sequence"
-                ).fetchall()
-            events = [self._event_from_json(row["event_json"]) for row in rows]
-        return events if action_id is None else [
-            event for event in events if event.action_id == action_id
-        ]
+                rows = connection.execute(sqlite_statement, sqlite_parameters).fetchall()
+        events = []
+        for row in rows:
+            event = self._event_from_json(row["event_json"])
+            if self._event_tenant_id(event) != row["tenant_id"]:
+                continue
+            events.append(event)
+        if action_id is not None:
+            events = [event for event in events if event.action_id == action_id]
+        return events
 
     @staticmethod
     def _event_from_json(payload: str) -> AuditEvent:

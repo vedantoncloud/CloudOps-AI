@@ -119,9 +119,10 @@ def test_import_is_dry_run_by_default_and_preserves_all_store_data(tmp_path, mon
     try:
         with engine.connect() as connection:
             audit = connection.execute(
-                text("SELECT sequence, event_json, event_hash FROM audit_events")
+                text("SELECT sequence, event_json, event_hash, tenant_id FROM audit_events")
             ).one()
             assert audit.sequence == 1
+            assert audit.tenant_id == "tenant-a"
             assert json.loads(audit.event_json)["action_id"] == "action-001"
             assert audit.event_hash == dry_run["audit_final_hash"]
 
@@ -341,6 +342,10 @@ def test_independent_reconciliation_detects_target_audit_chain_tampering(
             "UPDATE audit_idempotency SET evidence_json = '{\"reason\":\"tampered\"}' "
             "WHERE run_id = 'run-emitted'",
             "audit_idempotency_records",
+        ),
+        (
+            "UPDATE audit_events SET tenant_id = 'tenant-drifted'",
+            "audit_tenant_attribution",
         ),
         (
             "UPDATE gitops_change_sets SET tenant_id = 'tenant-drifted'",

@@ -81,3 +81,39 @@ def test_clear_removes_persisted_events_and_resets_integrity(tmp_path):
     reopened = PersistentAuditTrail(database)
     assert reopened.get_events() == []
     assert reopened.get_integrity_diagnostics().valid
+
+def test_existing_sqlite_audit_database_adds_tenant_scope_and_backfills(tmp_path):
+    import json
+    import sqlite3
+
+    database = tmp_path / "legacy-events.db"
+    event = {
+        "action_id": "legacy-tenant-event",
+        "action_type": "test",
+        "resource_type": "service",
+        "resource_id": "legacy-resource",
+        "old_status": "pending",
+        "new_status": "completed",
+        "event": "legacy_completed",
+        "timestamp": "2026-01-01T00:00:00+00:00",
+        "details": {"tenant_id": "tenant-legacy"},
+        "actor_id": "legacy-actor",
+    }
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "CREATE TABLE audit_events ("
+            "sequence INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "event_json TEXT NOT NULL, event_hash TEXT NOT NULL)"
+        )
+        connection.execute(
+            "INSERT INTO audit_events (event_json, event_hash) VALUES (?, ?)",
+            (json.dumps(event), "legacy-hash"),
+        )
+
+    trail = PersistentAuditTrail(database)
+    try:
+        scoped = trail.get_events(tenant_id="tenant-legacy", tenant_scoped=True)
+        assert [item.action_id for item in scoped] == ["legacy-tenant-event"]
+        assert trail.get_events(tenant_id="other-tenant", tenant_scoped=True) == []
+    finally:
+        trail.close()

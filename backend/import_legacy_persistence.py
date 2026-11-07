@@ -256,12 +256,21 @@ def _dry_run_or_import(
     # or none do. The ledger row is the commit marker and retry fence.
     with engine.begin() as connection:
         if rows["audit_events"]:
+            audit_rows = []
+            for row in rows["audit_events"]:
+                event = json.loads(row["event_json"])
+                details = event.get("details", {})
+                tenant_id = details.get("tenant_id") if isinstance(details, dict) else None
+                audit_rows.append({
+                    **row,
+                    "tenant_id": tenant_id if isinstance(tenant_id, str) else None,
+                })
             connection.execute(
                 text(
-                    "INSERT INTO audit_events (sequence, event_json, event_hash) "
-                    "VALUES (:sequence, :event_json, :event_hash)"
+                    "INSERT INTO audit_events (sequence, event_json, event_hash, tenant_id) "
+                    "VALUES (:sequence, :event_json, :event_hash, :tenant_id)"
                 ),
-                rows["audit_events"],
+                audit_rows,
             )
         if rows["audit_idempotency"]:
             connection.execute(
