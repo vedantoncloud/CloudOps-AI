@@ -304,6 +304,7 @@ def export_audit_events(
         new_status=new_status,
         actor_id=actor_id,
         tenant_id=tenant_id,
+        tenant_scoped=getattr(request.state, "tenant_scoped", False),
         start_time=start_time,
         end_time=end_time,
     )
