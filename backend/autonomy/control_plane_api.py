@@ -131,7 +131,11 @@ def get_action_trace(action_id: str, request: Request) -> ControlPlaneActionTrac
         )
     ]
 
-    audit_events = audit_trail.get_events(action_id)
+    audit_events = audit_trail.get_events(
+        action_id,
+        tenant_id=tenant_id,
+        tenant_scoped=tenant_scoped,
+    )
     if visible_actor_ids is not None:
         audit_events = [event for event in audit_events if event.actor_id in visible_actor_ids]
     if tenant_scoped:
