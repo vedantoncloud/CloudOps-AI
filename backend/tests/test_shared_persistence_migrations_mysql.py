@@ -3,6 +3,7 @@
 import os
 
 import pytest
+from rate_limit import SharedSQLRequestRateLimiter
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
@@ -28,6 +29,7 @@ def test_shared_persistence_schema_upgrades_and_downgrades_on_mysql():
             "gitops_change_sets",
             "gitops_state",
             "persistence_import_runs",
+            "rate_limit_counters",
             "alembic_version",
         }.issubset(set(inspector.get_table_names()))
         with engine.connect() as connection:
@@ -70,6 +72,14 @@ def test_shared_persistence_schema_upgrades_and_downgrades_on_mysql():
                 if column["name"] == "payload"
             )
             assert "LONGTEXT" in str(payload["type"]).upper()
+        limiter = SharedSQLRequestRateLimiter(2, 60, url, clock=lambda: 5)
+        try:
+            assert limiter.allow("tenant-a:operator") == (True, 55)
+            assert limiter.allow("tenant-a:operator") == (True, 55)
+            assert limiter.allow("tenant-a:operator") == (False, 55)
+            assert limiter.allow("tenant-b:operator") == (True, 55)
+        finally:
+            limiter.close()
         with engine.begin() as connection:
             connection.execute(
                 text(
@@ -92,7 +102,7 @@ def test_shared_persistence_schema_upgrades_and_downgrades_on_mysql():
     engine = create_engine(url)
     try:
         assert not {
-            "audit_events", "audit_chain_state", "audit_idempotency", "action_plans", "action_plan_state", "gitops_change_sets", "gitops_state", "persistence_import_runs"
+            "audit_events", "audit_chain_state", "audit_idempotency", "action_plans", "action_plan_state", "gitops_change_sets", "gitops_state", "persistence_import_runs", "rate_limit_counters"
         }.intersection(inspect(engine).get_table_names())
     finally:
         engine.dispose()
