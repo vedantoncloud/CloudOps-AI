@@ -111,4 +111,4 @@ def test_malformed_evidence_does_not_break_health_inspection(tmp_path):
     assert health.total_claims == 1
     assert health.pending_claims == 1
     assert health.emitted_claims == 0
-    assert health.evidence["consistent"] is True
+    assert health.evidence["consistent"] is False
