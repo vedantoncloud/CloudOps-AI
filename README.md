@@ -265,12 +265,24 @@ Terminate TLS at a trusted reverse proxy and expose the container only on a
 private interface; the sample port binding is loopback-only. `GET /health` is
 the liveness probe and `GET /ready` checks AWS and persistent-store readiness.
 
-The API applies a per-process fixed-window request limit of 120 requests per
-authenticated subject (or client address before authentication) per 60 seconds.
-Set `CLOUDOPS_RATE_LIMIT_REQUESTS` and `CLOUDOPS_RATE_LIMIT_WINDOW_SECONDS` to
-positive integers to adjust it. Exceeded limits return HTTP 429 with a
-`Retry-After` header. Each application process tracks its own counters; use a
-shared gateway or limiter when a deployment needs a cluster-wide quota.
+The API applies a fixed-window request limit of 120 requests per
+authenticated tenant/principal identity (or client address before
+authentication) per 60 seconds. Set `CLOUDOPS_RATE_LIMIT_REQUESTS` and
+`CLOUDOPS_RATE_LIMIT_WINDOW_SECONDS` to positive integers to adjust it.
+Exceeded limits return HTTP 429 with a `Retry-After` header.
+
+When `CLOUDOPS_DATABASE_URL` is unset, counters are bounded and held in each
+process's memory, so each worker enforces its own quota. When the variable is
+set to a supported `mysql+pymysql://` or `sqlite:///` URL, all workers using
+that database share atomic fixed-window counters through the
+`rate_limit_counters` table. SQLite coordinates processes sharing one local
+file; it is not a network database for separate hosts. Apply the Alembic
+migrations, including migration `0007_shared_rate_limit_counters`, before
+starting the application with the shared database URL. Configure the same URL
+on every replica. If the shared database or migration is unavailable, requests
+receive HTTP 503 rather than falling back to independent process-local limits.
+See [shared distributed request rate limiting](docs/distributed-rate-limiting.md)
+for deployment details.
 
 ## Health and telemetry
 
@@ -407,6 +419,9 @@ reviews. This is local-file durability for a single process, not shared database
 or multi-process coordination. Back up this file with the audit and action-plan
 stores. Real infrastructure mutation remains disabled.
 
-The console is a small browser client served directly by FastAPI. Shared
-production persistence, container deployment, CI, infrastructure as code, and
-LLM integration are not currently provided.
+The console is a small browser client served directly by FastAPI. The
+application includes optional shared SQL request-rate counters for workers
+using the same supported database URL; this does not make the other SQLite
+stores distributed or provide general shared production persistence.
+Container deployment and CI are provided. Infrastructure as code and LLM
+integration are not currently provided.
