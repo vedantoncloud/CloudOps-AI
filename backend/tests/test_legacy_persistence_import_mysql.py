@@ -146,6 +146,9 @@ def test_atomic_four_store_import_on_mysql(tmp_path, monkeypatch):
                 text("SELECT COUNT(*) FROM audit_events")
             ).scalar_one() == 1
             assert connection.execute(
+                text("SELECT tenant_id FROM audit_events")
+            ).scalar_one() == "tenant-import"
+            assert connection.execute(
                 text("SELECT COUNT(*) FROM audit_idempotency WHERE status = 'emitted'")
             ).scalar_one() == 1
             plan = connection.execute(

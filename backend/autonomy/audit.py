@@ -114,14 +114,26 @@ class AuditTrail:
 
         return deepcopy(audit_event)
 
-    def get_events(self, action_id: str | None = None) -> list[AuditEvent]:
+    def get_events(
+        self,
+        action_id: str | None = None,
+        *,
+        tenant_id: str | None = None,
+        tenant_scoped: bool = False,
+    ) -> list[AuditEvent]:
         with self._lock:
             events = deepcopy(self._events)
 
-        if action_id is None:
-            return events
-
-        return [item for item in events if item.action_id == action_id]
+        if action_id is not None:
+            events = [item for item in events if item.action_id == action_id]
+        if tenant_scoped:
+            if tenant_id is None:
+                return []
+            events = [
+                item for item in events
+                if item.details.get("tenant_id") == tenant_id
+            ]
+        return events
 
     def _verify_integrity_unlocked(self) -> AuditIntegrityResult:
         event_count = len(self._events)

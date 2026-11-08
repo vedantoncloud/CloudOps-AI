@@ -178,6 +178,41 @@ def reconcile(paths: dict[str, Path], database_url: str) -> dict[str, Any]:
                 if name == "audit_events" and not _audit_chain_valid(actual):
                     target_audit_chain_valid = False
                     mismatches.append("audit_events_hash_chain")
+                if name == "audit_events":
+                    expected_normalized = []
+                    for row in expected:
+                        try:
+                            event = json.loads(row["event_json"])
+                            details = event.get("details", {})
+                            tenant = details.get("tenant_id") if isinstance(details, dict) else None
+                        except (TypeError, ValueError):
+                            tenant = None
+                        tenant = tenant if isinstance(tenant, str) else None
+                        if row.get("tenant_id", tenant) != tenant:
+                            mismatches.append("audit_tenant_attribution")
+                        expected_normalized.append({
+                            "sequence": row["sequence"],
+                            "event_json": row["event_json"],
+                            "event_hash": row["event_hash"],
+                        })
+                    actual_normalized = []
+                    for row in actual:
+                        try:
+                            event = json.loads(row["event_json"])
+                            details = event.get("details", {})
+                            tenant = details.get("tenant_id") if isinstance(details, dict) else None
+                        except (TypeError, ValueError):
+                            tenant = None
+                        tenant = tenant if isinstance(tenant, str) else None
+                        if row.get("tenant_id") != tenant:
+                            mismatches.append("audit_tenant_attribution")
+                        actual_normalized.append({
+                            "sequence": row["sequence"],
+                            "event_json": row["event_json"],
+                            "event_hash": row["event_hash"],
+                        })
+                    expected = expected_normalized
+                    actual = actual_normalized
                 if name == "gitops":
                     normalized = []
                     for row in actual:

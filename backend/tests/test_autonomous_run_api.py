@@ -487,3 +487,44 @@ def test_token_authenticated_reviewer_identity_overrides_forged_claims():
     assert all(call["actor_id"] == "shared-subject" for call in fake.calls)
     assert all(call["tenant_id"] == "tenant-a" for call in fake.calls)
     assert fake.calls[1]["rejection_reason"] == "Risk is too high"
+
+
+def test_tenant_run_history_and_detail_use_repository_scoped_audit_reads(monkeypatch):
+    trail = AuditTrail()
+    trail.record(
+        action_id="tenant-scoped-run",
+        action_type="resize_instance",
+        resource_type="ec2_instance",
+        resource_id="i-123",
+        old_status="pending_approval",
+        new_status="completed",
+        event="autonomous_lifecycle_completed",
+        details={"tenant_id": "tenant-a"},
+        actor_id="shared-subject",
+    )
+    original_get_events = trail.get_events
+    calls = []
+
+    def scoped_get_events(action_id=None, *, tenant_id=None, tenant_scoped=False):
+        calls.append((action_id, tenant_id, tenant_scoped))
+        return original_get_events(
+            action_id=action_id,
+            tenant_id=tenant_id,
+            tenant_scoped=tenant_scoped,
+        )
+
+    monkeypatch.setattr(trail, "get_events", scoped_get_events)
+    monkeypatch.setattr(api, "audit_trail", trail)
+    client = make_tenant_client(FakeRunner("completed"))
+    headers = {"Authorization": "Bearer tenant-token"}
+
+    history = client.get("/autonomy/runs", headers=headers)
+    detail = client.get("/autonomy/runs/tenant-scoped-run", headers=headers)
+
+    assert history.status_code == 200
+    assert [run["action_id"] for run in history.json()["runs"]] == ["tenant-scoped-run"]
+    assert detail.status_code == 200
+    assert calls == [
+        (None, "tenant-a", True),
+        ("tenant-scoped-run", "tenant-a", True),
+    ]

@@ -172,6 +172,7 @@ def _filter_audit_events(
     new_status: str | None = None,
     actor_id: str | None = None,
     tenant_id: str | None = None,
+    tenant_scoped: bool = False,
     start_time: datetime | None = None,
     end_time: datetime | None = None,
 ) -> list[AuditEvent]:
@@ -181,7 +182,14 @@ def _filter_audit_events(
     if start is not None and end is not None and start > end:
         raise HTTPException(status_code=422, detail="start_time must be at or before end_time")
 
-    events = audit_trail.get_events(action_id=action_id)
+    if tenant_scoped:
+        events = audit_trail.get_events(
+            action_id=action_id,
+            tenant_id=tenant_id,
+            tenant_scoped=True,
+        )
+    else:
+        events = audit_trail.get_events(action_id=action_id)
 
     if resource_id is not None:
         events = [item for item in events if item.resource_id == resource_id]
@@ -201,9 +209,8 @@ def _filter_audit_events(
     if actor_id is not None:
         events = [item for item in events if item.actor_id == actor_id]
 
-    if tenant_id is not None:
-        # Legacy and unattributed events intentionally fail closed in tenant
-        # mode; actor identity alone is not a tenant boundary.
+    if tenant_scoped:
+        # Defense in depth for alternate AuditTrail implementations.
         events = [item for item in events if item.details.get("tenant_id") == tenant_id]
 
     if start is not None or end is not None:
@@ -258,6 +265,7 @@ def list_audit_events(
         new_status=new_status,
         actor_id=actor_id,
         tenant_id=tenant_id,
+        tenant_scoped=tenant_id is not None,
         start_time=start_time,
         end_time=end_time,
     )
@@ -299,6 +307,7 @@ def export_audit_events(
         new_status=new_status,
         actor_id=actor_id,
         tenant_id=tenant_id,
+        tenant_scoped=tenant_id is not None,
         start_time=start_time,
         end_time=end_time,
     )
