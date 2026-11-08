@@ -62,4 +62,4 @@ def test_inspect_detects_malformed_evidence_json(tmp_path):
     health = PersistentAuditHealthChecker(database).inspect()
 
     assert health.evidence["malformed_evidence_claims"] == 1
-    assert health.evidence["consistent"] is True
+    assert health.evidence["consistent"] is False
