@@ -57,6 +57,7 @@ def test_shared_persistence_schema_migrates_and_downgrades_on_sqlite(tmp_path, m
             "gitops_change_sets",
             "gitops_state",
             "persistence_import_runs",
+            "rate_limit_counters",
         }
         assert {column["name"] for column in inspector.get_columns("audit_idempotency")} == {
             "run_id", "event_type", "evidence_json", "status", "claim_token", "claimed_at"
@@ -103,7 +104,7 @@ def test_shared_persistence_schema_migrates_and_downgrades_on_sqlite(tmp_path, m
     engine = create_engine(url)
     try:
         assert not {
-            "audit_events", "audit_chain_state", "audit_idempotency", "action_plans", "action_plan_state", "gitops_change_sets", "gitops_state", "persistence_import_runs"
+            "audit_events", "audit_chain_state", "audit_idempotency", "action_plans", "action_plan_state", "gitops_change_sets", "gitops_state", "persistence_import_runs", "rate_limit_counters"
         }.intersection(inspect(engine).get_table_names())
     finally:
         engine.dispose()
