@@ -8,8 +8,9 @@ from rate_limit import SharedSQLRequestRateLimiter
 
 
 @pytest.fixture
-def shared_database_url(tmp_path):
+def shared_database_url(tmp_path, monkeypatch):
     url = f"sqlite:///{tmp_path / 'shared-rate-limits.db'}"
+    monkeypatch.setenv("CLOUDOPS_DATABASE_URL", url)
     config = Config("backend/alembic.ini")
     config.set_section_option("alembic", "sqlalchemy.url", url.replace("%", "%%"))
     command.upgrade(config, "head")
