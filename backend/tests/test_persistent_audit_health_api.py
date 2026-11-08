@@ -153,7 +153,7 @@ def test_health_endpoint_exposes_malformed_evidence_diagnostic(
     assert response.status_code == 200
     body = response.json()
     assert body["evidence"]["malformed_evidence_claims"] == 1
-    assert body["evidence"]["consistent"] is True
+    assert body["evidence"]["consistent"] is False
 
 
 def test_audit_health_openapi_exposes_response_contract():
