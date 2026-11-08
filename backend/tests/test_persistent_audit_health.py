@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from sqlalchemy import create_engine, text
 
 from autonomy.persistent_audit_idempotency import PersistentAuditIdempotencyStore
 from autonomy.persistent_audit_health import PersistentAuditHealthChecker
@@ -85,3 +86,33 @@ def test_health_reports_empty_initialized_store(tmp_path: Path):
     assert health.pending_claims == 0
     assert health.emitted_claims == 0
     assert health.evidence["consistent"] is True
+
+
+def test_shared_sql_health_marks_malformed_evidence_inconsistent(tmp_path: Path):
+    database_url = f"sqlite:///{tmp_path / 'shared-audit.db'}"
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(text("""
+                CREATE TABLE audit_idempotency (
+                    run_id TEXT NOT NULL,
+                    event_type TEXT NOT NULL,
+                    evidence_json TEXT,
+                    status TEXT NOT NULL,
+                    claim_token TEXT NOT NULL,
+                    claimed_at REAL NOT NULL,
+                    PRIMARY KEY (run_id, event_type)
+                )
+            """))
+            connection.execute(text("""
+                INSERT INTO audit_idempotency
+                    (run_id, event_type, evidence_json, status, claim_token, claimed_at)
+                VALUES ('run-malformed', 'recovery_failed', 'not-json', 'pending', 'token', 1)
+            """))
+    finally:
+        engine.dispose()
+
+    health = PersistentAuditHealthChecker(database_url).inspect()
+
+    assert health.evidence["malformed_evidence_claims"] == 1
+    assert health.evidence["consistent"] is False

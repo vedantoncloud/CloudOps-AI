@@ -67,7 +67,7 @@ class PersistentAuditHealthChecker:
                 evidence={
                     "store": "mysql" if self.path.startswith("mysql") else "sqlite",
                     "read_only": True,
-                    "consistent": total == pending + emitted and unknown == 0,
+                    "consistent": total == pending + emitted and unknown == 0 and malformed_evidence == 0,
                     "unknown_status_claims": unknown,
                     "malformed_evidence_claims": malformed_evidence,
                 },
@@ -109,7 +109,7 @@ class PersistentAuditHealthChecker:
             evidence={
                 "store": "sqlite",
                 "read_only": True,
-                "consistent": total == pending + emitted and unknown == 0,
+                "consistent": total == pending + emitted and unknown == 0 and malformed_evidence == 0,
                 "unknown_status_claims": unknown,
                 "malformed_evidence_claims": malformed_evidence,
             },
