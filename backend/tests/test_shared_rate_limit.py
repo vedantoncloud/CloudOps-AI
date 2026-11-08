@@ -67,7 +67,7 @@ def test_shared_limiter_requires_migrated_schema(tmp_path):
 
 
 def test_shared_limiter_rejects_unsupported_database_url():
-    with pytest.raises(ValueError, match="requires mysql+pymysql or sqlite"):
+    with pytest.raises(ValueError, match="shared rate limiting requires"):
         SharedSQLRequestRateLimiter(10, 60, "postgresql://localhost/cloudops")
 
 
