@@ -528,3 +528,31 @@ def test_tenant_run_history_and_detail_use_repository_scoped_audit_reads(monkeyp
         (None, "tenant-a", True),
         ("tenant-scoped-run", "tenant-a", True),
     ]
+
+
+
+def test_legacy_run_rejects_caller_supplied_reviewer_without_principal():
+    fake = FakeRunner("completed")
+    app = FastAPI()
+    app.include_router(api.router)
+    api.runner = fake
+    client = TestClient(app)
+
+    approved_payload = payload("run-api-unattributed-approval")
+    approved_payload["approved_by"] = "forged-admin"
+    approved = client.post("/autonomy/run", json=approved_payload)
+
+    rejected_payload = payload("run-api-unattributed-rejection")
+    rejected_payload.update(
+        {
+            "rejected_by": "forged-reviewer",
+            "rejection_reason": "Risk is too high",
+        }
+    )
+    rejected = client.post("/autonomy/run", json=rejected_payload)
+
+    assert approved.status_code == 401
+    assert rejected.status_code == 401
+    assert approved.json()["detail"] == "Authenticated principal required for approval decisions"
+    assert rejected.json()["detail"] == "Authenticated principal required for approval decisions"
+    assert fake.calls == []
