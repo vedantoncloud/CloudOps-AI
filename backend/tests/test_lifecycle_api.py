@@ -218,3 +218,17 @@ def test_authenticated_principal_overrides_supplied_rejection_identity():
     events = lifecycle_api.orchestrator.audit_events("api-authenticated-reject")
     assert events
     assert all(event.actor_id == "trusted-reviewer" for event in events)
+
+
+def test_authenticated_principal_overrides_supplied_run_approval_identity():
+    client = make_client(principal_subject="trusted-runner")
+    body = payload("api-authenticated-run")
+    body["approved_by"] = "forged-runner"
+
+    response = client.post("/autonomy/lifecycle/run", json=body)
+
+    assert response.status_code == 200
+    assert response.json()["approval"]["approved_by"] == "trusted-runner"
+    events = lifecycle_api.orchestrator.audit_events("api-authenticated-run")
+    assert events
+    assert all(event.actor_id == "trusted-runner" for event in events)
