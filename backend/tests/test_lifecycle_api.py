@@ -1,12 +1,18 @@
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from types import SimpleNamespace
 
 from autonomy.autonomous_lifecycle import AutonomousLifecycleOrchestrator
 import autonomy.lifecycle_api as lifecycle_api
 
 
-def make_client():
+def make_client(principal_subject=None):
     app = FastAPI()
+    if principal_subject is not None:
+        @app.middleware("http")
+        async def attach_principal(request, call_next):
+            request.state.principal = SimpleNamespace(subject=principal_subject)
+            return await call_next(request)
     app.include_router(lifecycle_api.router)
     lifecycle_api.orchestrator = AutonomousLifecycleOrchestrator()
     lifecycle_api._action_owners.clear()
@@ -181,3 +187,34 @@ def test_response_contains_safety_evidence():
     assert "safety" in data
     assert "evidence" in data["safety"]
     assert data["safety"]["dry_run"] is True
+
+
+def test_authenticated_principal_overrides_supplied_approval_identity():
+    client = make_client(principal_subject="trusted-operator")
+    body = payload("api-authenticated-approve")
+    body["approved_by"] = "forged-operator"
+
+    response = client.post("/autonomy/lifecycle/approve", json=body)
+
+    assert response.status_code == 200
+    assert response.json()["approval"]["approved_by"] == "trusted-operator"
+    events = lifecycle_api.orchestrator.audit_events("api-authenticated-approve")
+    assert events
+    assert all(event.actor_id == "trusted-operator" for event in events)
+
+
+def test_authenticated_principal_overrides_supplied_rejection_identity():
+    client = make_client(principal_subject="trusted-reviewer")
+    body = payload("api-authenticated-reject")
+    body.update({
+        "rejected_by": "forged-reviewer",
+        "rejection_reason": "change not authorized",
+    })
+
+    response = client.post("/autonomy/lifecycle/reject", json=body)
+
+    assert response.status_code == 200
+    assert response.json()["approval"]["rejected_by"] == "trusted-reviewer"
+    events = lifecycle_api.orchestrator.audit_events("api-authenticated-reject")
+    assert events
+    assert all(event.actor_id == "trusted-reviewer" for event in events)
