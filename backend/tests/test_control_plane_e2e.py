@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from auth import AccessControlMiddleware
 from autonomy.audit_api import audit_trail
 from autonomy.control_loop_api import router as control_loop_router
 from autonomy.gitops_api import registry as gitops_registry
@@ -9,6 +10,7 @@ from autonomy.gitops_api import router as gitops_router
 
 def make_app():
     app = FastAPI()
+    app.add_middleware(AccessControlMiddleware, mode="development", tokens={})
     app.include_router(control_loop_router)
     app.include_router(gitops_router)
     return app
