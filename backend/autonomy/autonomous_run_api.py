@@ -219,9 +219,14 @@ def run_autonomous(payload: AutonomousRunRequest, request: Request) -> dict[str,
         principal = getattr(request.state, "principal", None)
         actor_id = getattr(principal, "subject", None)
         # Reviewer fields select a requested transition, but identity comes from
-        # the authenticated principal. Never accept a caller-supplied actor.
-        approved_by = actor_id if payload.approved_by is not None and actor_id else payload.approved_by
-        rejected_by = actor_id if payload.rejected_by is not None and actor_id else payload.rejected_by
+        # the authenticated principal. Never fall back to caller-supplied identity.
+        if (payload.approved_by is not None or payload.rejected_by is not None) and not actor_id:
+            raise HTTPException(
+                status_code=401,
+                detail="Authenticated principal required for approval decisions",
+            )
+        approved_by = actor_id if payload.approved_by is not None else None
+        rejected_by = actor_id if payload.rejected_by is not None else None
         if rejected_by is not None and not (payload.rejection_reason or "").strip():
             raise ValueError("rejection_reason is required when rejecting.")
         action = _action(payload)
