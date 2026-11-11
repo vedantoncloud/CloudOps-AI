@@ -199,3 +199,40 @@ def test_custom_blast_radius_limit():
 def test_invalid_blast_radius_limit_is_rejected():
     with pytest.raises(ValueError):
         ExecutionSafetyGate(max_impact_score=-1)
+
+
+@pytest.mark.parametrize(
+    "blast_radius",
+    [
+        {"impact_score": "unknown", "risk": "low"},
+        {"impact_score": 10, "risk": "unclassified"},
+        {"impact_score": -1, "risk": "low"},
+        {"impact_score": 101, "risk": "low"},
+        {"impact_score": 10.5, "risk": "low"},
+        {"risk": "low"},
+    ],
+)
+def test_review_invalid_blast_radius_assessment(blast_radius):
+    result = ExecutionSafetyGate().evaluate(
+        Action(),
+        blast_radius=blast_radius,
+        approved=True,
+        dry_run=False,
+    )
+
+    assert result.decision is ExecutionSafetyDecision.REVIEW
+    assert result.execution_allowed is False
+    assert result.requires_human_approval is True
+    assert "invalid" in result.reasons[0]
+
+
+def test_accept_integer_string_impact_score_for_compatibility():
+    result = ExecutionSafetyGate().evaluate(
+        Action(),
+        blast_radius={"impact_score": "10", "risk": "low"},
+        approved=True,
+        dry_run=False,
+    )
+
+    assert result.decision is ExecutionSafetyDecision.ALLOW
+    assert result.evidence["impact_score"] == 10
