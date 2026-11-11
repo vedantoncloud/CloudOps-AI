@@ -123,6 +123,21 @@ class ExecutionSafetyGate:
         if risk is not None:
             evidence["blast_radius_risk"] = risk
 
+        # A supplied blast-radius assessment is a safety input, not optional
+        # decoration. Reject malformed or out-of-domain values rather than
+        # silently treating an unparseable assessment as low risk.
+        if blast_radius is not None and (
+            impact_score is None
+            or not 0 <= impact_score <= 100
+            or risk not in {"low", "medium", "high", "critical"}
+        ):
+            return self._review(
+                "Blast-radius assessment is incomplete or invalid and requires human review.",
+                evidence=evidence,
+                destructive=destructive,
+                dry_run=dry_run,
+            )
+
         if impact_score is not None and impact_score > self.max_impact_score:
             return self._review(
                 "Blast-radius impact exceeds the automatic execution limit.",
@@ -227,10 +242,13 @@ class ExecutionSafetyGate:
         value = getattr(blast_radius, "impact_score", None)
         if value is None and isinstance(blast_radius, dict):
             value = blast_radius.get("impact_score")
-        try:
-            return int(value) if value is not None else None
-        except (TypeError, ValueError):
+        if isinstance(value, bool):
             return None
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str) and value.strip().isdigit():
+            return int(value.strip())
+        return None
 
     @staticmethod
     def _risk_value(blast_radius: Any) -> str | None:
