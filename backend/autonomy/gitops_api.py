@@ -109,9 +109,16 @@ def _visible_change(change_set, request: Request):
     return change_set
 
 
-def _change_actor(request: Request, claimed_actor: str) -> str:
+def _change_actor(request: Request) -> str:
+    """Require a trusted identity for approval and rejection audit attribution."""
     principal = getattr(request.state, "principal", None)
-    return principal.subject if principal is not None else claimed_actor
+    actor_id = getattr(principal, "subject", None)
+    if not isinstance(actor_id, str) or not actor_id.strip():
+        raise HTTPException(
+            status_code=401,
+            detail="Authenticated principal required for GitOps review decisions",
+        )
+    return actor_id
 
 
 def _authenticated_actor(request: Request) -> str | None:
@@ -252,9 +259,9 @@ def approve_gitops_change(
         )
         change_set = registry.approve(
             change_id,
-            _change_actor(http_request, request.approved_by),
+            _change_actor(http_request),
             engine=engine,
-            actor_id=_change_actor(http_request, request.approved_by),
+            actor_id=_change_actor(http_request),
             tenant_id=getattr(http_request.state, "tenant_id", None),
             tenant_scoped=getattr(http_request.state, "tenant_scoped", False),
         )
@@ -290,10 +297,10 @@ def reject_gitops_change(
         )
         change_set = registry.reject(
             change_id,
-            _change_actor(http_request, request.rejected_by),
+            _change_actor(http_request),
             request.reason,
             engine=engine,
-            actor_id=_change_actor(http_request, request.rejected_by),
+            actor_id=_change_actor(http_request),
             tenant_id=getattr(http_request.state, "tenant_id", None),
             tenant_scoped=getattr(http_request.state, "tenant_scoped", False),
         )

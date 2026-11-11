@@ -10,14 +10,16 @@ from autonomy.gitops import GitOpsChange, GitOpsEngine
 from autonomy.gitops_api import registry, router
 
 
-def make_app():
+def make_app(*, auth=True):
     app = FastAPI()
+    if auth:
+        app.add_middleware(AccessControlMiddleware, mode="development", tokens={})
     app.include_router(router)
     return app
 
 
 def make_tenant_client():
-    app = make_app()
+    app = make_app(auth=False)
     app.add_middleware(
         AccessControlMiddleware,
         mode="token",
@@ -135,7 +137,29 @@ def test_approve_endpoint_changes_status():
     data = response.json()
 
     assert data["status"] == "approved"
-    assert data["approved_by"] == "operator"
+    assert data["approved_by"] == "local-development"
+
+
+
+def test_gitops_review_rejects_caller_supplied_identity_without_principal():
+    change_set = make_change_set()
+    registry.register(change_set)
+    client = TestClient(make_app(auth=False))
+
+    approved = client.post(
+        f"/autonomy/gitops/changes/{change_set.change_id}/approve",
+        json={"approved_by": "forged-admin"},
+    )
+    rejected = client.post(
+        f"/autonomy/gitops/changes/{change_set.change_id}/reject",
+        json={"rejected_by": "forged-reviewer", "reason": "Risk too high"},
+    )
+
+    assert approved.status_code == 401
+    assert rejected.status_code == 401
+    assert approved.json()["detail"] == "Authenticated principal required for GitOps review decisions"
+    assert rejected.json()["detail"] == "Authenticated principal required for GitOps review decisions"
+    assert change_set.status.value == "pending_approval"
 
 
 def test_approve_missing_change_returns_404():
@@ -186,7 +210,7 @@ def test_reject_endpoint_changes_status():
     data = response.json()
 
     assert data["status"] == "rejected"
-    assert data["metadata"]["rejected_by"] == "operator"
+    assert data["metadata"]["rejected_by"] == "local-development"
     assert data["metadata"]["rejection_reason"] == "Risk too high"
 
 
