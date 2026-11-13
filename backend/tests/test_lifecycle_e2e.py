@@ -1,11 +1,21 @@
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from auth import Principal
+
 from autonomy.lifecycle_api import orchestrator, router as lifecycle_router
 
 
 def make_app():
     app = FastAPI()
+
+    @app.middleware("http")
+    async def attach_test_principal(request, call_next):
+        request.state.principal = Principal("operator", "operator", "test-tenant")
+        request.state.tenant_id = "test-tenant"
+        request.state.tenant_scoped = True
+        return await call_next(request)
+
     app.include_router(lifecycle_router)
     return app
 
