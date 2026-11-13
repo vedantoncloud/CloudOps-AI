@@ -223,7 +223,7 @@ def test_decision_and_blast_radius_are_forwarded_to_safety_gate():
     action = make_action()
 
     decision = {"recommendation": "proceed"}
-    blast_radius = {"impact_score": 10}
+    blast_radius = {"impact_score": 10, "risk": "low"}
 
     result = orchestrator.approve_and_run(
         action,
