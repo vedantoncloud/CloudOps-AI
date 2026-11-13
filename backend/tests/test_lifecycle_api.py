@@ -1,12 +1,21 @@
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from auth import Principal
 from autonomy.autonomous_lifecycle import AutonomousLifecycleOrchestrator
 import autonomy.lifecycle_api as lifecycle_api
 
 
 def make_client():
     app = FastAPI()
+
+    @app.middleware("http")
+    async def attach_test_principal(request, call_next):
+        request.state.principal = Principal("test-operator", "operator", "test-tenant")
+        request.state.tenant_id = "test-tenant"
+        request.state.tenant_scoped = True
+        return await call_next(request)
+
     app.include_router(lifecycle_api.router)
     lifecycle_api.orchestrator = AutonomousLifecycleOrchestrator()
     lifecycle_api._action_owners.clear()
@@ -26,6 +35,73 @@ def payload(action_id="api-life-1"):
         "dry_run": True,
     }
 
+
+
+def make_unauthenticated_client():
+    app = FastAPI()
+    app.include_router(lifecycle_api.router)
+    lifecycle_api.orchestrator = AutonomousLifecycleOrchestrator()
+    lifecycle_api._action_owners.clear()
+    return TestClient(app)
+
+
+def test_approve_requires_authenticated_principal_even_with_forged_identity():
+    client = make_unauthenticated_client()
+    body = payload()
+    body["approved_by"] = "forged-operator"
+
+    response = client.post("/autonomy/lifecycle/approve", json=body)
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Authenticated principal required for lifecycle decisions"
+
+
+def test_reject_requires_authenticated_principal_even_with_forged_identity():
+    client = make_unauthenticated_client()
+    body = payload()
+    body.update({
+        "rejected_by": "forged-operator",
+        "rejection_reason": "not authorized",
+    })
+
+    response = client.post("/autonomy/lifecycle/reject", json=body)
+
+    assert response.status_code == 401
+
+
+def test_run_cannot_use_caller_supplied_approval_without_principal():
+    client = make_unauthenticated_client()
+    body = payload()
+    body["approved_by"] = "forged-operator"
+
+    response = client.post("/autonomy/lifecycle/run", json=body)
+
+    assert response.status_code == 401
+
+
+def test_approve_uses_authenticated_principal_not_supplied_identity():
+    client = make_client()
+    body = payload()
+    body["approved_by"] = "forged-operator"
+
+    response = client.post("/autonomy/lifecycle/approve", json=body)
+
+    assert response.status_code == 200
+    assert response.json()["approval"]["approved_by"] == "test-operator"
+
+
+def test_reject_uses_authenticated_principal_not_supplied_identity():
+    client = make_client()
+    body = payload()
+    body.update({
+        "rejected_by": "forged-operator",
+        "rejection_reason": "not authorized",
+    })
+
+    response = client.post("/autonomy/lifecycle/reject", json=body)
+
+    assert response.status_code == 200
+    assert response.json()["approval"]["rejected_by"] == "test-operator"
 
 def test_run_without_approval_waits_for_human():
     client = make_client()
