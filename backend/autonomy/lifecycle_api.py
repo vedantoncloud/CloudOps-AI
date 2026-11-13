@@ -28,9 +28,21 @@ _action_owners: dict[str, str] = {}
 _owner_lock = RLock()
 
 
-def _actor(request: Request, supplied: str | None = None) -> str:
+def _actor(request: Request) -> str:
     principal = getattr(request.state, "principal", None)
-    return principal.subject if principal is not None else (supplied or "local-development")
+    return principal.subject if principal is not None else "local-development"
+
+
+def _require_authenticated_principal(request: Request) -> str:
+    """Require a trusted identity for lifecycle approval decisions."""
+    principal = getattr(request.state, "principal", None)
+    subject = getattr(principal, "subject", None)
+    if not isinstance(subject, str) or not subject.strip():
+        raise HTTPException(
+            status_code=401,
+            detail="Authenticated principal required for lifecycle decisions",
+        )
+    return subject.strip()
 
 
 def _scope(request: Request, actor: str) -> str:
@@ -161,9 +173,13 @@ def _result(result: AutonomousLifecycleResult) -> dict[str, Any]:
 @router.post("/run")
 def run_lifecycle(payload: LifecycleRunRequest, request: Request) -> dict[str, Any]:
     try:
-        actor = _actor(request, payload.approved_by)
+        actor = (
+            _require_authenticated_principal(request)
+            if payload.approved_by
+            else _actor(request)
+        )
         tenant_id = request.state.tenant_id if getattr(request.state, "tenant_scoped", False) else None
-        if getattr(request.state, "principal", None) is not None and payload.approved_by:
+        if payload.approved_by:
             payload = payload.model_copy(update={"approved_by": actor})
         action = _action(payload)
         _claim_action(action.action_id, _scope(request, actor))
@@ -186,10 +202,9 @@ def run_lifecycle(payload: LifecycleRunRequest, request: Request) -> dict[str, A
 @router.post("/approve")
 def approve_lifecycle(payload: LifecycleApproveRequest, request: Request) -> dict[str, Any]:
     try:
-        actor = _actor(request, payload.approved_by)
+        actor = _require_authenticated_principal(request)
         tenant_id = request.state.tenant_id if getattr(request.state, "tenant_scoped", False) else None
-        if getattr(request.state, "principal", None) is not None:
-            payload = payload.model_copy(update={"approved_by": actor})
+        payload = payload.model_copy(update={"approved_by": actor})
         action = _action(payload)
         _claim_action(action.action_id, _scope(request, actor))
         result = orchestrator.approve_and_run(
@@ -211,10 +226,9 @@ def approve_lifecycle(payload: LifecycleApproveRequest, request: Request) -> dic
 @router.post("/reject")
 def reject_lifecycle(payload: LifecycleRejectRequest, request: Request) -> dict[str, Any]:
     try:
-        actor = _actor(request, payload.rejected_by)
+        actor = _require_authenticated_principal(request)
         tenant_id = request.state.tenant_id if getattr(request.state, "tenant_scoped", False) else None
-        if getattr(request.state, "principal", None) is not None:
-            payload = payload.model_copy(update={"rejected_by": actor})
+        payload = payload.model_copy(update={"rejected_by": actor})
         action = _action(payload)
         _claim_action(action.action_id, _scope(request, actor))
         result = orchestrator.reject(
