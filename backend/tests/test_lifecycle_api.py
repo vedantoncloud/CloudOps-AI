@@ -143,7 +143,7 @@ def test_reject_endpoint_does_not_execute():
     data = response.json()
     assert data["outcome"] in {"blocked", "awaiting_approval"}
     assert data["execution"] is None
-    assert data["approval"]["rejected_by"] == "operator"
+    assert data["approval"]["rejected_by"] == "test-operator"
 
 
 def test_audit_endpoint_returns_lifecycle_events():
