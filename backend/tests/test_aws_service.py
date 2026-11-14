@@ -3754,3 +3754,22 @@ def test_get_ec2_instances_supports_bounded_resumable_pages():
     assert result["instances"] == []
     assert result["is_truncated"] is True
     assert result["next_token"] == "next-page"
+
+
+@pytest.mark.parametrize(
+    ("service_name", "client_method"),
+    [("sts", "get_caller_identity"), ("ec2", "describe_instances")],
+)
+def test_get_service_health_reports_access_denied(service_name, client_method):
+    with patch("services.aws_service.boto3.client") as mock_client:
+        client = mock_client.return_value
+        getattr(client, client_method).side_effect = ClientError(
+            {"Error": {"Code": "AccessDenied", "Message": "Access denied"}},
+            client_method,
+        )
+
+        result = AWSService().get_service_health(service_name)
+
+    assert result["service"] == service_name
+    assert result["status"] == "unhealthy"
+    assert "AccessDenied" in result["error"]
