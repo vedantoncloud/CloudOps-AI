@@ -221,7 +221,7 @@ def test_fleet_alarm_endpoint_limits_tenant_to_owned_instances(monkeypatch):
     scoped = TestClient(scoped_app)
     monkeypatch.setattr(main.aws_service, "get_ec2_fleet_alarms", lambda **kwargs: {
         "service": "cloudwatch", "status": "healthy", "alarms": [
-            {"AlarmName": "owned", "instance_ids": ["i-aaaaaaaa"]},
+            {"AlarmName": "owned", "instance_ids": ["i-aaaaaaaa", "i-bbbbbbbb"]},
             {"AlarmName": "foreign", "instance_ids": ["i-bbbbbbbb"]},
         ],
     })
@@ -232,7 +232,9 @@ def test_fleet_alarm_endpoint_limits_tenant_to_owned_instances(monkeypatch):
         "Authorization": "Bearer token-a",
     })
     assert response.status_code == 200
-    assert response.json()["alarms"] == [{"AlarmName": "owned", "instance_ids": ["i-aaaaaaaa"]}]
+    assert response.json()["alarms"] == [
+        {"AlarmName": "owned", "instance_ids": ["i-aaaaaaaa"]},
+    ]
 
 
 @pytest.mark.parametrize(

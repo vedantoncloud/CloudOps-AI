@@ -1732,10 +1732,19 @@ def aws_ec2_fleet_alarms(request: Request, region: str | None = None):
     if getattr(request.state, "tenant_scoped", False):
         inventory = _all_tenant_ec2_instances(request, region)
         owned_ids = {item.get("instance_id") for item in inventory["instances"]}
-        result["alarms"] = [
-            alarm for alarm in result.get("alarms", [])
-            if set(alarm.get("instance_ids", [])) & owned_ids
-        ]
+        visible_alarms = []
+        for alarm in result.get("alarms", []):
+            visible_instance_ids = [
+                instance_id
+                for instance_id in alarm["instance_ids"]
+                if instance_id in owned_ids
+            ]
+            if visible_instance_ids:
+                visible_alarms.append({
+                    **alarm,
+                    "instance_ids": visible_instance_ids,
+                })
+        result = {**result, "alarms": visible_alarms}
     return result
 
 
