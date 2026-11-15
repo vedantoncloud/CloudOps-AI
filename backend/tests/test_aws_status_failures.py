@@ -2,6 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import main
+import services.aws_service as aws_service_module
 
 
 @pytest.mark.parametrize("result", [None, [], {"provider": "AWS", "status": "connected"},
@@ -62,7 +63,7 @@ def test_aws_status_fails_closed_on_malformed_ec2_page_shapes(monkeypatch, page)
             return page
 
     monkeypatch.setattr(
-        main.aws_service, "_aws_client",
+        aws_service_module, "_aws_client",
         lambda service, **_kwargs: FakeSts() if service == "sts" else FakeEc2(),
     )
 
@@ -89,7 +90,7 @@ def test_aws_status_counts_well_formed_ec2_instance_states(monkeypatch):
             }]}
 
     monkeypatch.setattr(
-        main.aws_service, "_aws_client",
+        aws_service_module, "_aws_client",
         lambda service, **_kwargs: FakeSts() if service == "sts" else FakeEc2(),
     )
 
