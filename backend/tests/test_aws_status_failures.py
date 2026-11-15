@@ -40,3 +40,63 @@ def test_aws_status_preserves_disconnected_provider_response(monkeypatch):
 
     assert response.status_code == 200
     assert response.json() == result
+
+
+@pytest.mark.parametrize("page", [
+    None,
+    [],
+    {"Reservations": "not-a-list"},
+    {"Reservations": [None]},
+    {"Reservations": [{"Instances": {}}]},
+    {"Reservations": [{"Instances": [None]}]},
+    {"Reservations": [{"Instances": [{"State": "running"}]}]},
+    {"Reservations": [{"Instances": [{"State": {"Name": 7}}]}]},
+])
+def test_aws_status_fails_closed_on_malformed_ec2_page_shapes(monkeypatch, page):
+    class FakeSts:
+        def get_caller_identity(self):
+            return {"Account": "123456789012", "Arn": "arn:aws:iam::123456789012:role/test"}
+
+    class FakeEc2:
+        def describe_instances(self, **_kwargs):
+            return page
+
+    monkeypatch.setattr(
+        main.aws_service, "_aws_client",
+        lambda service, **_kwargs: FakeSts() if service == "sts" else FakeEc2(),
+    )
+
+    result = main.aws_service.get_status()
+
+    assert result["status"] == "disconnected"
+    assert result["message"] == "Unable to connect to AWS services"
+    assert result["error"].startswith("Malformed EC2")
+
+
+def test_aws_status_counts_well_formed_ec2_instance_states(monkeypatch):
+    class FakeSts:
+        def get_caller_identity(self):
+            return {"Account": "123456789012", "Arn": "arn:aws:iam::123456789012:role/test"}
+
+    class FakeEc2:
+        def describe_instances(self, **_kwargs):
+            return {"Reservations": [{
+                "Instances": [
+                    {"State": {"Name": "running"}},
+                    {"State": {"Name": "stopped"}},
+                    {"State": {"Name": "pending"}},
+                ]
+            }]}
+
+    monkeypatch.setattr(
+        main.aws_service, "_aws_client",
+        lambda service, **_kwargs: FakeSts() if service == "sts" else FakeEc2(),
+    )
+
+    result = main.aws_service.get_status()
+
+    assert result["status"] == "connected"
+    assert result["services"]["ec2"] == {
+        "status": "healthy", "total_instances": 3,
+        "running_instances": 1, "stopped_instances": 1,
+    }
