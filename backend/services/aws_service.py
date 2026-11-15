@@ -310,13 +310,58 @@ class AWSService:
                     params["NextToken"] = next_token
                 response = ec2.describe_instances(**params)
 
-                for reservation in response.get("Reservations", []):
-                    for instance in reservation.get("Instances", []):
+                if not isinstance(response, dict):
+                    return {
+                        "provider": "AWS", "status": "disconnected",
+                        "message": "Unable to connect to AWS services",
+                        "error": "Malformed EC2 status response",
+                    }
+                reservations = response.get("Reservations", [])
+                if not isinstance(reservations, list):
+                    return {
+                        "provider": "AWS", "status": "disconnected",
+                        "message": "Unable to connect to AWS services",
+                        "error": "Malformed EC2 status reservations",
+                    }
+                for reservation in reservations:
+                    if not isinstance(reservation, dict):
+                        return {
+                            "provider": "AWS", "status": "disconnected",
+                            "message": "Unable to connect to AWS services",
+                            "error": "Malformed EC2 status reservation",
+                        }
+                    instances = reservation.get("Instances", [])
+                    if not isinstance(instances, list):
+                        return {
+                            "provider": "AWS", "status": "disconnected",
+                            "message": "Unable to connect to AWS services",
+                            "error": "Malformed EC2 status instances",
+                        }
+                    for instance in instances:
+                        if not isinstance(instance, dict):
+                            return {
+                                "provider": "AWS", "status": "disconnected",
+                                "message": "Unable to connect to AWS services",
+                                "error": "Malformed EC2 status instance",
+                            }
+                        state = instance.get("State", {})
+                        if not isinstance(state, dict):
+                            return {
+                                "provider": "AWS", "status": "disconnected",
+                                "message": "Unable to connect to AWS services",
+                                "error": "Malformed EC2 instance state",
+                            }
+                        state_name = state.get("Name")
+                        if state_name is not None and not isinstance(state_name, str):
+                            return {
+                                "provider": "AWS", "status": "disconnected",
+                                "message": "Unable to connect to AWS services",
+                                "error": "Malformed EC2 instance state name",
+                            }
                         total_instances += 1
-                        state = instance.get("State", {}).get("Name")
-                        if state == "running":
+                        if state_name == "running":
                             running_instances += 1
-                        elif state == "stopped":
+                        elif state_name == "stopped":
                             stopped_instances += 1
 
                 next_token = response.get("NextToken")
