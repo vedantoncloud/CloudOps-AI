@@ -1,13 +1,19 @@
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from auth import AccessControlMiddleware, Principal
 from autonomy.audit_api import audit_trail, router
 
 
-def make_client():
+def make_client(role="admin"):
     app = FastAPI()
     app.include_router(router)
-    return TestClient(app)
+    app.add_middleware(
+        AccessControlMiddleware,
+        mode="token",
+        tokens={"test-token": Principal("operator-1", role, "tenant-1")},
+    )
+    return TestClient(app, headers={"Authorization": "Bearer test-token"})
 
 
 def test_integrity_endpoint_reports_empty_trail_as_valid():
@@ -102,3 +108,11 @@ def test_integrity_endpoint_uses_atomic_snapshot(monkeypatch):
     }
     assert calls == [True]
 
+
+
+
+def test_integrity_endpoint_is_admin_only():
+    response = make_client("reader").get("/autonomy/audit/integrity")
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Insufficient role"
