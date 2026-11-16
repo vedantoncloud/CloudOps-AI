@@ -64,7 +64,8 @@ def _serialize(event: AuditEvent) -> AuditEventResponse:
     "/integrity",
     response_model=AuditIntegrityResponse,
 )
-def verify_audit_integrity() -> AuditIntegrityResponse:
+def verify_audit_integrity(request: Request) -> AuditIntegrityResponse:
+    require_role(request.state.principal, "admin")
     result = audit_trail.get_integrity_diagnostics()
     return AuditIntegrityResponse(
         valid=result.valid,
