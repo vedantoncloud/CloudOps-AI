@@ -64,3 +64,41 @@ def test_instance_volume_provider_failure_is_returned_as_unhealthy():
 
     assert result["status"] == "unhealthy"
     assert "private diagnostic" in result["error"]
+
+
+def test_instance_volume_lookup_rejects_incomplete_extra_duplicate_and_malformed_records():
+    requested = ["vol-a", "vol-b"]
+    invalid_responses = [
+        # An unrelated volume must never be included in this instance's result.
+        {"Volumes": [
+            {"VolumeId": "vol-a", "Attachments": []},
+            {"VolumeId": "vol-foreign", "Attachments": []},
+        ]},
+        # A partial response must not be represented as a complete healthy inventory.
+        {"Volumes": [{"VolumeId": "vol-a", "Attachments": []}]},
+        # Duplicate records make the provider response ambiguous.
+        {"Volumes": [
+            {"VolumeId": "vol-a", "Attachments": []},
+            {"VolumeId": "vol-a", "Attachments": []},
+        ]},
+        # Malformed entries must fail closed rather than be silently skipped.
+        {"Volumes": [{"Attachments": []}, {"VolumeId": "vol-b", "Attachments": []}]},
+        {"Volumes": "not-a-list"},
+    ]
+
+    for response in invalid_responses:
+        ec2 = MagicMock()
+        ec2.describe_instances.return_value = {"Reservations": [{"Instances": [{
+            "BlockDeviceMappings": [
+                {"Ebs": {"VolumeId": "vol-b"}},
+                {"Ebs": {"VolumeId": "vol-a"}},
+            ]
+        }]}]}
+        ec2.describe_volumes.return_value = response
+
+        with patch("services.aws_service._aws_client", return_value=ec2):
+            result = AWSService().get_ec2_instance_volumes("i-12345678")
+
+        assert result["status"] == "unhealthy"
+        assert "volumes" not in result
+        ec2.describe_volumes.assert_called_once_with(VolumeIds=requested)
