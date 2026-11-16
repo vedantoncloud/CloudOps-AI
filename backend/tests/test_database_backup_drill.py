@@ -232,3 +232,34 @@ def test_restore_drill_rejects_idempotency_records_import_would_reject(
     with pytest.raises(ValueError, match=expected_error):
         verify_backup("idempotency", backup)
     assert backup.read_bytes() == original
+
+
+def test_restore_drill_includes_committed_wal_records(tmp_path):
+    from autonomy.persistent_audit_trail import PersistentAuditTrail
+
+    backup = tmp_path / "wal-audit.db"
+    trail = PersistentAuditTrail(backup)
+    trail.close()
+
+    # Hold a read snapshot open so the committed event remains in the WAL
+    # instead of being checkpointed into the main database file.
+    anchor = sqlite3.connect(backup, timeout=5)
+    try:
+        assert anchor.execute("PRAGMA journal_mode=WAL").fetchone()[0].lower() == "wal"
+        anchor.execute("BEGIN")
+        anchor.execute("SELECT COUNT(*) FROM audit_events").fetchone()
+
+        writer = PersistentAuditTrail(backup)
+        writer.record(
+            action_id="wal-event", action_type="inspect", resource_type="instance",
+            resource_id="i-wal", old_status="running", new_status="running",
+            event="inspection_completed",
+        )
+        writer.close()
+
+        assert (tmp_path / "wal-audit.db-wal").exists()
+        result = verify_backup("audit", backup)
+        assert result == {"store": "audit", "records_loaded": 1}
+    finally:
+        anchor.rollback()
+        anchor.close()
