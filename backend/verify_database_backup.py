@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import gc
 import json
-import shutil
 import sqlite3
 import sys
 import tempfile
@@ -154,7 +153,15 @@ def verify_backup(store: str, backup: Path) -> dict[str, int | str]:
 
     with tempfile.TemporaryDirectory(prefix="cloudops-restore-drill-") as temporary:
         isolated_copy = Path(temporary) / "restore.db"
-        shutil.copyfile(source, isolated_copy)
+        # Use SQLite's online backup API so committed WAL pages are included
+        # in the isolated restore snapshot. A raw file copy can omit them.
+        with sqlite3.connect(
+            f"{source.as_uri()}?mode=ro", uri=True, timeout=5
+        ) as source_connection, sqlite3.connect(isolated_copy, timeout=5) as destination:
+            source_connection.backup(destination)
+            integrity = destination.execute("PRAGMA integrity_check").fetchone()
+            if integrity != ("ok",):
+                raise ValueError("SQLite restore snapshot integrity check failed")
         count = _load_copy(store, isolated_copy)
         gc.collect()
     return {"store": store, "records_loaded": count}
