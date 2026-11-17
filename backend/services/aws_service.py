@@ -698,10 +698,21 @@ class AWSService:
             if not volume_ids:
                 return {"service": "ec2", "status": "healthy", "instance_id": instance_id, "volumes": []}
             volumes_response = client.describe_volumes(VolumeIds=volume_ids)
+            returned_volumes = volumes_response.get("Volumes")
+            if not isinstance(returned_volumes, list) or any(
+                not isinstance(volume, dict)
+                or not isinstance(volume.get("VolumeId"), str)
+                for volume in returned_volumes
+            ):
+                return {"service": "ec2", "status": "unhealthy", "error": "Malformed volume response"}
+            returned_volume_ids = [volume["VolumeId"] for volume in returned_volumes]
+            if (
+                len(returned_volume_ids) != len(set(returned_volume_ids))
+                or set(returned_volume_ids) != set(volume_ids)
+            ):
+                return {"service": "ec2", "status": "unhealthy", "error": "Incomplete or mismatched volume response"}
             volumes = []
-            for volume in volumes_response.get("Volumes", []):
-                if not isinstance(volume, dict) or not isinstance(volume.get("VolumeId"), str):
-                    continue
+            for volume in returned_volumes:
                 volumes.append({
                     "volume_id": volume["VolumeId"],
                     "encrypted": volume.get("Encrypted") if isinstance(volume.get("Encrypted"), bool) else None,
