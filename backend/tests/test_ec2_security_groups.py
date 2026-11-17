@@ -179,3 +179,32 @@ def test_console_labels_and_renders_both_security_group_directions():
     assert "egress_rules" in html
     assert "No ${label.toLowerCase()} rules." in html
     assert "Outbound" in html
+
+
+
+def test_provider_rejects_duplicate_security_group_records(monkeypatch):
+    class DuplicateClient:
+        def describe_instances(self, **kwargs):
+            assert kwargs == {"InstanceIds": [INSTANCE]}
+            return {"Reservations": [{"Instances": [{
+                "SecurityGroups": [{"GroupId": "sg-12345678"}],
+            }]}]}
+
+        def describe_security_groups(self, **kwargs):
+            assert kwargs == {"GroupIds": ["sg-12345678"]}
+            group = {
+                "GroupId": "sg-12345678",
+                "GroupName": "web",
+                "Description": "web",
+                "VpcId": "vpc-12345678",
+                "IpPermissions": [],
+                "IpPermissionsEgress": [],
+            }
+            return {"SecurityGroups": [group, dict(group)]}
+
+    monkeypatch.setattr("services.aws_service._aws_client", lambda *a, **k: DuplicateClient())
+
+    result = AWSService().get_ec2_instance_security_groups(INSTANCE)
+
+    assert result["status"] == "unhealthy"
+    assert "security_groups" not in result
