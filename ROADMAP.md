@@ -1,6 +1,6 @@
 # CloudOps AI Roadmap
 
-**Repository audit:** 2026-11-17, reconciled against the current `main` branch after PRs #115–#119. This roadmap contains **7 open or partially complete delivery outcomes**; completed items are labeled as such. CI on `main` commit `b4de29b` passed backend tests, the production container build, MySQL 8.4 migration upgrade/downgrade checks, and the dependency audit. This is a CI result, not a claim that a local end-to-end deployment or production rollout has been performed.
+**Repository audit:** 2026-11-17, reconciled against the current `main` branch after PR #122. This roadmap contains **7 open or partially complete delivery outcomes**; completed items are labeled as such. CI on `main` commit `65c1c43` passed backend tests, the production container build and runtime smoke test, MySQL 8.4 migration upgrade/downgrade checks, and the pinned dependency audit. The container smoke test verifies health and authenticated/unauthenticated API behavior. These checks, together with the local Docker smoke test, validate the portfolio runtime path; they are not evidence of a live AWS production rollout.
 
 **Feature update:** 2026-10-22. EC2 instance details now include launch time, platform/OS, CPU architecture, and IAM instance profile ARN, with explicit Linux/UNIX fallback and nullable optional fields. Focused provider, endpoint, regional follow-up, and failure-contract tests pass.
 
@@ -314,7 +314,6 @@ S3 object-version listing validates response identity, version row fields, and t
 - Operators can inspect RDS DB instance inventory through a regional paginated API; tenant mode verifies `CloudOpsTenantId` per instance and fails closed when tag reads or provider responses are unavailable.
 - Operators can filter EC2 inventory by exact instance type at the AWS API before pagination; the console preserves the filter across pages and full CSV exports.
 - Operators can filter EC2 inventory by VPC, subnet, and Availability Zone at the AWS API before pagination; tenant scoping remains in effect, and the console preserves all three filters across pages and full CSV exports while showing placement IDs.
-- The checkout contains untracked SQLite database files. They were left untouched and are not part of this roadmap change.
 
 ## Scope and count
 
