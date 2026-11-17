@@ -378,13 +378,15 @@ release record or immutable storage account with separate credentials).
 Compare later exports against that checkpoint. Do not keep the only
 checkpoint beside the audit database.
 
-Audit events are retained in the configured local SQLite database; CloudOps AI
-does not automatically prune them. Set a retention period that meets the
-organization's obligations, archive complete verified exports before any
-approved deletion, and retain the associated external final-hash checkpoints.
-Restrict database and export access to the operations administrators who need
-it. The chain detects changes relative to a trusted checkpoint; it cannot
-restore deleted or rewritten records by itself.
+Audit events are retained in the configured persistence backend: the
+legacy local SQLite database when `CLOUDOPS_DATABASE_URL` is unset, or the
+shared SQL database when it is configured. CloudOps AI does not automatically
+prune them. Set a retention period that meets the organization's obligations,
+archive complete verified exports before any approved deletion, and retain
+the associated external final-hash checkpoints. Restrict database and export
+access to the operations administrators who need it. The chain detects changes
+relative to a trusted checkpoint; it cannot restore deleted or rewritten
+records by itself.
 
 When using the legacy SQLite deployment (shared URL unset),
 administrators can download a consistent snapshot of the audit database from
@@ -400,13 +402,16 @@ a MySQL backup mechanism. The audit-idempotency SQLite store needs its own
 protected backup. For shared SQL deployment backups and recovery, follow the
 [shared database operations runbook](docs/shared-database-operations.md).
 
-Store backups separately with access controls and a tested restore window. To
-recover, stop the service, preserve the damaged database as evidence, restore
-the selected backup to the configured database path, restart, and verify
-readiness. Export and independently verify the restored chain, then compare
-its final hash and event count with the most recent external checkpoint. If
-they differ, preserve both copies and investigate before resuming normal audit
-operations; do not silently replace the checkpoint or rewrite the chain.
+For a legacy SQLite deployment, store backups separately with access
+controls and a tested restore window. To recover those local files, stop the
+service, preserve the damaged database as evidence, restore the selected backup
+to its configured database path, restart, and verify readiness. Export and
+independently verify the restored chain, then compare its final hash and event
+count with the most recent external checkpoint. If they differ, preserve both
+copies and investigate before resuming normal audit operations; do not silently
+replace the checkpoint or rewrite the chain. For shared MySQL deployment,
+follow the provider-specific restore procedure in the
+[shared database operations runbook](docs/shared-database-operations.md).
 
 Before an incident, run a non-destructive restore drill against each downloaded
 backup. The tool checks SQLite integrity, loads the store using the application's
@@ -415,6 +420,7 @@ chain. It never opens the supplied backup for writing:
 
 ```powershell
 python backend/verify_database_backup.py audit path\to\cloudops-audit-backup.db
+python backend/verify_database_backup.py idempotency path\to\cloudops-idempotency-backup.db
 python backend/verify_database_backup.py action-plans path\to\cloudops-action-plans-backup.db
 python backend/verify_database_backup.py gitops path\to\cloudops-gitops-backup.db
 ```
