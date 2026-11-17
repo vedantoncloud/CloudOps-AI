@@ -5,14 +5,22 @@ analyze, and manage cloud infrastructure through a secured browser console and A
 
 ## Project Status
 
-Under active development. The FastAPI application serves an authenticated
-operations console at `/console` for EC2/S3 inventory, resource governance,
-pending approvals, and actor-scoped autonomous run history. In development
-auth mode it connects without a token; in token mode, enter a bearer token in
-the console. The token is held in page memory and cleared when the page closes.
+**Portfolio milestone — 17 November 2026.** The current `main` branch
+includes the authenticated FastAPI operations console at `/console` for
+EC2/S3 inventory, resource governance, pending approvals, and actor-scoped
+autonomous run history. In development auth mode it connects without a token;
+in token mode, enter a bearer token in the console. The token is held in page
+memory and cleared when the page closes.
 
-The console and API show planning and governance information. Infrastructure
-mutations remain disabled; action execution is dry-run only.
+CI on `main` commit `65c1c43` passed the backend test suite, production
+container build and runtime smoke test, MySQL 8.4 migration checks, and pinned
+dependency audit. The container smoke test verifies the health endpoint, rejects
+an unauthenticated protected request with `401`, and accepts a valid bearer
+token with `200`. A local Docker smoke test also verified these runtime paths.
+
+This is a portfolio/demo-ready milestone, not a claim of a live AWS production
+deployment. The console and API show planning and governance information.
+Infrastructure mutations remain disabled; action execution is dry-run only.
 
 S3 bucket analysis checks encryption, Public Access Block, whether AWS classifies
 the bucket policy as public, public ACL grants, and versioning. The AWS role needs
