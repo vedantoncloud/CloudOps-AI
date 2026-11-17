@@ -266,9 +266,13 @@ registry and `CLOUDOPS_TENANT_AWS_ROLES` as the tenant-to-role ARN map. Set
 `AWS_DEFAULT_REGION` for the deployment. In production, tenant AWS requests
 fail closed when a tenant has no role mapping. Supply AWS credentials through
 the host's workload identity mechanism (such as an ECS task role or EC2
-instance profile); avoid baking credentials into the image. The container
-stores its four SQLite databases in `/var/lib/cloudops`, so keep the named
-volume across upgrades and back it up using the documented admin backup APIs.
+instance profile); avoid baking credentials into the image. When `CLOUDOPS_DATABASE_URL` is unset, the container stores its four
+SQLite databases in `/var/lib/cloudops`; keep the named volume across upgrades
+and back up the local stores. When the shared URL is configured, the audit,
+idempotency, action-plan, and GitOps stores use that shared SQL database instead
+of the legacy SQLite files. See
+[shared database deployment and recovery](docs/shared-database-operations.md)
+before migrating legacy data or operating a shared database.
 Terminate TLS at a trusted reverse proxy and expose the container only on a
 private interface; the sample port binding is loopback-only. `GET /health` is
 the liveness probe and `GET /ready` checks AWS and persistent-store readiness.
@@ -382,16 +386,19 @@ Restrict database and export access to the operations administrators who need
 it. The chain detects changes relative to a trusted checkpoint; it cannot
 restore deleted or rewritten records by itself.
 
-Administrators can download a consistent snapshot of the live audit database
-from `GET /autonomy/audit/database/backup`. The endpoint requires an admin
-bearer token, opens the configured database read-only, uses SQLite's online
-backup API, checks the snapshot with `PRAGMA integrity_check`, and streams the
-file without retaining a server-side copy. The same admin-only API provides
+When using the legacy SQLite deployment (shared URL unset),
+administrators can download a consistent snapshot of the audit database from
+`GET /autonomy/audit/database/backup`. The endpoint requires an admin bearer
+token, opens the SQLite database read-only, uses SQLite's online backup API,
+checks the snapshot with `PRAGMA integrity_check`, and streams the file without
+retaining a server-side copy. The same admin-only API provides
 `GET /autonomy/audit/database/backup/action-plans` and
 `GET /autonomy/audit/database/backup/gitops` for the durable action-plan and
 GitOps stores. Each store is snapshotted independently; the API does not create
-a cross-database transaction. Store downloads separately with access controls;
-temporary snapshots are removed after streaming.
+a cross-database transaction. These endpoints are SQLite-specific and are not
+a MySQL backup mechanism. The audit-idempotency SQLite store needs its own
+protected backup. For shared SQL deployment backups and recovery, follow the
+[shared database operations runbook](docs/shared-database-operations.md).
 
 Store backups separately with access controls and a tested restore window. To
 recover, stop the service, preserve the damaged database as evidence, restore
@@ -418,18 +425,19 @@ with status 1 and a concise diagnostic. A successful drill validates a backup
 copy; it does not replace a production restore rehearsal or verify external
 checkpoints and application readiness.
 
-GitOps change sets and their lifecycle state are stored in SQLite so proposals,
-approvals, dry-run applies, and verification results survive process restarts.
-The default file is `backend/gitops_changes.db`; set
-`CLOUDOPS_GITOPS_DB_PATH` to place it elsewhere. `/ready` checks this store.
+GitOps change sets and their lifecycle state survive process restarts.
+With `CLOUDOPS_DATABASE_URL` unset, the default file is
+`backend/gitops_changes.db`; set `CLOUDOPS_GITOPS_DB_PATH` to place it
+elsewhere. With the shared URL configured, GitOps state is stored in the shared
+SQL database alongside audit events, audit idempotency, action plans, and
+shared rate-limit counters. `/ready` checks the configured persistence schema.
 Corrupt stored change data fails startup rather than silently dropping pending
-reviews. This is local-file durability for a single process, not shared database
-or multi-process coordination. Back up this file with the audit and action-plan
-stores. Real infrastructure mutation remains disabled.
+reviews. Real infrastructure mutation remains disabled.
 
-The console is a small browser client served directly by FastAPI. The
-application includes optional shared SQL request-rate counters for workers
-using the same supported database URL; this does not make the other SQLite
-stores distributed or provide general shared production persistence.
+The console is a small browser client served directly by FastAPI. Shared SQL
+persistence is optional and supports MySQL through PyMySQL or SQLite for
+processes sharing one local file. See the
+[shared database deployment and recovery runbook](docs/shared-database-operations.md)
+for migration, import, readiness, backup, and recovery boundaries.
 Container deployment and CI are provided. Infrastructure as code and LLM
 integration are not currently provided.
