@@ -30,6 +30,50 @@ jobs:
         run: python -m pytest backend/tests
       - name: Build production container image
         run: docker build --tag cloudops-ai:ci .
+      - name: Smoke test production container
+        env:
+          CLOUDOPS_API_TOKENS: '{"smoke-token":{"subject":"smoke-admin","role":"admin","tenant_id":"smoke-tenant"}}'
+        run: |
+          set -euo pipefail
+          container_name="cloudops-ai-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          trap 'docker logs "$container_name" || true; docker rm -f "$container_name" >/dev/null 2>&1 || true' EXIT
+
+          docker run -d --name "$container_name" \
+            -p 127.0.0.1::8000 \
+            --env "CLOUDOPS_API_TOKENS=${CLOUDOPS_API_TOKENS}" \
+            cloudops-ai:ci
+
+          host_port="$(docker port "$container_name" 8000/tcp | awk -F: '{print $NF}')"
+          healthy=0
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent "http://127.0.0.1:${host_port}/health" > /tmp/cloudops-health.json; then
+              healthy=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$healthy" -ne 1 ]; then
+            echo "Container health endpoint did not become healthy"
+            exit 1
+          fi
+          grep -q '"status":"healthy"' /tmp/cloudops-health.json
+
+          unauthenticated_status="$(curl --silent --show-error --output /tmp/cloudops-unauthenticated.json --write-out '%{http_code}' "http://127.0.0.1:${host_port}/operations/failures")"
+          if [ "$unauthenticated_status" != "401" ]; then
+            cat /tmp/cloudops-unauthenticated.json
+            echo "Expected unauthenticated request to return 401, got ${unauthenticated_status}"
+            exit 1
+          fi
+
+          authenticated_status="$(curl --silent --show-error --output /tmp/cloudops-authenticated.json --write-out '%{http_code}' \
+            --header "Authorization: Bearer smoke-token" \
+            "http://127.0.0.1:${host_port}/operations/failures")"
+          if [ "$authenticated_status" != "200" ]; then
+            cat /tmp/cloudops-authenticated.json
+            echo "Expected authenticated request to return 200, got ${authenticated_status}"
+            exit 1
+          fi
+          grep -q '"scope":"since_process_start"' /tmp/cloudops-authenticated.json
 
   dependency-audit:
     runs-on: ubuntu-latest
@@ -74,7 +118,9 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-          cache-dependency-path: backend/requirements.txt
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
       - name: Install backend dependencies
         run: python -m pip install -r backend/requirements.txt -r backend/requirements-dev.txt
       - name: Upgrade and downgrade shared schema on MySQL 8.4
