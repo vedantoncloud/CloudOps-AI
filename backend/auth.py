@@ -106,8 +106,10 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
         self.environment = (environment or os.getenv("CLOUDOPS_ENV", "development")).lower()
         if self.environment not in {"development", "staging", "production"}:
             raise RuntimeError("CLOUDOPS_ENV must be 'development', 'staging', or 'production'")
-        if self.environment == "production" and self.mode != "token":
-            raise RuntimeError("CLOUDOPS_AUTH_MODE=token is required when CLOUDOPS_ENV=production")
+        if self.environment in {"staging", "production"} and self.mode != "token":
+            raise RuntimeError(
+                f"CLOUDOPS_AUTH_MODE=token is required when CLOUDOPS_ENV={self.environment}"
+            )
         self.tokens = load_token_registry() if tokens is None else tokens
         if self.mode == "token" and not self.tokens:
             raise RuntimeError("CLOUDOPS_API_TOKENS is required when CLOUDOPS_AUTH_MODE=token")
