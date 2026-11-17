@@ -252,3 +252,26 @@ def test_production_token_mode_requires_configured_credentials():
             tokens={},
             environment="production",
         )
+
+
+@pytest.mark.parametrize("mode", [None, "development"])
+def test_staging_rejects_permissive_development_authentication(mode):
+    with pytest.raises(RuntimeError, match="CLOUDOPS_AUTH_MODE=token is required"):
+        AccessControlMiddleware(
+            lambda scope, receive, send: None,
+            mode=mode,
+            tokens={},
+            environment="staging",
+        )
+
+
+def test_staging_token_mode_accepts_configured_credentials():
+    middleware = AccessControlMiddleware(
+        lambda scope, receive, send: None,
+        mode="token",
+        tokens=TOKENS,
+        environment="staging",
+    )
+
+    assert middleware.mode == "token"
+    assert middleware.environment == "staging"
