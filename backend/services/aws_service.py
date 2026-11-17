@@ -747,8 +747,17 @@ class AWSService:
             response_groups = result.get("SecurityGroups")
             if not isinstance(response_groups, list):
                 return {"service": "ec2", "status": "unhealthy", "error": "Malformed security group response"}
-            returned_ids = [group.get("GroupId") for group in response_groups if isinstance(group, dict)]
-            if len(returned_ids) != len(response_groups) or set(returned_ids) != set(group_ids):
+            if any(
+                not isinstance(group, dict) or not isinstance(group.get("GroupId"), str)
+                for group in response_groups
+            ):
+                return {"service": "ec2", "status": "unhealthy", "error": "Malformed security group"}
+            returned_ids = [group["GroupId"] for group in response_groups]
+            if (
+                len(returned_ids) != len(group_ids)
+                or len(set(returned_ids)) != len(returned_ids)
+                or set(returned_ids) != set(group_ids)
+            ):
                 return {"service": "ec2", "status": "unhealthy", "error": "Incomplete security group response"}
             groups = []
             for group in response_groups:
