@@ -295,7 +295,16 @@ def evaluate_control_loop(request: ControlLoopEvaluateRequest, http_request: Req
             },
         )
 
+    except HTTPException:
+        raise
     except (ValueError, KeyError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception:
+        # Provider, persistence, and audit failures must use a stable
+        # dependency response rather than exposing internal exception data.
+        raise HTTPException(
+            status_code=503,
+            detail="Control loop evaluation is unavailable",
+        ) from None
 
 
