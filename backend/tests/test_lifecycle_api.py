@@ -348,3 +348,4 @@ def test_lifecycle_audit_and_tenant_ownership_survive_worker_restart(tmp_path):
         audit_trail=lifecycle_api.audit_trail
     )
     lifecycle_api._action_owners.clear()
+    lifecycle_api._action_fingerprints.clear()
