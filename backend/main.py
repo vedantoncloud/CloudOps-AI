@@ -386,23 +386,29 @@ def aws_ec2_regions():
     return result
 
 
+MAX_EC2_AGGREGATION_PAGES = 100
+
+
 def _all_tenant_ec2_instances(request: Request, region: str | None = None):
-    """Load every EC2 page in a region and apply tenant ownership before aggregation."""
+    """Load a bounded number of EC2 pages before tenant-scoped aggregation."""
     instances = []
     next_token = None
     seen_tokens = set()
-    while True:
+    for _ in range(MAX_EC2_AGGREGATION_PAGES):
         inventory = _tenant_ec2_instances(request, None, None, 1000, next_token, region=region)
         if inventory.get("status") != "healthy":
             _raise_aws_resource_unavailable()
         instances.extend(inventory.get("instances", []))
         next_token = inventory.get("next_token")
         if not next_token:
-            break
+            return {"service": "ec2", "status": "healthy", "instances": instances}
         if next_token in seen_tokens:
             _raise_aws_resource_unavailable()
         seen_tokens.add(next_token)
-    return {"service": "ec2", "status": "healthy", "instances": instances}
+
+    # Never return a silently truncated aggregate when the provider keeps
+    # producing continuation tokens beyond the safety bound.
+    _raise_aws_resource_unavailable()
 
 
 def _tenant_ec2_instances(request: Request, state: str | None, tag: str | None, max_results=None, next_token=None, name=None, region=None, instance_type=None, vpc_id=None, subnet_id=None, availability_zone=None):
