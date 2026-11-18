@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 
 from auth import Principal
 from autonomy.autonomous_lifecycle import AutonomousLifecycleOrchestrator
+from autonomy.persistent_audit_trail import PersistentAuditTrail
 import autonomy.lifecycle_api as lifecycle_api
 
 
@@ -17,7 +18,7 @@ def make_client():
         return await call_next(request)
 
     app.include_router(lifecycle_api.router)
-    lifecycle_api.orchestrator = AutonomousLifecycleOrchestrator()
+    lifecycle_api.orchestrator = AutonomousLifecycleOrchestrator(audit_trail=lifecycle_api.audit_trail)
     lifecycle_api._action_owners.clear()
     return TestClient(app)
 
@@ -257,3 +258,59 @@ def test_response_contains_safety_evidence():
     assert "safety" in data
     assert "evidence" in data["safety"]
     assert data["safety"]["dry_run"] is True
+
+
+def test_lifecycle_audit_and_tenant_ownership_survive_worker_restart(tmp_path):
+    database = tmp_path / "lifecycle-audit.db"
+    lifecycle_api.orchestrator = AutonomousLifecycleOrchestrator(
+        audit_trail=PersistentAuditTrail(database)
+    )
+    lifecycle_api._action_owners.clear()
+
+    def client_for(tenant_id):
+        app = FastAPI()
+
+        @app.middleware("http")
+        async def attach_tenant_principal(request, call_next):
+            request.state.principal = Principal(f"operator-{tenant_id}", "operator", tenant_id)
+            request.state.tenant_id = tenant_id
+            request.state.tenant_scoped = True
+            return await call_next(request)
+
+        app.include_router(lifecycle_api.router)
+        return TestClient(app)
+
+    tenant_a = client_for("tenant-a")
+    body = payload("durable-lifecycle-1")
+    created = tenant_a.post("/autonomy/lifecycle/run", json=body)
+    assert created.status_code == 200
+    assert created.json()["outcome"] == "awaiting_approval"
+
+    # Simulate a new worker process: rebuild the orchestrator and lose the
+    # process-local action-owner cache while retaining only the SQL audit DB.
+    lifecycle_api.orchestrator = AutonomousLifecycleOrchestrator(
+        audit_trail=PersistentAuditTrail(database)
+    )
+    lifecycle_api._action_owners.clear()
+
+    tenant_b = client_for("tenant-b")
+    foreign_approval = tenant_b.post(
+        "/autonomy/lifecycle/approve",
+        json={**body, "approved_by": "forged"},
+    )
+    assert foreign_approval.status_code == 404
+
+    foreign_audit = tenant_b.get("/autonomy/lifecycle/durable-lifecycle-1/audit")
+    assert foreign_audit.status_code == 404
+
+    recovered_audit = tenant_a.get("/autonomy/lifecycle/durable-lifecycle-1/audit")
+    assert recovered_audit.status_code == 200
+    events = recovered_audit.json()["events"]
+    assert events
+    assert all(event["details"]["tenant_id"] == "tenant-a" for event in events)
+
+    # Restore the normal shared audit store for subsequent tests.
+    lifecycle_api.orchestrator = AutonomousLifecycleOrchestrator(
+        audit_trail=lifecycle_api.audit_trail
+    )
+    lifecycle_api._action_owners.clear()
