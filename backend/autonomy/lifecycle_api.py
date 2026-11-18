@@ -16,6 +16,7 @@ from autonomy.audit_api import audit_trail
 from autonomy.autonomous_lifecycle import (
     AutonomousLifecycleOrchestrator,
     AutonomousLifecycleResult,
+    lifecycle_action_fingerprint,
 )
 
 
@@ -26,6 +27,7 @@ router = APIRouter(
 
 orchestrator = AutonomousLifecycleOrchestrator(audit_trail=audit_trail)
 _action_owners: dict[str, str] = {}
+_action_fingerprints: dict[str, str] = {}
 _owner_lock = RLock()
 
 
@@ -50,17 +52,31 @@ def _scope(request: Request, actor: str) -> str:
     return request.state.tenant_id if getattr(request.state, "tenant_scoped", False) else actor
 
 
-def _claim_action(action_id: str, scope: str, *, create: bool = True) -> None:
+def _claim_action(
+    action_id: str,
+    scope: str,
+    *,
+    action: ActionPlan | None = None,
+    create: bool = True,
+) -> None:
     with _owner_lock:
+        fingerprint = lifecycle_action_fingerprint(action) if action is not None else None
         owner = _action_owners.get(action_id)
-        if owner is not None:
-            if owner != scope:
-                raise HTTPException(status_code=404, detail="Lifecycle action not found")
-            return
+        if owner is not None and owner != scope:
+            raise HTTPException(status_code=404, detail="Lifecycle action not found")
 
-        # The in-process cache is only an optimization. Recover ownership from
-        # durable lifecycle audit evidence after a worker restart or on another
-        # replica, and fail closed when the recorded scope does not match.
+        cached_fingerprint = _action_fingerprints.get(action_id)
+        if (
+            fingerprint is not None
+            and cached_fingerprint is not None
+            and cached_fingerprint != fingerprint
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Lifecycle action details do not match the originally submitted action",
+            )
+
+        # Durable audit evidence is authoritative across worker restarts and replicas.
         events = orchestrator.audit_events(action_id)
         if events:
             recorded_scopes = set()
@@ -73,12 +89,37 @@ def _claim_action(action_id: str, scope: str, *, create: bool = True) -> None:
 
             if recorded_scopes != {scope}:
                 raise HTTPException(status_code=404, detail="Lifecycle action not found")
+
+            if fingerprint is not None:
+                started_events = [
+                    event for event in events
+                    if event.event == "autonomous_lifecycle_started"
+                ]
+                recorded_fingerprints = [
+                    event.details.get("action_fingerprint")
+                    for event in started_events
+                ]
+                # Older records without a fingerprint cannot safely authorize a
+                # decision against caller-resubmitted action details.
+                if (
+                    not recorded_fingerprints
+                    or any(value != fingerprint for value in recorded_fingerprints)
+                ):
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Lifecycle action details do not match the originally submitted action",
+                    )
+
             _action_owners[action_id] = scope
+            if fingerprint is not None:
+                _action_fingerprints[action_id] = fingerprint
             return
 
         if not create:
             raise HTTPException(status_code=404, detail="Lifecycle action not found")
         _action_owners[action_id] = scope
+        if fingerprint is not None:
+            _action_fingerprints[action_id] = fingerprint
 
 
 class LifecycleActionRequest(BaseModel):
@@ -203,7 +244,7 @@ def run_lifecycle(payload: LifecycleRunRequest, request: Request) -> dict[str, A
         if payload.approved_by:
             payload = payload.model_copy(update={"approved_by": actor})
         action = _action(payload)
-        _claim_action(action.action_id, _scope(request, actor))
+        _claim_action(action.action_id, _scope(request, actor), action=action)
         result = orchestrator.run(
             action,
             approved_by=payload.approved_by,
