@@ -12,6 +12,7 @@ from autonomy.action_models import (
     ActionTarget,
     RiskLevel,
 )
+from autonomy.audit_api import audit_trail
 from autonomy.autonomous_lifecycle import (
     AutonomousLifecycleOrchestrator,
     AutonomousLifecycleResult,
@@ -23,7 +24,7 @@ router = APIRouter(
     tags=["autonomous-lifecycle"],
 )
 
-orchestrator = AutonomousLifecycleOrchestrator()
+orchestrator = AutonomousLifecycleOrchestrator(audit_trail=audit_trail)
 _action_owners: dict[str, str] = {}
 _owner_lock = RLock()
 
@@ -52,12 +53,32 @@ def _scope(request: Request, actor: str) -> str:
 def _claim_action(action_id: str, scope: str, *, create: bool = True) -> None:
     with _owner_lock:
         owner = _action_owners.get(action_id)
-        if owner is not None and owner != scope:
-            raise HTTPException(status_code=404, detail="Lifecycle action not found")
-        if owner is None:
-            if not create:
+        if owner is not None:
+            if owner != scope:
+                raise HTTPException(status_code=404, detail="Lifecycle action not found")
+            return
+
+        # The in-process cache is only an optimization. Recover ownership from
+        # durable lifecycle audit evidence after a worker restart or on another
+        # replica, and fail closed when the recorded scope does not match.
+        events = orchestrator.audit_events(action_id)
+        if events:
+            recorded_scopes = set()
+            for event in events:
+                tenant_id = event.details.get("tenant_id")
+                if isinstance(tenant_id, str) and tenant_id.strip():
+                    recorded_scopes.add(tenant_id.strip())
+                elif isinstance(event.actor_id, str) and event.actor_id.strip():
+                    recorded_scopes.add(event.actor_id.strip())
+
+            if recorded_scopes != {scope}:
                 raise HTTPException(status_code=404, detail="Lifecycle action not found")
             _action_owners[action_id] = scope
+            return
+
+        if not create:
+            raise HTTPException(status_code=404, detail="Lifecycle action not found")
+        _action_owners[action_id] = scope
 
 
 class LifecycleActionRequest(BaseModel):
