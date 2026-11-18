@@ -20,6 +20,8 @@ def make_client():
     app.include_router(lifecycle_api.router)
     lifecycle_api.orchestrator = AutonomousLifecycleOrchestrator(audit_trail=lifecycle_api.audit_trail)
     lifecycle_api._action_owners.clear()
+    lifecycle_api._action_fingerprints.clear()
+    lifecycle_api._action_fingerprints.clear()
     return TestClient(app)
 
 
@@ -43,6 +45,7 @@ def make_unauthenticated_client():
     app.include_router(lifecycle_api.router)
     lifecycle_api.orchestrator = AutonomousLifecycleOrchestrator()
     lifecycle_api._action_owners.clear()
+    lifecycle_api._action_fingerprints.clear()
     return TestClient(app)
 
 
@@ -128,6 +131,30 @@ def test_approve_endpoint_completes_dry_run_lifecycle():
     assert data["completed"] is True
     assert data["execution"]["dry_run"] is True
     assert data["verification"]["verified"] is True
+
+
+
+def test_approve_rejects_action_details_changed_after_submission():
+    client = make_client()
+    body = payload("api-action-binding-1")
+
+    submitted = client.post("/autonomy/lifecycle/run", json=body)
+    assert submitted.status_code == 200
+    assert submitted.json()["outcome"] == "awaiting_approval"
+
+    changed = {
+        **body,
+        "resource_id": "i-attacker-selected",
+        "risk": "critical",
+        "approved_by": "operator",
+        "dry_run": False,
+    }
+    response = client.post("/autonomy/lifecycle/approve", json=changed)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "Lifecycle action details do not match the originally submitted action"
+    )
 
 
 def test_reject_endpoint_does_not_execute():
@@ -266,6 +293,7 @@ def test_lifecycle_audit_and_tenant_ownership_survive_worker_restart(tmp_path):
         audit_trail=PersistentAuditTrail(database)
     )
     lifecycle_api._action_owners.clear()
+    lifecycle_api._action_fingerprints.clear()
 
     def client_for(tenant_id):
         app = FastAPI()
@@ -292,6 +320,13 @@ def test_lifecycle_audit_and_tenant_ownership_survive_worker_restart(tmp_path):
         audit_trail=PersistentAuditTrail(database)
     )
     lifecycle_api._action_owners.clear()
+    lifecycle_api._action_fingerprints.clear()
+
+    changed_after_restart = tenant_a.post(
+        "/autonomy/lifecycle/approve",
+        json={**body, "resource_id": "i-changed-after-restart", "approved_by": "forged"},
+    )
+    assert changed_after_restart.status_code == 409
 
     tenant_b = client_for("tenant-b")
     foreign_approval = tenant_b.post(
