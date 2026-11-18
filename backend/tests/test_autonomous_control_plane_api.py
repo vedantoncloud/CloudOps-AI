@@ -257,3 +257,22 @@ def test_control_plane_rejection_without_reason_fails_before_lifecycle(monkeypat
 
     assert response.status_code == 400
     assert "rejection_reason is required" in response.json()["detail"]
+
+
+def test_control_plane_sanitizes_unexpected_dependency_failure(monkeypatch, client):
+    def fail(**kwargs):
+        raise RuntimeError("internal provider endpoint and secret detail")
+
+    monkeypatch.setattr(control_plane_api.control_plane, "run", fail)
+    response = client.post(
+        "/autonomy/control-plane/run",
+        json={
+            "resource_type": "ec2",
+            "resource_id": "i-9",
+            "action_type": "review_instance_state",
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Control-plane evaluation is unavailable"
+    assert "secret detail" not in response.text
