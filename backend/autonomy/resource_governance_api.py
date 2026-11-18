@@ -43,13 +43,10 @@ def resource_governance(resource_type: str, resource_id: str, request: Request):
 
     except HTTPException:
         raise
-    except KeyError as exc:
+    except Exception:
+        # Provider and serialization failures must not leak SDK, resource, or
+        # credential details through this read-only inspection endpoint.
         raise HTTPException(
             status_code=503,
-            detail=str(exc),
-        ) from exc
-    except (ValueError, OSError) as exc:
-        raise HTTPException(
-            status_code=503,
-            detail=str(exc),
-        ) from exc
+            detail="Resource governance data is unavailable",
+        ) from None
