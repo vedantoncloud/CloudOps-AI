@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -18,6 +20,24 @@ from autonomy.execution_verification import (
     ExecutionVerificationBridge,
     ExecutionVerificationResult,
 )
+
+
+def lifecycle_action_fingerprint(action: ActionPlan) -> str:
+    """Return a stable digest of the immutable action fields requiring approval."""
+    payload = {
+        "action_id": str(action.action_id).strip(),
+        "action_type": str(action.action_type).strip(),
+        "resource_type": str(action.target.resource_type).strip(),
+        "resource_id": str(action.target.resource_id).strip(),
+        "reason": str(action.reason).strip(),
+        "risk": getattr(action.risk, "value", str(action.risk)),
+        "requires_approval": bool(action.requires_approval),
+        "rollback_available": bool(action.rollback_available),
+    }
+    encoded = json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    )
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
 class LifecycleOutcome(str):
@@ -98,6 +118,7 @@ class AutonomousLifecycleOrchestrator:
                 "dry_run": dry_run,
                 "idempotency_key": idempotency_key,
                 "idempotency_seen": idempotency_seen,
+                "action_fingerprint": lifecycle_action_fingerprint(action),
             },
             actor_id=actor_id,
             tenant_id=tenant_id,
