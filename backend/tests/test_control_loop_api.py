@@ -194,3 +194,24 @@ def test_control_loop_audit_events_include_authenticated_actor(monkeypatch):
         event.event == "gitops_change_registered" and event.actor_id == "operator-17"
         for event in events
     )
+
+
+def test_control_loop_api_sanitizes_unexpected_pipeline_failures(monkeypatch):
+    def fail_build(**kwargs):
+        raise RuntimeError("internal provider endpoint and secret detail")
+
+    monkeypatch.setattr(
+        control_loop_api.resource_context_pipeline,
+        "build",
+        fail_build,
+    )
+    response = TestClient(make_app()).post(
+        "/autonomy/control-loop/evaluate",
+        json=make_payload(),
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": "Control loop evaluation is unavailable"
+    }
+    assert "secret" not in response.text
