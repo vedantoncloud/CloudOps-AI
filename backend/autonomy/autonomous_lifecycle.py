@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import hashlib
 import json
+from dataclasses import dataclass, field
 from typing import Any
 
 from autonomy.action_models import ActionPlan, ActionStatus
@@ -34,7 +34,9 @@ def lifecycle_action_fingerprint(action: ActionPlan) -> str:
         "requires_approval": bool(action.requires_approval),
         "rollback_available": bool(action.rollback_available),
     }
-    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    encoded = json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    )
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
