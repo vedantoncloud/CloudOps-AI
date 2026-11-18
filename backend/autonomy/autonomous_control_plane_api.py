@@ -197,5 +197,10 @@ def run_control_plane(payload: ControlPlaneRunRequest, request: Request) -> dict
         }
     except HTTPException:
         raise
-    except (ValueError, KeyError, TypeError, AttributeError) as exc:
+    except (ValueError, KeyError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Control-plane evaluation is unavailable",
+        ) from exc

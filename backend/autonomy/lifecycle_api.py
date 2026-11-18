@@ -259,6 +259,11 @@ def run_lifecycle(payload: LifecycleRunRequest, request: Request) -> dict[str, A
         raise
     except (ValueError, PermissionError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Lifecycle evaluation is unavailable",
+        ) from exc
 
 
 @router.post("/approve")
@@ -283,6 +288,11 @@ def approve_lifecycle(payload: LifecycleApproveRequest, request: Request) -> dic
         raise
     except (ValueError, PermissionError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Lifecycle approval is unavailable",
+        ) from exc
 
 
 @router.post("/reject")
@@ -306,6 +316,11 @@ def reject_lifecycle(payload: LifecycleRejectRequest, request: Request) -> dict[
         raise
     except (ValueError, PermissionError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Lifecycle rejection is unavailable",
+        ) from exc
 
 
 @router.get("/{action_id}/audit")

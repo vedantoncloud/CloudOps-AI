@@ -5,6 +5,7 @@ from auth import Principal
 from autonomy.autonomous_lifecycle import AutonomousLifecycleOrchestrator
 from autonomy.persistent_audit_trail import PersistentAuditTrail
 import autonomy.lifecycle_api as lifecycle_api
+import pytest
 
 
 def make_client():
@@ -284,6 +285,33 @@ def test_response_contains_safety_evidence():
     assert "safety" in data
     assert "evidence" in data["safety"]
     assert data["safety"]["dry_run"] is True
+
+
+@pytest.mark.parametrize(
+    ("route", "method", "extra_payload", "expected_detail"),
+    [
+        ("/run", "run", {}, "Lifecycle evaluation is unavailable"),
+        ("/approve", "approve_and_run", {"approved_by": "forged"}, "Lifecycle approval is unavailable"),
+        ("/reject", "reject", {"rejected_by": "forged", "rejection_reason": "test"}, "Lifecycle rejection is unavailable"),
+    ],
+)
+def test_lifecycle_routes_sanitize_unexpected_dependency_failures(
+    monkeypatch, route, method, extra_payload, expected_detail
+):
+    client = make_client()
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("internal provider endpoint and secret detail")
+
+    monkeypatch.setattr(lifecycle_api.orchestrator, method, fail)
+    response = client.post(
+        f"/autonomy/lifecycle{route}",
+        json={**payload(f"failure-{method}"), **extra_payload},
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == expected_detail
+    assert "secret detail" not in response.text
 
 
 def test_lifecycle_audit_and_tenant_ownership_survive_worker_restart(tmp_path):
