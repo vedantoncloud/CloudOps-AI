@@ -268,7 +268,7 @@ def approve_lifecycle(payload: LifecycleApproveRequest, request: Request) -> dic
         tenant_id = request.state.tenant_id if getattr(request.state, "tenant_scoped", False) else None
         payload = payload.model_copy(update={"approved_by": actor})
         action = _action(payload)
-        _claim_action(action.action_id, _scope(request, actor))
+        _claim_action(action.action_id, _scope(request, actor), action=action)
         result = orchestrator.approve_and_run(
             action,
             approved_by=payload.approved_by,
@@ -292,7 +292,7 @@ def reject_lifecycle(payload: LifecycleRejectRequest, request: Request) -> dict[
         tenant_id = request.state.tenant_id if getattr(request.state, "tenant_scoped", False) else None
         payload = payload.model_copy(update={"rejected_by": actor})
         action = _action(payload)
-        _claim_action(action.action_id, _scope(request, actor))
+        _claim_action(action.action_id, _scope(request, actor), action=action)
         result = orchestrator.reject(
             action,
             rejected_by=payload.rejected_by,
