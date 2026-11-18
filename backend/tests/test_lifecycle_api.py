@@ -21,7 +21,6 @@ def make_client():
     lifecycle_api.orchestrator = AutonomousLifecycleOrchestrator(audit_trail=lifecycle_api.audit_trail)
     lifecycle_api._action_owners.clear()
     lifecycle_api._action_fingerprints.clear()
-    lifecycle_api._action_fingerprints.clear()
     return TestClient(app)
 
 
