@@ -45,7 +45,7 @@ def test_governance_api_maps_value_error_to_503(monkeypatch):
 
     assert response.status_code == 503
     assert response.json() == {
-        "detail": "provider validation failed"
+        "detail": "Resource governance data is unavailable"
     }
 
 
@@ -66,7 +66,7 @@ def test_governance_api_maps_os_error_to_503(monkeypatch):
 
     assert response.status_code == 503
     assert response.json() == {
-        "detail": "provider unavailable"
+        "detail": "Resource governance data is unavailable"
     }
 
 
@@ -86,3 +86,30 @@ def test_governance_api_keeps_success_contract():
     assert body["resource_id"] == "i-task23-success"
     assert body["decision"] == "allow"
     assert body["allowed_for_decision"] is True
+
+
+class UnexpectedProviderError:
+    @property
+    def provider_name(self):
+        return "aws"
+
+    def get_resource(self, resource_type, resource_id):
+        raise RuntimeError("sensitive provider endpoint and credentials detail")
+
+
+def test_governance_api_sanitizes_unexpected_provider_errors(monkeypatch):
+    monkeypatch.setattr(
+        governance_api.provider_registry,
+        "get",
+        lambda provider_name: UnexpectedProviderError(),
+    )
+
+    response = TestClient(make_app()).get(
+        "/autonomy/resources/ec2/i-task23-runtime-error/governance"
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": "Resource governance data is unavailable"
+    }
+    assert "sensitive" not in response.text
