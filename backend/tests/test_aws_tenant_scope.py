@@ -1083,3 +1083,32 @@ def test_ec2_inventory_page_size_is_bounded(monkeypatch):
     response = tenant_client(monkeypatch).get("/cloud/aws/ec2/instances?max_results=1001", headers={"Authorization": "Bearer token-a"})
     assert response.status_code == 400
     assert response.json()["detail"] == "max_results must be between 5 and 1000"
+
+
+
+def test_tenant_ec2_aggregate_pagination_stops_after_safety_bound(monkeypatch):
+    from types import SimpleNamespace
+
+    calls = []
+
+    def endless_pages(_request, _state, _tag, _max_results, next_token, **_kwargs):
+        calls.append(next_token)
+        return {
+            "service": "ec2",
+            "status": "healthy",
+            "instances": [],
+            "next_token": f"page-{len(calls)}",
+        }
+
+    monkeypatch.setattr(main, "_tenant_ec2_instances", endless_pages)
+    request = SimpleNamespace(
+        state=SimpleNamespace(tenant_scoped=True, tenant_id="tenant-a")
+    )
+
+    with pytest.raises(HTTPException) as error:
+        main._all_tenant_ec2_instances(request)
+
+    assert error.value.status_code == 503
+    assert len(calls) == main.MAX_EC2_AGGREGATION_PAGES
+    assert calls[0] is None
+    assert calls[-1] == f"page-{main.MAX_EC2_AGGREGATION_PAGES - 1}"
