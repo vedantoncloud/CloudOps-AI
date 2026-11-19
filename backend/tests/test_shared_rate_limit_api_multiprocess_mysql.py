@@ -56,7 +56,7 @@ def _wait_for_worker(process: subprocess.Popen, base_url: str) -> None:
             stderr = process.stderr.read() if process.stderr is not None else ""
             detail = stderr.strip() or "<worker produced no stderr output>"
             raise RuntimeError(
-                f"API worker exited during startup with code {process.returncode}:\\n{detail}"
+                f"API worker exited during startup with code {process.returncode}:\n{detail}"
             )
         try:
             status, _body = _request(base_url, "unused", path="/health")
