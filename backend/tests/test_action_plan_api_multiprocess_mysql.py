@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from http.client import HTTPResponse
 import json
 import os
 from pathlib import Path
@@ -76,7 +75,7 @@ def test_mysql_tenant_scoped_plan_api_reads_are_isolated_across_workers(database
     plan = ActionPlan(
         action_id=identity,
         action_type="review_instance_state",
-        target=ActionTarget("ec2_instance", "i-api-worker-isolation"),
+        target=ActionTarget("ec2_instance", f"i-{identity}"),
         reason="Read-only multi-worker tenant isolation integration test.",
         risk=RiskLevel.MEDIUM,
         status=ActionStatus.PENDING_APPROVAL,
