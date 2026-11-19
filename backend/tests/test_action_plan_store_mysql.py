@@ -113,3 +113,84 @@ def test_mysql_updates_preserve_creation_order_and_tenant_metadata(database_url)
             engine.dispose()
     finally:
         store.close()
+
+
+def _save_mysql_plans_in_process(database_url, identity, process_index, start_barrier, result_queue):
+    """Persist from an independently spawned process with its own SQLAlchemy engine."""
+    store = None
+    try:
+        start_barrier.wait(timeout=30)
+        store = ActionPlanStore(database_url=database_url)
+        plans = [
+            _plan(f"{identity}-{process_index}-{index}")
+            for index in range(3)
+        ]
+        store.save_many(plans, f"tenant-process-{process_index}")
+        result_queue.put((process_index, None))
+    except Exception as exc:
+        result_queue.put((process_index, repr(exc)))
+    finally:
+        if store is not None:
+            store.close()
+
+
+def test_mysql_allocator_serializes_writes_from_independent_processes(database_url):
+    """Exercise the shared allocator across OS processes, not just threads."""
+    import multiprocessing
+
+    identity = f"mysql-process-plan-{uuid.uuid4().hex}"
+    context = multiprocessing.get_context("spawn")
+    process_count = 4
+    start_barrier = context.Barrier(process_count)
+    result_queue = context.Queue()
+    processes = [
+        context.Process(
+            target=_save_mysql_plans_in_process,
+            args=(database_url, identity, index, start_barrier, result_queue),
+        )
+        for index in range(process_count)
+    ]
+
+    try:
+        for process in processes:
+            process.start()
+        for process in processes:
+            process.join(timeout=60)
+
+        unfinished = [process for process in processes if process.is_alive()]
+        for process in unfinished:
+            process.terminate()
+            process.join(timeout=5)
+        assert not unfinished, "MySQL writer processes did not finish before timeout"
+        assert all(process.exitcode == 0 for process in processes)
+
+        outcomes = [result_queue.get(timeout=5) for _ in processes]
+        assert all(error is None for _, error in outcomes), outcomes
+        assert {index for index, _ in outcomes} == set(range(process_count))
+
+        engine = create_engine(database_url, future=True)
+        try:
+            with engine.connect() as connection:
+                rows = connection.execute(
+                    text(
+                        "SELECT action_id, tenant_id, created_order FROM action_plans "
+                        "WHERE action_id LIKE :prefix ORDER BY created_order"
+                    ),
+                    {"prefix": f"{identity}-%"},
+                ).all()
+            orders = [row.created_order for row in rows]
+            assert len(rows) == process_count * 3
+            assert len(set(orders)) == process_count * 3
+            assert orders == sorted(orders)
+            assert {
+                row.tenant_id for row in rows
+            } == {f"tenant-process-{index}" for index in range(process_count)}
+        finally:
+            engine.dispose()
+    finally:
+        for process in processes:
+            if process.is_alive():
+                process.terminate()
+                process.join(timeout=5)
+        result_queue.close()
+        result_queue.join_thread()
