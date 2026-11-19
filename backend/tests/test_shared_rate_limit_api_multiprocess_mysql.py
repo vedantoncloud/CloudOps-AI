@@ -53,7 +53,11 @@ def _wait_for_worker(process: subprocess.Popen, base_url: str) -> None:
     deadline = time.monotonic() + 30
     while time.monotonic() < deadline:
         if process.poll() is not None:
-            raise RuntimeError(f"API worker exited during startup with code {process.returncode}")
+            stderr = process.stderr.read() if process.stderr is not None else ""
+            detail = stderr.strip() or "<worker produced no stderr output>"
+            raise RuntimeError(
+                f"API worker exited during startup with code {process.returncode}:\n{detail}"
+            )
         try:
             status, _body = _request(base_url, "unused", path="/health")
             if status == 200:
@@ -96,7 +100,10 @@ def test_mysql_rate_limit_budget_is_shared_across_api_workers(database_url):
                 cwd=backend_dir,
                 env=environment,
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
             ))
 
         for worker, base_url in zip(workers, base_urls):
