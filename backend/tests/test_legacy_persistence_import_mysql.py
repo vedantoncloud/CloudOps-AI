@@ -83,7 +83,14 @@ def _sources(directory):
         payload = json.dumps({
             "change_id": f"change-{identity}",
             "source_action_id": f"plan-{identity}",
-            "changes": [],
+            "changes": [{
+                "resource_type": "ec2_instance",
+                "resource_id": "i-mysql-import",
+                "field": "instance_type",
+                "desired_value": "t3.small",
+                "current_value": "t3.micro",
+                "reason": "MySQL importer integration",
+            }],
             "status": "pending",
             "requires_approval": True,
             "approved_by": None,
@@ -155,12 +162,12 @@ def test_atomic_four_store_import_on_mysql(tmp_path, monkeypatch):
                 text("SELECT tenant_id, created_order, payload FROM action_plans")
             ).one()
             assert tuple(plan[:2]) == ("tenant-import", 4)
-            assert json.loads(plan.payload)["status"] == "pending_approval"
+            assert json.loads(plan.payload)["status"] == "pending"
             change = connection.execute(
                 text("SELECT tenant_id, created_order, payload FROM gitops_change_sets")
             ).one()
             assert tuple(change[:2]) == ("tenant-import", 6)
-            assert json.loads(change.payload)["status"] == "pending_approval"
+            assert json.loads(change.payload)["status"] == "pending"
             assert connection.execute(
                 text("SELECT manifest_sha256 FROM persistence_import_runs")
             ).scalar_one() == imported["manifest_sha256"]
