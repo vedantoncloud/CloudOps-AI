@@ -136,9 +136,10 @@ def test_import_is_dry_run_by_default_and_preserves_all_store_data(tmp_path, mon
             assert all(row.claim_token for row in claims)
 
             plan = connection.execute(
-                text("SELECT action_id, tenant_id, created_order FROM action_plans")
+                text("SELECT action_id, tenant_id, created_order, payload FROM action_plans")
             ).one()
-            assert tuple(plan) == ("plan-001", "tenant-a", 9)
+            assert tuple(plan[:3]) == ("plan-001", "tenant-a", 9)
+            assert json.loads(plan.payload)["status"] == "pending_approval"
 
             change = connection.execute(
                 text("SELECT change_id, tenant_id, payload, created_order FROM gitops_change_sets")
@@ -146,6 +147,7 @@ def test_import_is_dry_run_by_default_and_preserves_all_store_data(tmp_path, mon
             assert (change.change_id, change.tenant_id, change.created_order) == (
                 "change-001", "tenant-b", 12
             )
+            assert json.loads(change.payload)["status"] == "pending_approval"
             assert json.loads(change.payload)["metadata"]["tenant_id"] == "tenant-b"
 
             assert tuple(connection.execute(
