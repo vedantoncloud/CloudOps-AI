@@ -152,13 +152,15 @@ def test_atomic_four_store_import_on_mysql(tmp_path, monkeypatch):
                 text("SELECT COUNT(*) FROM audit_idempotency WHERE status = 'emitted'")
             ).scalar_one() == 1
             plan = connection.execute(
-                text("SELECT tenant_id, created_order FROM action_plans")
+                text("SELECT tenant_id, created_order, payload FROM action_plans")
             ).one()
-            assert tuple(plan) == ("tenant-import", 4)
+            assert tuple(plan[:2]) == ("tenant-import", 4)
+            assert json.loads(plan.payload)["status"] == "pending_approval"
             change = connection.execute(
-                text("SELECT tenant_id, created_order FROM gitops_change_sets")
+                text("SELECT tenant_id, created_order, payload FROM gitops_change_sets")
             ).one()
-            assert tuple(change) == ("tenant-import", 6)
+            assert tuple(change[:2]) == ("tenant-import", 6)
+            assert json.loads(change.payload)["status"] == "pending_approval"
             assert connection.execute(
                 text("SELECT manifest_sha256 FROM persistence_import_runs")
             ).scalar_one() == imported["manifest_sha256"]
