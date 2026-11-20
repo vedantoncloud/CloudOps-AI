@@ -89,3 +89,21 @@ def test_legacy_plan_payload_without_created_at_keeps_age_unknown(tmp_path):
 
     assert tenant == "tenant-a"
     assert restored.created_at is None
+
+ 
+def test_legacy_pending_status_decodes_as_pending_approval(tmp_path):
+    path = tmp_path / "plans.sqlite3"
+    store = ActionPlanStore(path)
+    payload = json.loads(store._encode(_plan("act-legacy-pending")))
+    payload["status"] = "pending"
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "INSERT INTO action_plans(action_id, tenant_id, payload, created_order) "
+            "VALUES (?, ?, ?, ?)",
+            ("act-legacy-pending", "tenant-a", json.dumps(payload), 1),
+        )
+
+    restored, tenant = store.get("act-legacy-pending")
+
+    assert tenant == "tenant-a"
+    assert restored.status == ActionStatus.PENDING_APPROVAL

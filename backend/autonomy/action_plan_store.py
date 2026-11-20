@@ -118,6 +118,9 @@ class ActionPlanStore:
         created_at = datetime.fromisoformat(value["created_at"]) if value.get("created_at") else None
         if created_at is not None and created_at.tzinfo is None:
             created_at = created_at.replace(tzinfo=timezone.utc)
+        status_value = value["status"]
+        if status_value == "pending":
+            status_value = ActionStatus.PENDING_APPROVAL.value
         return ActionPlan(
             action_type=value["action_type"],
             target=ActionTarget(**value["target"]),
@@ -125,7 +128,7 @@ class ActionPlanStore:
             risk=RiskLevel(value["risk"]),
             requires_approval=value["requires_approval"],
             rollback_available=value["rollback_available"],
-            status=ActionStatus(value["status"]),
+            status=ActionStatus(status_value),
             decision_by=value["decision_by"],
             decision_reason=value["decision_reason"],
             action_id=value["action_id"],

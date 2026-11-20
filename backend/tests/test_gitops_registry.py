@@ -1,4 +1,6 @@
-﻿from autonomy.gitops import (
+﻿import json
+
+from autonomy.gitops import (
     GitOpsChange,
     GitOpsChangeStatus,
     GitOpsEngine,
@@ -278,3 +280,20 @@ def test_approval_boundary_is_preserved():
 
     assert result.success is False
     assert change_set.status == GitOpsChangeStatus.PENDING_APPROVAL
+
+ 
+def test_legacy_pending_status_decodes_as_pending_approval():
+    payload = {
+        "change_id": "legacy-change",
+        "source_action_id": "legacy-action",
+        "changes": [],
+        "status": "pending",
+        "requires_approval": True,
+        "approved_by": None,
+        "commit_message": "Legacy status compatibility",
+        "metadata": {},
+    }
+
+    restored = GitOpsChangeSetRegistry._decode(json.dumps(payload))
+
+    assert restored.status == GitOpsChangeStatus.PENDING_APPROVAL

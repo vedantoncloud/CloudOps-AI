@@ -282,21 +282,36 @@ def _dry_run_or_import(
                 rows["audit_idempotency"],
             )
         if rows["action_plans"]:
+            action_plan_rows = []
+            for row in rows["action_plans"]:
+                payload = json.loads(row["payload"])
+                if payload.get("status") == "pending":
+                    payload["status"] = "pending_approval"
+                action_plan_rows.append({
+                    **row,
+                    "payload": json.dumps(
+                        payload, separators=(",", ":"), ensure_ascii=False
+                    ),
+                })
             connection.execute(
                 text(
                     "INSERT INTO action_plans (action_id, tenant_id, payload, created_order) "
                     "VALUES (:action_id, :tenant_id, :payload, :created_order)"
                 ),
-                rows["action_plans"],
+                action_plan_rows,
             )
         gitops_rows = []
         for row in rows["gitops"]:
             payload = json.loads(row["payload"])
             tenant_id = (payload.get("metadata") or {}).get("tenant_id")
+            if payload.get("status") == "pending":
+                payload["status"] = "pending_approval"
             gitops_rows.append({
                 "change_id": row["change_id"],
                 "tenant_id": tenant_id,
-                "payload": row["payload"],
+                "payload": json.dumps(
+                    payload, separators=(",", ":"), ensure_ascii=False
+                ),
                 "created_order": row["created_order"],
             })
         if gitops_rows:
