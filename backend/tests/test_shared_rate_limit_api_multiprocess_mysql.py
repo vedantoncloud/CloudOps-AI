@@ -49,7 +49,8 @@ def _request(base_url: str, token: str, path: str = "/operations/failures") -> t
         return error.code, json.loads(error.read())
 
 
-def _wait_for_worker(process: subprocess.Popen, base_url: str) -> None:
+def _wait_for_worker(process: subprocess.Popen, host: str, port: int) -> None:
+    """Wait for Uvicorn to accept connections without consuming a rate-limit token."""
     deadline = time.monotonic() + 30
     while time.monotonic() < deadline:
         if process.poll() is not None:
@@ -59,13 +60,11 @@ def _wait_for_worker(process: subprocess.Popen, base_url: str) -> None:
                 f"API worker exited during startup with code {process.returncode}:\n{detail}"
             )
         try:
-            status, _body = _request(base_url, "unused", path="/health")
-            if status == 200:
+            with socket.create_connection((host, port), timeout=1):
                 return
-        except (OSError, URLError, TimeoutError, ValueError):
-            pass
-        time.sleep(0.2)
-    raise TimeoutError("API worker did not become healthy within 30 seconds")
+        except OSError:
+            time.sleep(0.2)
+    raise TimeoutError(f"API worker did not accept connections on {host}:{port} within 30 seconds")
 
 
 def test_mysql_rate_limit_budget_is_shared_across_api_workers(database_url):
@@ -106,8 +105,8 @@ def test_mysql_rate_limit_budget_is_shared_across_api_workers(database_url):
                 errors="replace",
             ))
 
-        for worker, base_url in zip(workers, base_urls):
-            _wait_for_worker(worker, base_url)
+        for worker, port in zip(workers, ports):
+            _wait_for_worker(worker, "127.0.0.1", port)
 
         first_status, _ = _request(base_urls[0], token)
         second_status, _ = _request(base_urls[1], token)
