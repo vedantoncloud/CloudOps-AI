@@ -122,11 +122,14 @@ class GitOpsChangeSetRegistry:
             if metadata.get("tenant_id") != tenant_id:
                 raise ValueError("persisted GitOps tenant ownership metadata is inconsistent")
             metadata = {**metadata, "tenant_id": tenant_id}
+        status_value = value["status"]
+        if status_value == "pending":
+            status_value = GitOpsChangeStatus.PENDING_APPROVAL.value
         return GitOpsChangeSet(
             change_id=value["change_id"],
             source_action_id=value["source_action_id"],
             changes=[GitOpsChange(**change) for change in value["changes"]],
-            status=GitOpsChangeStatus(value["status"]),
+            status=GitOpsChangeStatus(status_value),
             requires_approval=value["requires_approval"],
             approved_by=value.get("approved_by"),
             commit_message=value.get("commit_message", ""),
