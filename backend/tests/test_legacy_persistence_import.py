@@ -71,7 +71,14 @@ def _make_sources(tmp_path):
         payload = json.dumps({
             "change_id": "change-001",
             "source_action_id": "plan-001",
-            "changes": [],
+            "changes": [{
+                "resource_type": "ec2_instance",
+                "resource_id": "i-legacy-001",
+                "field": "instance_type",
+                "desired_value": "t3.small",
+                "current_value": "t3.micro",
+                "reason": "Legacy import regression fixture",
+            }],
             "status": "pending",
             "requires_approval": True,
             "approved_by": None,
@@ -139,7 +146,7 @@ def test_import_is_dry_run_by_default_and_preserves_all_store_data(tmp_path, mon
                 text("SELECT action_id, tenant_id, created_order, payload FROM action_plans")
             ).one()
             assert tuple(plan[:3]) == ("plan-001", "tenant-a", 9)
-            assert json.loads(plan.payload)["status"] == "pending_approval"
+            assert json.loads(plan.payload)["status"] == "pending"
 
             change = connection.execute(
                 text("SELECT change_id, tenant_id, payload, created_order FROM gitops_change_sets")
@@ -147,7 +154,7 @@ def test_import_is_dry_run_by_default_and_preserves_all_store_data(tmp_path, mon
             assert (change.change_id, change.tenant_id, change.created_order) == (
                 "change-001", "tenant-b", 12
             )
-            assert json.loads(change.payload)["status"] == "pending_approval"
+            assert json.loads(change.payload)["status"] == "pending"
             assert json.loads(change.payload)["metadata"]["tenant_id"] == "tenant-b"
 
             assert tuple(connection.execute(
@@ -404,7 +411,14 @@ def test_independent_reconciliation_detects_each_persistence_drift_class(
             {
                 "change_id": "change-001",
                 "source_action_id": "plan-001",
-                "changes": [],
+                "changes": [{
+                    "resource_type": "ec2_instance",
+                    "resource_id": "i-legacy-002",
+                    "field": "instance_type",
+                    "desired_value": "t3.small",
+                    "current_value": "t3.micro",
+                    "reason": "Legacy duplicate-order fixture",
+                }],
                 "status": "pending",
                 "requires_approval": True,
                 "approved_by": None,
@@ -484,7 +498,14 @@ def test_import_rejects_invalid_creation_order_values(
             {
                 "change_id": "change-002",
                 "source_action_id": "plan-001",
-                "changes": [],
+                "changes": [{
+                    "resource_type": "ec2_instance",
+                    "resource_id": "i-legacy-002",
+                    "field": "instance_type",
+                    "desired_value": "t3.small",
+                    "current_value": "t3.micro",
+                    "reason": "Legacy duplicate-order fixture",
+                }],
                 "status": "pending",
                 "requires_approval": True,
                 "approved_by": None,
@@ -513,4 +534,21 @@ def test_import_rejects_duplicate_creation_order_values(
         )
 
     with pytest.raises(ValueError, match="creation order contains duplicates"):
+        run_import(paths, "sqlite:///unused-target.db")
+
+
+def test_import_rejects_empty_gitops_change_list(tmp_path):
+    paths = _make_sources(tmp_path)
+    with sqlite3.connect(paths["gitops"]) as connection:
+        payload = json.loads(connection.execute(
+            "SELECT payload FROM gitops_change_sets WHERE change_id = ?",
+            ("change-001",),
+        ).fetchone()[0])
+        payload["changes"] = []
+        connection.execute(
+            "UPDATE gitops_change_sets SET payload = ? WHERE change_id = ?",
+            (json.dumps(payload), "change-001"),
+        )
+
+    with pytest.raises(ValueError, match="GitOps changes must be a non-empty list"):
         run_import(paths, "sqlite:///unused-target.db")

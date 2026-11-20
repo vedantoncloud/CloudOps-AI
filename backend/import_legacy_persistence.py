@@ -148,6 +148,11 @@ def _validate_sources(paths: dict[str, Path]) -> dict[str, list[dict[str, Any]]]
             raise ValueError("GitOps tenant ownership metadata is invalid")
         if len(row["change_id"]) > 255 or (tenant is not None and len(tenant) > 255):
             raise ValueError("GitOps identifier or tenant exceeds the shared schema length limit")
+        changes = payload.get("changes")
+        if not isinstance(changes, list) or not changes:
+            raise ValueError("GitOps changes must be a non-empty list")
+        if any(not isinstance(change, dict) for change in changes):
+            raise ValueError("GitOps changes must contain objects")
     return rows
 
 
@@ -282,36 +287,21 @@ def _dry_run_or_import(
                 rows["audit_idempotency"],
             )
         if rows["action_plans"]:
-            action_plan_rows = []
-            for row in rows["action_plans"]:
-                payload = json.loads(row["payload"])
-                if payload.get("status") == "pending":
-                    payload["status"] = "pending_approval"
-                action_plan_rows.append({
-                    **row,
-                    "payload": json.dumps(
-                        payload, separators=(",", ":"), ensure_ascii=False
-                    ),
-                })
             connection.execute(
                 text(
                     "INSERT INTO action_plans (action_id, tenant_id, payload, created_order) "
                     "VALUES (:action_id, :tenant_id, :payload, :created_order)"
                 ),
-                action_plan_rows,
+                rows["action_plans"],
             )
         gitops_rows = []
         for row in rows["gitops"]:
             payload = json.loads(row["payload"])
             tenant_id = (payload.get("metadata") or {}).get("tenant_id")
-            if payload.get("status") == "pending":
-                payload["status"] = "pending_approval"
             gitops_rows.append({
                 "change_id": row["change_id"],
                 "tenant_id": tenant_id,
-                "payload": json.dumps(
-                    payload, separators=(",", ":"), ensure_ascii=False
-                ),
+                "payload": row["payload"],
                 "created_order": row["created_order"],
             })
         if gitops_rows:
