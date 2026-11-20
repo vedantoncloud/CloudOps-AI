@@ -286,7 +286,14 @@ def test_legacy_pending_status_decodes_as_pending_approval():
     payload = {
         "change_id": "legacy-change",
         "source_action_id": "legacy-action",
-        "changes": [],
+        "changes": [{
+            "resource_type": "ec2_instance",
+            "resource_id": "i-legacy-status",
+            "field": "instance_type",
+            "desired_value": "t3.small",
+            "current_value": "t3.micro",
+            "reason": "Legacy status compatibility",
+        }],
         "status": "pending",
         "requires_approval": True,
         "approved_by": None,
