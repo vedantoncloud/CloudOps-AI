@@ -175,7 +175,7 @@ def test_mysql_tenant_scoped_gitops_api_reads_are_isolated_across_workers(databa
         workers[0] = subprocess.Popen(
             [
                 sys.executable, "-m", "uvicorn", "main:app",
-                "--host": "127.0.0.1", "--port": str(ports[0]),
+                "--host", "127.0.0.1", "--port", str(ports[0]),
                 "--log-level": "warning",
             ],
             cwd=backend_dir,
