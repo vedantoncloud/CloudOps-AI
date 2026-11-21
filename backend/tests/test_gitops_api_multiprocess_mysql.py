@@ -168,6 +168,28 @@ def test_mysql_tenant_scoped_gitops_api_reads_are_isolated_across_workers(databa
         assert status_a_again == 200
         assert body_a_again["total"] == 1
         assert [item["change_id"] for item in body_a_again["changes"]] == [change_a]
+
+        # A fresh API process must recover the same durable GitOps state from MySQL.
+        workers[0].terminate()
+        workers[0].wait(timeout=5)
+        workers[0] = subprocess.Popen(
+            [
+                sys.executable, "-m", "uvicorn", "main:app",
+                "--host": "127.0.0.1", "--port": str(ports[0]),
+                "--log-level": "warning",
+            ],
+            cwd=backend_dir,
+            env=environment,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        _wait_for_worker(workers[0], base_urls[0])
+        status_after_restart, body_after_restart = _request_json(
+            base_urls[0], query, "tenant-a-reader"
+        )
+        assert status_after_restart == 200
+        assert body_after_restart["total"] == 1
+        assert [item["change_id"] for item in body_after_restart["changes"]] == [change_a]
     finally:
         for worker in workers:
             if worker.poll() is None:
