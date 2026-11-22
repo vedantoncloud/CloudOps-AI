@@ -5,18 +5,21 @@ analyze, and manage cloud infrastructure through a secured browser console and A
 
 ## Project Status
 
-**Portfolio milestone — 20 November 2026.** The current `main` branch
+**Portfolio milestone — 22 November 2026.** The current `main` branch
 includes the authenticated FastAPI operations console at `/console` for
 EC2/S3 inventory, resource governance, pending approvals, and actor-scoped
 autonomous run history. In development auth mode it connects without a token;
 in token mode, enter a bearer token in the console. The token is held in page
 memory and cleared when the page closes.
 
-CI on `main` commit `b8dfac5` passed the backend test suite, production
-container build and runtime smoke test, MySQL 8.4 migration checks, and pinned
-dependency audit. The container smoke test verifies the health endpoint, rejects
-an unauthenticated protected request with `401`, and accepts a valid bearer
-token with `200`. A local Docker smoke test also verified these runtime paths.
+CI on `main` commit `314a086` passed the backend test suite, MySQL 8.4
+migration checks, and pinned dependency audit. The MySQL integration tests cover
+shared writes across independent processes, tenant-scoped reads across two API
+workers, and Action Plan/GitOps persistence after a worker process restart.
+These are CI integration checks, not evidence of a live multi-replica deployment
+or a MySQL backup/restore rehearsal. The production container build and runtime
+smoke test were verified in the preceding main CI milestone; the smoke test
+checks health and authenticated/unauthenticated API behavior.
 
 This is a portfolio/demo-ready milestone, not a claim of a live AWS production
 deployment. The console and API show planning and governance information.
