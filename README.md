@@ -12,14 +12,15 @@ autonomous run history. In development auth mode it connects without a token;
 in token mode, enter a bearer token in the console. The token is held in page
 memory and cleared when the page closes.
 
-CI on `main` commit `314a086` passed the backend test suite, MySQL 8.4
-migration checks, and pinned dependency audit. The MySQL integration tests cover
-shared writes across independent processes, tenant-scoped reads across two API
-workers, and Action Plan/GitOps persistence after a worker process restart.
-These are CI integration checks, not evidence of a live multi-replica deployment
-or a MySQL backup/restore rehearsal. The production container build and runtime
-smoke test were verified in the preceding main CI milestone; the smoke test
-checks health and authenticated/unauthenticated API behavior.
+CI on `main` commit `70d3653` passed all three jobs in post-merge
+run [#45021173607](https://github.com/vedantoncloud/CloudOps-AI/actions/runs/45021173607):
+backend tests, MySQL 8.4 migration and production-container smoke tests, and the
+pinned dependency audit. The MySQL integration tests cover shared writes across
+independent processes, tenant-scoped reads across two API workers, and Action
+Plan/GitOps persistence after a worker process restart. The production-container
+smoke tests cover SQLite and MySQL-backed startup, health/readiness, and an
+authenticated API request. These are CI integration checks, not evidence of a
+live multi-replica deployment or a MySQL backup/restore rehearsal.
 
 This is a portfolio/demo-ready milestone, not a claim of a live AWS production
 deployment. The console and API show planning and governance information.
@@ -367,7 +368,9 @@ outcomes. These summaries are process-local and reset on restart. They contain
 fixed operation/route labels and counts, not provider errors, SQL, database
 paths, or audit content. Request logs include a correlation ID, method, path,
 status, and duration; they omit headers and request/response bodies. Use the
-response `X-Request-ID` value to locate the matching log entry.
+response `X-Request-ID` value to locate the matching log entry. Unhandled
+server exceptions return a generic `500` response with the same request ID;
+internal exception details are not sent to API clients.
 
 ## Audit chain export, verification, and recovery
 
