@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from pathlib import Path
 from datetime import date, datetime
 from math import isfinite
@@ -46,6 +46,20 @@ app.add_middleware(RateLimitMiddleware)
 app.add_middleware(AccessControlMiddleware)
 app.add_middleware(RequestObservabilityMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
+
+
+async def _unhandled_exception_handler(request: Request, exc: Exception):
+    """Return a sanitized 500 response while preserving request correlation."""
+    request_id = getattr(request.state, "request_id", None)
+    headers = {"X-Request-ID": request_id} if isinstance(request_id, str) else None
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+        headers=headers,
+    )
+
+
+app.add_exception_handler(Exception, _unhandled_exception_handler)
 
 CONSOLE_PAGE = Path(__file__).parent / "static" / "console.html"
 
