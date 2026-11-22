@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from observability import RequestObservabilityMiddleware
+import main
 
 
 def build_app():
@@ -56,3 +57,24 @@ def test_invalid_request_id_is_replaced_with_generated_id():
     assert response.status_code == 200
     assert response.headers["x-request-id"] != "bad id\r\n"
     assert len(response.headers["x-request-id"]) == 36
+
+
+def test_unhandled_server_errors_return_request_id_without_exception_details():
+    app = FastAPI()
+    app.add_middleware(RequestObservabilityMiddleware)
+    app.add_exception_handler(Exception, main._unhandled_exception_handler)
+
+    @app.get("/failure")
+    def fail():
+        raise RuntimeError("sensitive database connection detail")
+
+    response = TestClient(app, raise_server_exceptions=False).get("/failure")
+
+    assert response.status_code == 500
+    assert len(response.headers["x-request-id"]) == 36
+    assert response.json() == {"detail": "Internal server error"}
+    assert "sensitive database connection detail" not in response.text
+
+
+def test_production_app_registers_sanitized_unhandled_exception_handler():
+    assert main.app.exception_handlers[Exception] is main._unhandled_exception_handler
