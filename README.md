@@ -258,11 +258,23 @@ volume for audit, idempotency, action-plan, and GitOps state:
 ```sh
 docker volume create cloudops-data
 docker run -d --name cloudops-ai --restart unless-stopped \
+  --read-only \
+  --tmpfs /tmp:rw,noexec,nosuid,size=16m,mode=1777 \
+  --cap-drop=ALL \
+  --security-opt=no-new-privileges:true \
+  --pids-limit=128 \
   --env-file /secure/path/cloudops-ai.env \
   -p 127.0.0.1:8000:8000 \
   -v cloudops-data:/var/lib/cloudops \
   cloudops-ai:latest
 ```
+
+The example also makes the container root filesystem read-only, gives `/tmp`
+a small non-executable temporary filesystem, drops all Linux capabilities,
+prevents privilege escalation, and limits the process count. The named data
+volume remains writable for SQLite state. Keep the Docker daemon and its
+socket restricted to trusted operators; container flags do not replace host
+isolation or a dedicated workload identity.
 
 The environment file must define `CLOUDOPS_API_TOKENS` as the JSON token
 registry and `CLOUDOPS_TENANT_AWS_ROLES` as the tenant-to-role ARN map. Set

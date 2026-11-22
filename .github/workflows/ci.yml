@@ -38,10 +38,21 @@ jobs:
           container_name="cloudops-ai-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           trap 'docker logs "$container_name" || true; docker rm -f "$container_name" >/dev/null 2>&1 || true' EXIT
 
-          docker run -d --name "$container_name" \
+                    docker run -d --name "$container_name" \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=16m,mode=1777 \
+            --cap-drop=ALL \
+            --security-opt=no-new-privileges:true \
+            --pids-limit=128 \
             -p 127.0.0.1::8000 \
             --env "CLOUDOPS_API_TOKENS=${CLOUDOPS_API_TOKENS}" \
             cloudops-ai:ci
+          
+          test "$(docker inspect --format='{{.Config.User}}' "$container_name")" = "cloudops"
+          test "$(docker inspect --format='{{.HostConfig.ReadonlyRootfs}}' "$container_name")" = "true"
+          test "$(docker inspect --format='{{json .HostConfig.CapDrop}}' "$container_name")" = "[\"ALL\"]"
+          docker inspect --format='{{json .HostConfig.SecurityOpt}}' "$container_name" | grep -q 'no-new-privileges:true'
+          test "$(docker inspect --format='{{.HostConfig.PidsLimit}}' "$container_name")" = "128"
 
           host_port="$(docker port "$container_name" 8000/tcp | awk -F: '{print $NF}')"
           healthy=0
@@ -158,11 +169,22 @@ jobs:
           container_name="cloudops-ai-mysql-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           trap 'docker logs "$container_name" || true; docker rm -f "$container_name" >/dev/null 2>&1 || true' EXIT
 
-          docker run -d --name "$container_name" --network host \
+                    docker run -d --name "$container_name" --network host \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=16m,mode=1777 \
+            --cap-drop=ALL \
+            --security-opt=no-new-privileges:true \
+            --pids-limit=128 \
             --env "CLOUDOPS_DATABASE_URL=${CLOUDOPS_DATABASE_URL}" \
             --env "CLOUDOPS_API_TOKENS=${CLOUDOPS_API_TOKENS}" \
             --env "AWS_EC2_METADATA_DISABLED=${AWS_EC2_METADATA_DISABLED}" \
             cloudops-ai:mysql-ci
+          
+          test "$(docker inspect --format='{{.Config.User}}' "$container_name")" = "cloudops"
+          test "$(docker inspect --format='{{.HostConfig.ReadonlyRootfs}}' "$container_name")" = "true"
+          test "$(docker inspect --format='{{json .HostConfig.CapDrop}}' "$container_name")" = "[\"ALL\"]"
+          docker inspect --format='{{json .HostConfig.SecurityOpt}}' "$container_name" | grep -q 'no-new-privileges:true'
+          test "$(docker inspect --format='{{.HostConfig.PidsLimit}}' "$container_name")" = "128"
 
           healthy=0
           for attempt in $(seq 1 45); do
