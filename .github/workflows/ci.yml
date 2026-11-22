@@ -50,8 +50,8 @@ jobs:
           
           test "$(docker inspect --format='{{.Config.User}}' "$container_name")" = "cloudops"
           test "$(docker inspect --format='{{.HostConfig.ReadonlyRootfs}}' "$container_name")" = "true"
-          test "$(docker inspect --format='{{join .HostConfig.CapDrop \",\"}}' "$container_name")" = "ALL"
-          docker inspect --format='{{join .HostConfig.SecurityOpt \",\"}}' "$container_name" | grep -qx 'no-new-privileges:true'
+          test "$(docker inspect --format='{{json .HostConfig.CapDrop}}' "$container_name")" = "[\"ALL\"]"
+          docker inspect --format='{{json .HostConfig.SecurityOpt}}' "$container_name" | grep -q 'no-new-privileges:true'
           test "$(docker inspect --format='{{.HostConfig.PidsLimit}}' "$container_name")" = "128"
 
           host_port="$(docker port "$container_name" 8000/tcp | awk -F: '{print $NF}')"
@@ -182,8 +182,8 @@ jobs:
           
           test "$(docker inspect --format='{{.Config.User}}' "$container_name")" = "cloudops"
           test "$(docker inspect --format='{{.HostConfig.ReadonlyRootfs}}' "$container_name")" = "true"
-          test "$(docker inspect --format='{{join .HostConfig.CapDrop \",\"}}' "$container_name")" = "ALL"
-          docker inspect --format='{{join .HostConfig.SecurityOpt \",\"}}' "$container_name" | grep -qx 'no-new-privileges:true'
+          test "$(docker inspect --format='{{json .HostConfig.CapDrop}}' "$container_name")" = "[\"ALL\"]"
+          docker inspect --format='{{json .HostConfig.SecurityOpt}}' "$container_name" | grep -q 'no-new-privileges:true'
           test "$(docker inspect --format='{{.HostConfig.PidsLimit}}' "$container_name")" = "128"
 
           healthy=0
