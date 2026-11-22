@@ -58,6 +58,20 @@ jobs:
           fi
           grep -q '"status":"healthy"' /tmp/cloudops-health.json
 
+          docker_healthy=0
+          for attempt in $(seq 1 20); do
+            if [ "$(docker inspect --format='{{.State.Health.Status}}' "$container_name")" = "healthy" ]; then
+              docker_healthy=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$docker_healthy" -ne 1 ]; then
+            docker inspect --format='{{json .State.Health}}' "$container_name"
+            echo "Docker HEALTHCHECK did not report healthy"
+            exit 1
+          fi
+
           unauthenticated_status="$(curl --silent --show-error --output /tmp/cloudops-unauthenticated.json --write-out '%{http_code}' "http://127.0.0.1:${host_port}/operations/failures")"
           if [ "$unauthenticated_status" != "401" ]; then
             cat /tmp/cloudops-unauthenticated.json
@@ -163,6 +177,20 @@ jobs:
             exit 1
           fi
           grep -q '"status":"healthy"' /tmp/cloudops-mysql-health.json
+
+          docker_healthy=0
+          for attempt in $(seq 1 20); do
+            if [ "$(docker inspect --format='{{.State.Health.Status}}' "$container_name")" = "healthy" ]; then
+              docker_healthy=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$docker_healthy" -ne 1 ]; then
+            docker inspect --format='{{json .State.Health}}' "$container_name"
+            echo "MySQL-backed Docker HEALTHCHECK did not report healthy"
+            exit 1
+          fi
 
           persistence_ready=0
           for attempt in $(seq 1 45); do
