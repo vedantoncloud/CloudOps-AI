@@ -125,3 +125,71 @@ jobs:
         run: python -m pip install -r backend/requirements.txt -r backend/requirements-dev.txt
       - name: Upgrade and downgrade shared schema on MySQL 8.4
         run: python -m pytest backend/tests/test_shared_persistence_migrations_mysql.py backend/tests/test_persistent_audit_idempotency_mysql.py backend/tests/test_persistent_audit_trail_mysql.py backend/tests/test_action_plan_store_mysql.py backend/tests/test_action_plan_api_multiprocess_mysql.py backend/tests/test_gitops_registry_mysql.py backend/tests/test_atomic_lifecycle_audit_mysql.py backend/tests/test_shared_database_readiness_mysql.py backend/tests/test_atomic_idempotent_audit_mysql.py backend/tests/test_legacy_persistence_import_mysql.py backend/tests/test_shared_rate_limit_api_multiprocess_mysql.py -q
+
+      - name: Prepare migrated MySQL schema for production-container smoke test
+        env:
+          CLOUDOPS_DATABASE_URL: ${{ env.CLOUDOPS_MYSQL_TEST_URL }}
+        run: alembic -c backend/alembic.ini upgrade head
+
+      - name: Build production image for MySQL-backed smoke test
+        run: docker build --tag cloudops-ai:mysql-ci .
+
+      - name: Smoke test production container against MySQL 8.4
+        env:
+          CLOUDOPS_DATABASE_URL: ${{ env.CLOUDOPS_MYSQL_TEST_URL }}
+          CLOUDOPS_API_TOKENS: '{"smoke-token":{"subject":"mysql-smoke-admin","role":"admin","tenant_id":"mysql-smoke-tenant"}}'
+          AWS_EC2_METADATA_DISABLED: "true"
+        run: |
+          set -euo pipefail
+          container_name="cloudops-ai-mysql-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          trap 'docker logs "$container_name" || true; docker rm -f "$container_name" >/dev/null 2>&1 || true' EXIT
+
+          docker run -d --name "$container_name" --network host \
+            --env "CLOUDOPS_DATABASE_URL=${CLOUDOPS_DATABASE_URL}" \
+            --env "CLOUDOPS_API_TOKENS=${CLOUDOPS_API_TOKENS}" \
+            --env "AWS_EC2_METADATA_DISABLED=${AWS_EC2_METADATA_DISABLED}" \
+            cloudops-ai:mysql-ci
+
+          healthy=0
+          for attempt in $(seq 1 45); do
+            if curl --fail --silent http://127.0.0.1:8000/health > /tmp/cloudops-mysql-health.json; then
+              healthy=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$healthy" -ne 1 ]; then
+            echo "MySQL-backed production container did not become healthy"
+            exit 1
+          fi
+          grep -q '"status":"healthy"' /tmp/cloudops-mysql-health.json
+
+          persistence_ready=0
+          for attempt in $(seq 1 45); do
+            ready_status="$(curl --silent --show-error --output /tmp/cloudops-mysql-ready.json --write-out '%{http_code}' http://127.0.0.1:8000/ready || true)"
+            if [[ "$ready_status" == "200" || "$ready_status" == "503" ]] && jq -e '
+              (.detail.dependencies // .dependencies) as $d
+              | $d.audit_events == "healthy"
+              and $d.audit_idempotency == "healthy"
+              and $d.action_plans == "healthy"
+              and $d.gitops_changes == "healthy"
+            ' /tmp/cloudops-mysql-ready.json >/dev/null; then
+              persistence_ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$persistence_ready" -ne 1 ]; then
+            cat /tmp/cloudops-mysql-ready.json
+            echo "Production container did not report every shared MySQL store ready"
+            exit 1
+          fi
+
+          authenticated_status="$(curl --silent --show-error --output /tmp/cloudops-mysql-authenticated.json --write-out '%{http_code}' \
+            --header "Authorization: Bearer smoke-token" \
+            http://127.0.0.1:8000/operations/failures)"
+          if [ "$authenticated_status" != "200" ]; then
+            cat /tmp/cloudops-mysql-authenticated.json
+            echo "Expected authenticated operations request to return 200, got ${authenticated_status}"
+            exit 1
+          fi
