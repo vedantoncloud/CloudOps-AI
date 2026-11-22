@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CloudOps AI Ã‚Â· Operations Console</title>
+<title>CloudOps AI | Operations Console</title>
 <style>
 :root{color-scheme:dark;--bg:#0b1220;--panel:#111c2e;--line:#26364d;--muted:#9aabc1;--text:#edf4ff;--accent:#66d9c2;--warn:#f1bd6b;--danger:#ff8585}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,sans-serif}header{padding:24px clamp(18px,5vw,64px);border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap}h1{font-size:22px;margin:0}h2{font-size:17px;margin:0 0 16px}p{color:var(--muted)}main{max-width:1400px;margin:auto;padding:24px clamp(18px,5vw,64px)}.auth{display:flex;gap:8px;max-width:650px}.auth input{min-width:120px;flex:1}input,select,button{background:#0b1423;color:var(--text);border:1px solid var(--line);border-radius:7px;padding:9px 11px;font:inherit}button{cursor:pointer}button.primary{background:#16483f;border-color:#246b5d}button:hover{border-color:var(--accent)}.tabs{display:flex;gap:8px;margin:22px 0}.tabs button[aria-selected=true]{border-color:var(--accent);color:var(--accent)}.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:18px}.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}table{width:100%;border-collapse:collapse;text-align:left}th,td{padding:11px 9px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.06em}.scroll{overflow:auto}.status{color:var(--accent)}.error{color:var(--danger)}.notice{color:var(--muted);min-height:24px}.actions{display:flex;gap:7px;flex-wrap:wrap}.empty{text-align:center;color:var(--muted);padding:24px}.pill{border:1px solid var(--line);border-radius:20px;padding:2px 9px;white-space:nowrap}.metric-charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:14px;margin:10px 0}.metric-chart{border:1px solid var(--line);border-radius:8px;padding:12px;min-width:0}.metric-chart h4{margin:0 0 6px}.metric-plot{display:block;width:100%;height:auto;min-height:120px}.metric-grid{stroke:var(--line);stroke-width:1}.metric-line{fill:none;stroke:var(--accent);stroke-width:3;stroke-linecap:round;stroke-linejoin:round}.metric-summary{font-size:13px;margin:6px 0 0}pre{white-space:pre-wrap;overflow-wrap:anywhere;color:#c9d9ed}.hidden{display:none}@media(max-width:650px){header{align-items:flex-start}.auth{width:100%}th:nth-child(3),td:nth-child(3){display:none}}
 
@@ -43,6 +43,56 @@ table{font-size:13px}th,td{padding:13px 14px;border-bottom:1px solid rgba(65,91,
 .empty{padding:32px}
 @media(max-width:900px){#dashboardOverview{grid-template-columns:repeat(2,minmax(0,1fr))}.tabs{top:69px}}
 @media(max-width:560px){#dashboardOverview{grid-template-columns:1fr 1fr}.kpi-card{min-height:96px;padding:13px}.kpi-value{font-size:24px}main{padding:18px 12px 40px}.panel{padding:15px}.auth{width:100%}.auth input{min-width:0}}
+
+
+/* Final portfolio dashboard polish: layout-only overrides; preserve existing controls and behavior. */
+:root{--surface:#101c2e;--surface-raised:#14243a;--line-soft:rgba(103,137,181,.22);--text-soft:#c6d5e8}
+html{scroll-behavior:smooth}
+body{min-width:320px}
+header{min-height:82px;padding:18px clamp(22px,4.2vw,76px)}
+header>div{display:flex;flex-direction:column;gap:2px}
+header .status{font-size:11px;letter-spacing:.09em}
+main{width:100%;max-width:1840px;margin:0 auto;padding:26px clamp(22px,4.2vw,76px) 64px}
+#notice{min-height:46px;font-size:13px}
+#dashboardOverview{gap:16px;margin-bottom:24px}
+.kpi-card{min-height:126px;padding:19px 20px;box-shadow:inset 0 1px 0 rgba(255,255,255,.025),0 10px 26px rgba(0,0,0,.12)}
+.kpi-label{font-size:10px;letter-spacing:.11em}
+.kpi-value{font-size:32px;margin-top:13px}
+.kpi-foot{font-size:12px}
+.tabs{gap:7px;padding:8px;margin-bottom:24px}
+.tabs button{padding:10px 15px;font-size:13px}
+.panel{padding:24px;margin-bottom:22px}
+#inventory{padding:24px}
+#inventory>h2{margin-bottom:22px}
+#inventory .toolbar{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,205px),1fr));gap:11px;margin:0 0 16px;align-items:stretch}
+#inventory .toolbar>#regionControls{display:contents}
+#inventory .toolbar>input,#inventory .toolbar>select,#inventory .toolbar>button,
+#inventory .toolbar>#regionControls input,#inventory .toolbar>#regionControls button,
+#inventory .toolbar>#regionControls .notice{width:100%;min-width:0;max-width:none;min-height:44px}
+#inventory .toolbar input,#inventory .toolbar select{overflow:hidden;text-overflow:ellipsis}
+#inventory .toolbar button{white-space:normal;line-height:1.35}
+#inventory .toolbar>#regionControls .notice{display:flex;align-items:center;padding:7px 10px;grid-column:span 2}
+#inventory .toolbar>#regionControls input{min-width:0}
+#inventory .toolbar #bucketPageSize{max-width:none}
+#instancePageStatus{padding:4px 2px}
+#ebsInventory,#ebsSnapshots,#rdsInventory{margin-top:22px;padding-top:18px;border-top:1px solid var(--line-soft)}
+#ebsInventory h3,#ebsSnapshots h3,#rdsInventory h3{margin-top:4px}
+#fleetSummary{min-height:42px;display:flex;align-items:center;margin:0 0 22px;font-size:13px}
+#aggregateInsights{padding:22px 24px 24px;margin:0 0 22px;border:1px solid rgba(86,116,154,.25);border-radius:16px;background:linear-gradient(145deg,rgba(17,30,49,.78),rgba(10,20,35,.72))}
+#aggregateInsights>h3{font-size:16px;margin:0 0 16px}
+#aggregateInsights .toolbar{display:flex;align-items:center;gap:10px;margin:0 0 14px}
+#aggregateInsights .toolbar button,#aggregateInsights .toolbar select{min-height:42px}
+#aggregateInsightResults{padding:12px 14px;border-radius:10px;background:rgba(7,15,27,.32);border:1px solid var(--line-soft);min-height:48px}
+#resources{min-height:100px}
+.scroll{box-shadow:0 8px 22px rgba(0,0,0,.08)}
+.scroll table{min-width:680px}
+.empty{font-size:13px}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button:disabled{opacity:.48;cursor:not-allowed}
+@media(min-width:1500px){#inventory .toolbar{grid-template-columns:repeat(5,minmax(0,1fr))}}
+@media(max-width:900px){main{padding:22px 20px 48px}#inventory .toolbar{grid-template-columns:repeat(2,minmax(0,1fr))}#aggregateInsights .toolbar{display:flex;flex-wrap:wrap}#aggregateInsights .toolbar>*{max-width:100%}}
+@media(max-width:560px){header{padding:16px 16px;align-items:stretch}.auth{width:100%;max-width:none}.auth input{min-width:0;width:100%}main{padding:16px 12px 36px}#dashboardOverview{gap:9px}.kpi-card{min-height:102px;padding:12px}.kpi-label{font-size:9px}.kpi-value{font-size:24px;margin-top:9px}.kpi-foot{font-size:10px}.tabs{top:70px;margin-bottom:16px}.tabs button{padding:9px 11px}#inventory{padding:16px}#inventory .toolbar{grid-template-columns:1fr;gap:9px}#inventory .toolbar>#regionControls .notice{grid-column:auto}#aggregateInsights{padding:17px 15px}#aggregateInsights .toolbar{display:grid;grid-template-columns:1fr 1fr}#aggregateInsights .toolbar>*{min-width:0;width:100%}.scroll table{min-width:620px}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{transition:none!important;animation:none!important}}
 
 </style>
 </head>
