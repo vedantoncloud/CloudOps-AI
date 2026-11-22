@@ -12,8 +12,8 @@ autonomous run history. In development auth mode it connects without a token;
 in token mode, enter a bearer token in the console. The token is held in page
 memory and cleared when the page closes.
 
-CI on `main` commit `68ada4a` passed all three jobs in post-merge
-run [#45021699225](https://github.com/vedantoncloud/CloudOps-AI/actions/runs/45021699225):
+CI on `main` commit `6e3d471` passed all three jobs in post-merge
+run [#45021912420](https://github.com/vedantoncloud/CloudOps-AI/actions/runs/45021912420):
 backend tests, MySQL 8.4 migration and production-container smoke tests, and the
 pinned dependency audit. The verified commit includes PR #150's documentation
 reconciliation and PR #149's sanitized unhandled-error response with request-ID
