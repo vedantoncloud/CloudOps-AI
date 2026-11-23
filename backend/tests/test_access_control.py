@@ -220,7 +220,7 @@ def test_token_registry_parses_optional_expiration_timestamp():
     assert principal.expires_at == 4102444800.0
 
 
-@pytest.mark.parametrize("expires_at", [True, False, 0, -1, "4102444800", [], {}])
+@pytest.mark.parametrize("expires_at", [True, False, 0, -1, "4102444800", [], {}, float("nan"), float("inf"), 10**400])
 def test_token_registry_rejects_invalid_expiration_timestamps(expires_at):
     import json
 
