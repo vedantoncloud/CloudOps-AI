@@ -92,14 +92,16 @@ def load_token_registry(raw: str | None = None) -> dict[str, Principal]:
             raise RuntimeError(f"Unsupported API token role: {role}")
         expires_at = claims.get("exp")
         if expires_at is not None:
-            if (
-                not isinstance(expires_at, (int, float))
-                or isinstance(expires_at, bool)
-                or not math.isfinite(expires_at)
-                or expires_at <= 0
-            ):
+            if not isinstance(expires_at, (int, float)) or isinstance(expires_at, bool):
                 raise RuntimeError("API token exp must be a finite positive Unix timestamp")
-            expires_at = float(expires_at)
+            try:
+                expires_at = float(expires_at)
+            except (OverflowError, TypeError, ValueError) as exc:
+                raise RuntimeError(
+                    "API token exp must be a finite positive Unix timestamp"
+                ) from exc
+            if not math.isfinite(expires_at) or expires_at <= 0:
+                raise RuntimeError("API token exp must be a finite positive Unix timestamp")
         registry[token] = Principal(subject.strip(), role, tenant_id.strip(), expires_at)
     return registry
 
