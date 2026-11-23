@@ -342,12 +342,12 @@ def _visible_actor_filter(request: Request, requested_actor: str | None) -> str 
 
 
 def _visible_tenant_filter(request: Request) -> str | None:
-    """Scope tenant users to attributed events; admins keep shared visibility."""
+    """Scope every token-authenticated principal to its tenant's attributed events.
+
+    Admins may inspect every actor within their tenant, but tenant membership
+    does not grant platform-wide visibility into another tenant's audit trail.
+    """
     principal = getattr(request.state, "principal", None)
-    if (
-        principal is None
-        or principal.role == "admin"
-        or not getattr(request.state, "tenant_scoped", False)
-    ):
+    if principal is None or not getattr(request.state, "tenant_scoped", False):
         return None
     return getattr(request.state, "tenant_id", None)
