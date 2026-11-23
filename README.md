@@ -217,9 +217,10 @@ to reference the new role.
 For compatibility, tenants without a mapping use the process AWS identity by
 default. Set `CLOUDOPS_REQUIRE_TENANT_AWS_ROLE=true` to fail closed when any
 authenticated tenant has no configured role. The setting defaults to `true`
-when `CLOUDOPS_ENV=production` and `false` otherwise; an explicit
-`CLOUDOPS_REQUIRE_TENANT_AWS_ROLE` value overrides that default. Configure a
-role for every tenant before routing tenant AWS requests in production.
+when `CLOUDOPS_ENV=staging` or `CLOUDOPS_ENV=production`, and `false` in
+development; an explicit `CLOUDOPS_REQUIRE_TENANT_AWS_ROLE` value overrides
+that default. Configure a role for every tenant before routing tenant AWS
+requests in staging or production.
 
 Credential parsing fails closed: duplicate JSON keys in `CLOUDOPS_API_TOKENS`
 and token keys containing whitespace are rejected at startup. Requests must
