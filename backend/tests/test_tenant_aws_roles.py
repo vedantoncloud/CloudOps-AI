@@ -153,9 +153,11 @@ def test_unmapped_tenant_keeps_default_aws_identity(monkeypatch):
         aws_service.reset_aws_tenant(token)
 
 
-def test_production_requires_tenant_role_by_default(monkeypatch):
-    monkeypatch.setenv("CLOUDOPS_ENV", "production")
+@pytest.mark.parametrize("environment", ["staging", "production"])
+def test_non_development_environments_require_tenant_role_by_default(monkeypatch, environment):
+    monkeypatch.setenv("CLOUDOPS_ENV", environment)
     monkeypatch.delenv("CLOUDOPS_REQUIRE_TENANT_AWS_ROLE", raising=False)
+
     assert aws_service._tenant_roles_required()
 
 
