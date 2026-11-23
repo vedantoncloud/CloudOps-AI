@@ -6,6 +6,8 @@ or persist credentials. Use an upstream identity provider for token lifecycle.
 
 import json
 import os
+import math
+import time
 from dataclasses import dataclass
 
 from fastapi import HTTPException, Request
@@ -19,6 +21,7 @@ class Principal:
     subject: str
     role: str
     tenant_id: str
+    expires_at: float | None = None
 
 
 ROLE_LEVEL = {"reader": 1, "operator": 2, "admin": 3}
@@ -87,7 +90,19 @@ def load_token_registry(raw: str | None = None) -> dict[str, Principal]:
             raise RuntimeError("API token claims require subject, role, and tenant_id")
         if role not in ROLE_LEVEL:
             raise RuntimeError(f"Unsupported API token role: {role}")
-        registry[token] = Principal(subject.strip(), role, tenant_id.strip())
+        expires_at = claims.get("exp")
+        if expires_at is not None:
+            if not isinstance(expires_at, (int, float)) or isinstance(expires_at, bool):
+                raise RuntimeError("API token exp must be a finite positive Unix timestamp")
+            try:
+                expires_at = float(expires_at)
+            except (OverflowError, TypeError, ValueError) as exc:
+                raise RuntimeError(
+                    "API token exp must be a finite positive Unix timestamp"
+                ) from exc
+            if not math.isfinite(expires_at) or expires_at <= 0:
+                raise RuntimeError("API token exp must be a finite positive Unix timestamp")
+        registry[token] = Principal(subject.strip(), role, tenant_id.strip(), expires_at)
     return registry
 
 
@@ -142,7 +157,9 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
                 and not any(character in token for character in (b" ", b"\t", b"\r", b"\n"))
             ):
                 principal = self.tokens.get(token.decode("latin-1"))
-        if principal is None:
+        if principal is None or (
+            principal.expires_at is not None and time.time() >= principal.expires_at
+        ):
             return JSONResponse(status_code=401, content={"detail": "Bearer token required"}, headers={"WWW-Authenticate": "Bearer"})
 
         required_role = "admin" if is_admin_only_path(request.url.path) else (

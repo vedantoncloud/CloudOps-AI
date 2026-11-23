@@ -135,12 +135,21 @@ For a token protected deployment, set `CLOUDOPS_AUTH_MODE=token` and provide
 example:
 
 ```json
-{"replace-with-a-secret":{"subject":"operator-1","role":"operator","tenant_id":"account-1"}}
+{"replace-with-a-secret":{"subject":"operator-1","role":"operator","tenant_id":"account-1","exp":4102444800}}
 ```
 
 Supported roles are `reader`, `operator`, and `admin`. GET and HEAD requests
 require `reader`; other methods require `operator`. Requests may include
 `X-Cloud-Tenant`, which must match the authenticated token's `tenant_id`.
+
+The optional `exp` claim is a Unix timestamp in seconds and is checked on every
+authenticated request. Expired tokens receive HTTP 401 with a Bearer challenge.
+For example, the value above expires at 2100-01-01T00:00:00Z. Existing token
+entries without `exp` remain non-expiring for backward compatibility; add an
+expiration to each deployed token as part of the credential-rotation process.
+This registry validates and enforces configured credentials but does not issue
+or persist tokens, and changing the registry still requires a controlled
+configuration update/restart.
 Keep token values in a deployment secret store and use an identity provider or
 gateway to issue, rotate, and revoke them. The boundary attaches the principal
 and tenant to request state, and autonomous-run lifecycle and verification
