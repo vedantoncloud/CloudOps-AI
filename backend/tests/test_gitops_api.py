@@ -26,6 +26,7 @@ def make_tenant_client():
         tokens={
             "tenant-a": Principal("alice", "operator", "tenant-a"),
             "tenant-b": Principal("bob", "operator", "tenant-b"),
+            "tenant-a-admin": Principal("admin-alice", "admin", "tenant-a"),
         },
     )
     return TestClient(app)
@@ -526,6 +527,41 @@ def test_foreign_gitops_change_cannot_be_mutated_and_actor_is_authenticated():
     ]
     assert rejection_events
     assert rejection_events[-1].actor_id == "alice"
+
+def test_tenant_admin_gitops_reads_remain_scoped_to_own_tenant():
+    owned = make_change_set(reason="Tenant A change")
+    owned.change_id = "change-tenant-a-admin"
+    owned.metadata["tenant_id"] = "tenant-a"
+    foreign = make_change_set(reason="Tenant B secret change")
+    foreign.change_id = "change-tenant-b-admin"
+    foreign.metadata["tenant_id"] = "tenant-b"
+    registry.register(owned)
+    registry.register(foreign)
+    client = make_tenant_client()
+    headers = {"Authorization": "Bearer tenant-a-admin"}
+
+    listed = client.get("/autonomy/gitops/changes", headers=headers)
+    pending = client.get("/autonomy/gitops/changes/pending", headers=headers)
+    exported = client.get("/autonomy/gitops/changes/export.csv", headers=headers)
+    own_detail = client.get(
+        f"/autonomy/gitops/changes/{owned.change_id}", headers=headers
+    )
+    foreign_detail = client.get(
+        f"/autonomy/gitops/changes/{foreign.change_id}", headers=headers
+    )
+
+    assert listed.status_code == 200
+    assert listed.json()["total"] == 1
+    assert [item["change_id"] for item in listed.json()["changes"]] == [owned.change_id]
+    assert pending.status_code == 200
+    assert [item["change_id"] for item in pending.json()] == [owned.change_id]
+    assert exported.status_code == 200
+    assert owned.change_id in exported.text
+    assert foreign.change_id not in exported.text
+    assert own_detail.status_code == 200
+    assert own_detail.json()["change_id"] == owned.change_id
+    assert foreign_detail.status_code == 404
+
 
 def test_gitops_csv_export_applies_search_status_and_tenant_scope():
     matching = make_change_set(reason="Resize production instance")
