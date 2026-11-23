@@ -76,8 +76,13 @@ def test_reader_cannot_select_another_actor_for_audit_feed_or_export(clients, pa
     assert response.json()["detail"] == "Audit events are limited to the authenticated actor"
 
 
-def test_admin_can_list_audit_events_across_actors(clients):
-    response = clients["admin"].get("/autonomy/audit/events")
+@pytest.mark.parametrize("path", ["/autonomy/audit/events", "/autonomy/audit/events/export"])
+def test_admin_can_read_all_actors_but_only_within_own_tenant(clients, path):
+    response = clients["admin"].get(path)
 
     assert response.status_code == 200
-    assert {event["actor_id"] for event in response.json()} == {"alice", "bob"}
+    body = response.text
+    assert "own" in body
+    assert "foreign-actor-event" in body
+    assert "same-actor-other-tenant" not in body
+    assert "legacy-unattributed" not in body
