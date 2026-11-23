@@ -212,6 +212,63 @@ def test_token_registry_requires_complete_valid_claims():
         load_token_registry('{"secret":{"subject":"alice","role":"reader"}}')
 
 
+def test_token_registry_parses_optional_expiration_timestamp():
+    principal = load_token_registry(
+        '{"secret":{"subject":"alice","role":"reader","tenant_id":"account-a","exp":4102444800}}'
+    )["secret"]
+
+    assert principal.expires_at == 4102444800.0
+
+
+@pytest.mark.parametrize("expires_at", [True, False, 0, -1, "4102444800", [], {}])
+def test_token_registry_rejects_invalid_expiration_timestamps(expires_at):
+    import json
+
+    raw = json.dumps({
+        "secret": {
+            "subject": "alice",
+            "role": "reader",
+            "tenant_id": "account-a",
+            "exp": expires_at,
+        }
+    })
+
+    with pytest.raises(RuntimeError, match="API token exp must be a finite positive Unix timestamp"):
+        load_token_registry(raw)
+
+
+def test_expired_bearer_token_is_rejected_at_request_time():
+    import time
+
+    tokens = {
+        "expired": Principal("alice", "reader", "account-a", time.time() - 1),
+    }
+
+    response = build_client(tokens=tokens).get(
+        "/resources",
+        headers={"Authorization": "Bearer expired"},
+    )
+
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
+
+
+def test_unexpired_bearer_token_remains_accepted():
+    import time
+
+    tokens = {
+        "valid": Principal("alice", "reader", "account-a", time.time() + 60),
+    }
+
+    response = build_client(tokens=tokens).get(
+        "/resources",
+        headers={"Authorization": "Bearer valid"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"subject": "alice", "tenant_id": "account-a"}
+
+
 @pytest.mark.parametrize("token", ["bad token", "bad\ttoken", "bad\ntoken"])
 def test_token_registry_rejects_credentials_that_cannot_be_sent_as_bearer_tokens(token):
     import json
