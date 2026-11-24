@@ -30,6 +30,12 @@ PUBLIC_PATHS = {"/", "/health", "/ready"}
 # explicitly configured platform administrator. Tenant admins remain scoped.
 # Approval decisions remain operator-level POST operations.
 PLATFORM_ADMIN_ONLY_PATHS = {
+    "/autonomy/audit/health",
+    "/autonomy/audit/pending",
+    "/autonomy/audit/reconciliation",
+    "/autonomy/audit/integrity",
+    "/autonomy/audit/chain/export",
+    "/autonomy/audit/database/backup",
 }
 
 ADMIN_ONLY_PATHS = {
@@ -38,12 +44,6 @@ ADMIN_ONLY_PATHS = {
     "/operations/failures",
     "/operations/aws-failures",
     "/operations/database-failures",
-    "/autonomy/audit/health",
-    "/autonomy/audit/pending",
-    "/autonomy/audit/reconciliation",
-    "/autonomy/audit/integrity",
-    "/autonomy/audit/chain/export",
-    "/autonomy/audit/database/backup",
     # This summary is tenant-scoped but remains administrator-only.
     "/autonomy/control-plane/summary",
 }
