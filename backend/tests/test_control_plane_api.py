@@ -287,6 +287,7 @@ def test_tenant_admin_summary_only_includes_tenant_gitops_and_audit(monkeypatch)
     foreign = change("action-foreign", "account-b")
     registry.register(own)
     registry.register(foreign)
+    audit_trail.clear()
 
     for action_id, tenant_id, actor_id in (
         ("action-own", "account-a", "alice"),
