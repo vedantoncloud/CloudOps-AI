@@ -115,4 +115,4 @@ def test_integrity_endpoint_requires_platform_admin():
     response = make_client("reader").get("/autonomy/audit/integrity")
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "Insufficient role"
+    assert response.json()["detail"] == "Platform administrator role required"
