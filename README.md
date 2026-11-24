@@ -138,8 +138,14 @@ example:
 {"replace-with-a-secret":{"subject":"operator-1","role":"operator","tenant_id":"account-1","exp":4102444800}}
 ```
 
-Supported roles are `reader`, `operator`, and `admin`. GET and HEAD requests
-require `reader`; other methods require `operator`. Requests may include
+Supported roles are `reader`, `operator`, `admin`, and `platform_admin`. GET and HEAD requests
+require `reader`; other methods require `operator`. Administrator-only routes require
+`admin` or `platform_admin`. Shared audit-store diagnostics, reconciliation,
+integrity export, and database backup routes require the explicit
+`platform_admin` role; a tenant `admin` cannot access those cross-tenant stores.
+A platform-admin token must still carry a configured `tenant_id`: AWS request
+context remains bound to that tenant and does not become global AWS access.
+Requests may include
 `X-Cloud-Tenant`, which must match the authenticated token's `tenant_id`.
 
 The optional `exp` claim is a Unix timestamp in seconds and is checked on every
@@ -156,7 +162,7 @@ and tenant to request state, and autonomous-run lifecycle and verification
 events record the authenticated subject as their actor. In token mode, the
 audit event feed and NDJSON export are restricted to the authenticated actor
 and tenant; events without tenant attribution remain hidden from tenant users,
-while administrators retain shared audit visibility. The
+while tenant administrators remain restricted to their own tenant. Shared audit-store diagnostics and exports require the explicit `platform_admin` role. The
 provider-neutral `/autonomy/resources` inventory and governance routes only
 return resources tagged `CloudOpsTenantId` with the token's `tenant_id`; missing
 or mismatched ownership tags are hidden as not found for governance lookups.
