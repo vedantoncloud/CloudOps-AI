@@ -11,7 +11,7 @@ from autonomy.persistent_audit_trail import PersistentAuditTrail
 
 TOKENS = {
     "reader": Principal("reader", "reader", "tenant-a"),
-    "admin": Principal("admin", "admin", "tenant-a"),
+    "platform": Principal("platform", "platform_admin", "tenant-a"),
 }
 
 
@@ -39,7 +39,7 @@ def test_chain_export_includes_verifiable_events_and_empty_state(tmp_path, monke
     )
     client = make_client(monkeypatch, trail)
 
-    response = client.get("/autonomy/audit/chain/export", headers={"Authorization": "Bearer admin"})
+    response = client.get("/autonomy/audit/chain/export", headers={"Authorization": "Bearer platform"})
 
     assert response.status_code == 200
     payload = response.json()
@@ -67,7 +67,7 @@ def test_chain_export_includes_verifiable_events_and_empty_state(tmp_path, monke
     assert empty_response.json()["final_hash"] == ""
 
 
-def test_chain_export_requires_admin_and_authentication(tmp_path, monkeypatch):
+def test_chain_export_requires_platform_admin_and_authentication(tmp_path, monkeypatch):
     client = make_client(monkeypatch, PersistentAuditTrail(tmp_path / "audit.db"))
 
     assert client.get("/autonomy/audit/chain/export").status_code == 401
