@@ -257,3 +257,88 @@ def test_tenant_trace_uses_repository_scoped_gitops_read(monkeypatch):
     assert response.status_code == 200
     assert response.json()["gitops"]["change_id"] == change_set.change_id
     assert calls == [("account-a", True)]
+
+
+
+def test_tenant_admin_summary_only_includes_tenant_gitops_and_audit(monkeypatch):
+    from auth import AccessControlMiddleware, Principal
+    from autonomy import control_plane_api
+
+    engine = GitOpsEngine()
+
+    def change(action_id, tenant_id):
+        item = engine.create_change_set(
+            source_action_id=action_id,
+            changes=[
+                GitOpsChange(
+                    resource_type="ec2",
+                    resource_id=f"i-{action_id}",
+                    field="instance_type",
+                    current_value="t3.small",
+                    desired_value="t3.medium",
+                )
+            ],
+            requires_approval=True,
+        )
+        item.metadata["tenant_id"] = tenant_id
+        return item
+
+    own = change("action-own", "account-a")
+    foreign = change("action-foreign", "account-b")
+    registry.register(own)
+    registry.register(foreign)
+    audit_trail.clear()
+
+    for action_id, tenant_id, actor_id in (
+        ("action-own", "account-a", "alice"),
+        ("action-same-tenant-peer", "account-a", "bob"),
+        ("action-foreign", "account-b", "charlie"),
+        ("action-unattributed", None, "legacy"),
+    ):
+        details = {"tenant_id": tenant_id} if tenant_id else {"secret": "legacy"}
+        audit_trail.record(
+            action_id=action_id,
+            action_type="test",
+            resource_type="ec2",
+            resource_id=f"i-{action_id}",
+            old_status="old",
+            new_status="new",
+            event="tenant_summary_test",
+            actor_id=actor_id,
+            details=details,
+        )
+
+    calls = []
+    original_list_all = control_plane_api.gitops_registry.list_all
+
+    def tracked_list_all(tenant_id=None, *, tenant_scoped=False):
+        calls.append((tenant_id, tenant_scoped))
+        return original_list_all(tenant_id, tenant_scoped=tenant_scoped)
+
+    monkeypatch.setattr(control_plane_api.gitops_registry, "list_all", tracked_list_all)
+
+    app = FastAPI()
+    app.add_middleware(
+        AccessControlMiddleware,
+        mode="token",
+        tokens={"admin-token": Principal("tenant-admin", "admin", "account-a")},
+    )
+    app.include_router(router)
+
+    response = TestClient(app).get(
+        "/autonomy/control-plane/summary",
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["gitops"]["total_changes"] == 1
+    assert body["gitops"]["recent_changes"][0]["source_action_id"] == "action-own"
+    assert body["audit"]["total_events"] == 2
+    assert {event["action_id"] for event in body["audit"]["recent_events"]} == {
+        "action-own",
+        "action-same-tenant-peer",
+    }
+    assert calls == [("account-a", True)]
+    assert "action-foreign" not in response.text
+    assert "action-unattributed" not in response.text
