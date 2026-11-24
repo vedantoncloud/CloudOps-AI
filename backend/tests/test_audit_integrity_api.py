@@ -5,7 +5,7 @@ from auth import AccessControlMiddleware, Principal
 from autonomy.audit_api import audit_trail, router
 
 
-def make_client(role="admin"):
+def make_client(role="platform_admin"):
     app = FastAPI()
     app.include_router(router)
     app.add_middleware(
@@ -111,7 +111,7 @@ def test_integrity_endpoint_uses_atomic_snapshot(monkeypatch):
 
 
 
-def test_integrity_endpoint_is_admin_only():
+def test_integrity_endpoint_requires_platform_admin():
     response = make_client("reader").get("/autonomy/audit/integrity")
 
     assert response.status_code == 403
