@@ -24,11 +24,20 @@ class Principal:
     expires_at: float | None = None
 
 
-ROLE_LEVEL = {"reader": 1, "operator": 2, "admin": 3}
+ROLE_LEVEL = {"reader": 1, "operator": 2, "admin": 3, "platform_admin": 4}
 PUBLIC_PATHS = {"/", "/health", "/ready"}
 # These endpoints expose operational details about shared audit storage and
 # reconciliation state, so they require an administrator even though they are
 # read-only. Approval decisions remain operator-level POST operations.
+PLATFORM_ADMIN_ONLY_PATHS = {
+    "/autonomy/audit/health",
+    "/autonomy/audit/pending",
+    "/autonomy/audit/reconciliation",
+    "/autonomy/audit/integrity",
+    "/autonomy/audit/chain/export",
+    "/autonomy/audit/database/backup",
+}
+
 ADMIN_ONLY_PATHS = {
     "/metrics",
     "/cloud/aws/account-costs",
@@ -41,19 +50,29 @@ ADMIN_ONLY_PATHS = {
     "/autonomy/audit/integrity",
     "/autonomy/audit/chain/export",
     "/autonomy/audit/database/backup",
-    # This summary includes shared GitOps counts and audit-event details.
+    # This summary is tenant-scoped but remains administrator-only.
     "/autonomy/control-plane/summary",
 }
 
 
-def is_admin_only_path(path: str) -> bool:
-    """Match an admin endpoint and any subroutes independent of slash form."""
+def _matches_protected_path(path: str, protected_paths: set[str]) -> bool:
+    """Match a protected endpoint and its subroutes independent of slash form."""
     normalized = path.rstrip("/") or "/"
     return any(
         normalized == protected.rstrip("/")
         or normalized.startswith(protected.rstrip("/") + "/")
-        for protected in ADMIN_ONLY_PATHS
+        for protected in protected_paths
     )
+
+
+def is_platform_admin_only_path(path: str) -> bool:
+    """Return whether an endpoint exposes shared platform audit state."""
+    return _matches_protected_path(path, PLATFORM_ADMIN_ONLY_PATHS)
+
+
+def is_admin_only_path(path: str) -> bool:
+    """Return whether an endpoint requires an administrator role."""
+    return _matches_protected_path(path, ADMIN_ONLY_PATHS)
 
 
 def _unique_json_object(pairs):
@@ -161,6 +180,15 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
             principal.expires_at is not None and time.time() >= principal.expires_at
         ):
             return JSONResponse(status_code=401, content={"detail": "Bearer token required"}, headers={"WWW-Authenticate": "Bearer"})
+
+        if (
+            is_platform_admin_only_path(request.url.path)
+            and principal.role != "platform_admin"
+        ):
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Platform administrator role required"},
+            )
 
         required_role = "admin" if is_admin_only_path(request.url.path) else (
             "reader" if request.method in {"GET", "HEAD"} else "operator"
