@@ -26,16 +26,10 @@ class Principal:
 
 ROLE_LEVEL = {"reader": 1, "operator": 2, "admin": 3, "platform_admin": 4}
 PUBLIC_PATHS = {"/", "/health", "/ready"}
-# These endpoints expose operational details about shared audit storage and
-# reconciliation state, so they require an administrator even though they are
-# read-only. Approval decisions remain operator-level POST operations.
+# These endpoints expose shared, cross-tenant audit state and require an
+# explicitly configured platform administrator. Tenant admins remain scoped.
+# Approval decisions remain operator-level POST operations.
 PLATFORM_ADMIN_ONLY_PATHS = {
-    "/autonomy/audit/health",
-    "/autonomy/audit/pending",
-    "/autonomy/audit/reconciliation",
-    "/autonomy/audit/integrity",
-    "/autonomy/audit/chain/export",
-    "/autonomy/audit/database/backup",
 }
 
 ADMIN_ONLY_PATHS = {
