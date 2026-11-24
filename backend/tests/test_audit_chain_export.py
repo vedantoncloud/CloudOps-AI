@@ -60,7 +60,7 @@ def test_chain_export_includes_verifiable_events_and_empty_state(tmp_path, monke
 
     empty = PersistentAuditTrail(tmp_path / "empty.db")
     empty_response = make_client(monkeypatch, empty).get(
-        "/autonomy/audit/chain/export", headers={"Authorization": "Bearer admin"}
+        "/autonomy/audit/chain/export", headers={"Authorization": "Bearer platform"}
     )
     assert empty_response.status_code == 200
     assert empty_response.json()["events"] == []
@@ -88,7 +88,7 @@ def test_chain_export_fails_closed_on_tampered_stored_hash(tmp_path, monkeypatch
     client = make_client(monkeypatch, trail)
 
     response = client.get(
-        "/autonomy/audit/chain/export", headers={"Authorization": "Bearer admin"}
+        "/autonomy/audit/chain/export", headers={"Authorization": "Bearer platform"}
     )
 
     assert response.status_code == 503
@@ -107,7 +107,7 @@ def test_chain_export_fails_closed_on_malformed_stored_event(tmp_path, monkeypat
     client = make_client(monkeypatch, trail)
 
     response = client.get(
-        "/autonomy/audit/chain/export", headers={"Authorization": "Bearer admin"}
+        "/autonomy/audit/chain/export", headers={"Authorization": "Bearer platform"}
     )
 
     assert response.status_code == 503
@@ -124,7 +124,7 @@ def test_chain_export_sanitizes_storage_failures(monkeypatch, tmp_path):
     client = make_client(monkeypatch, trail)
 
     response = client.get(
-        "/autonomy/audit/chain/export", headers={"Authorization": "Bearer admin"}
+        "/autonomy/audit/chain/export", headers={"Authorization": "Bearer platform"}
     )
 
     assert response.status_code == 503
