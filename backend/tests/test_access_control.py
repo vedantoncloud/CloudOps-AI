@@ -130,7 +130,23 @@ def test_operational_audit_diagnostics_require_admin(path):
     assert client.get(path, headers={"Authorization": "Bearer operator-a"}).status_code == 403
 
 
-def test_admin_can_access_operational_audit_diagnostics():
+def test_platform_admin_can_access_shared_audit_diagnostics():
+    app = FastAPI()
+    app.add_middleware(AccessControlMiddleware, mode="token", tokens={**TOKENS, "platform": Principal("platform-ops", "platform_admin", "ops-tenant")})
+
+    @app.get("/autonomy/audit/health")
+    def audit_health():
+        return {"ok": True}
+
+    response = TestClient(app).get(
+        "/autonomy/audit/health",
+        headers={"Authorization": "Bearer platform"},
+    )
+
+    assert response.status_code == 200
+
+
+def test_tenant_admin_cannot_access_shared_audit_diagnostics():
     app = FastAPI()
     app.add_middleware(AccessControlMiddleware, mode="token", tokens=TOKENS)
 
@@ -143,7 +159,18 @@ def test_admin_can_access_operational_audit_diagnostics():
         headers={"Authorization": "Bearer admin-a"},
     )
 
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Platform administrator role required"
+
+
+def test_platform_admin_keeps_explicit_tenant_context():
+    tokens = {"platform": Principal("platform-ops", "platform_admin", "ops-tenant")}
+    response = build_client(tokens=tokens).get(
+        "/resources", headers={"Authorization": "Bearer platform"}
+    )
+
     assert response.status_code == 200
+    assert response.json() == {"subject": "platform-ops", "tenant_id": "ops-tenant"}
 
 
 def test_process_metrics_require_admin():
@@ -207,6 +234,7 @@ def test_health_is_public_and_development_mode_sets_explicit_local_principal():
 
 def test_token_registry_requires_complete_valid_claims():
     assert load_token_registry('{"secret":{"subject":"alice","role":"reader","tenant_id":"account-a"}}')["secret"] == TOKENS["reader-a"]
+    assert load_token_registry('{"platform":{"subject":"ops","role":"platform_admin","tenant_id":"ops-tenant"}}')["platform"].role == "platform_admin"
 
     with pytest.raises(RuntimeError, match="subject, role, and tenant_id"):
         load_token_registry('{"secret":{"subject":"alice","role":"reader"}}')
