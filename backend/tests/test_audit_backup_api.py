@@ -8,7 +8,7 @@ from autonomy import audit_api
 from autonomy.persistent_audit_trail import PersistentAuditTrail
 
 
-def make_client(role="admin"):
+def make_client(role="platform_admin"):
     app = FastAPI()
     app.include_router(audit_api.router)
     app.add_middleware(
@@ -67,7 +67,7 @@ def test_large_sqlite_backup_streams_beyond_normal_response_limit(tmp_path, monk
     app.add_middleware(
         AccessControlMiddleware,
         mode="token",
-        tokens={"test-token": Principal("operator-1", "admin", "tenant-1")},
+        tokens={"test-token": Principal("operator-1", "platform_admin", "tenant-1")},
     )
     app.add_middleware(ResponseSizeLimitMiddleware, max_bytes=1024)
 
@@ -88,7 +88,7 @@ def test_large_sqlite_backup_streams_beyond_normal_response_limit(tmp_path, monk
     assert payload == (5 * 1024 * 1024,)
 
 
-def test_audit_database_backup_requires_admin(tmp_path, monkeypatch):
+def test_audit_database_backup_requires_platform_admin(tmp_path, monkeypatch):
     trail = PersistentAuditTrail(tmp_path / "audit.db")
     monkeypatch.setattr(audit_api, "audit_trail", trail)
 
@@ -113,7 +113,7 @@ def test_audit_database_backup_maps_unavailable_store_to_sanitized_503(monkeypat
     assert "private.db" not in response.text
 
 
-def test_action_plan_database_backup_is_admin_only_and_integrity_checked(monkeypatch, tmp_path):
+def test_action_plan_database_backup_is_platform_admin_only_and_integrity_checked(monkeypatch, tmp_path):
     from autonomy import api
 
     source = tmp_path / "plans.db"
@@ -218,7 +218,7 @@ def test_shared_action_plan_database_backup_is_provider_managed(monkeypatch):
 
 
 
-def test_idempotency_database_backup_is_admin_only_and_integrity_checked(tmp_path, monkeypatch):
+def test_idempotency_database_backup_is_platform_admin_only_and_integrity_checked(tmp_path, monkeypatch):
     from autonomy.persistent_audit_idempotency import PersistentAuditIdempotencyStore
 
     source = tmp_path / "idempotency.db"
