@@ -28,8 +28,10 @@ class ControlPlaneSummaryResponse(BaseModel):
     capabilities: dict[str, bool]
 
 
-def _gitops_summary() -> dict[str, Any]:
-    changes = gitops_registry.list_all()
+def _gitops_summary(request: Request) -> dict[str, Any]:
+    tenant_scoped = getattr(request.state, "tenant_scoped", False)
+    tenant_id = getattr(request.state, "tenant_id", None)
+    changes = gitops_registry.list_all(tenant_id, tenant_scoped=tenant_scoped)
 
     status_counts = Counter(
         change_set.status.value
@@ -60,8 +62,10 @@ def _gitops_summary() -> dict[str, Any]:
     }
 
 
-def _audit_summary() -> dict[str, Any]:
-    events = audit_trail.get_events()
+def _audit_summary(request: Request) -> dict[str, Any]:
+    tenant_scoped = getattr(request.state, "tenant_scoped", False)
+    tenant_id = getattr(request.state, "tenant_id", None)
+    events = audit_trail.get_events(tenant_id=tenant_id, tenant_scoped=tenant_scoped)
 
     return {
         "total_events": len(events),
@@ -87,11 +91,11 @@ def _audit_summary() -> dict[str, Any]:
     "/summary",
     response_model=ControlPlaneSummaryResponse,
 )
-def get_control_plane_summary() -> ControlPlaneSummaryResponse:
+def get_control_plane_summary(request: Request) -> ControlPlaneSummaryResponse:
     return ControlPlaneSummaryResponse(
         status="operational",
-        gitops=_gitops_summary(),
-        audit=_audit_summary(),
+        gitops=_gitops_summary(request),
+        audit=_audit_summary(request),
         capabilities={
             "governed_gitops": True,
             "human_approval": True,
