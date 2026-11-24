@@ -130,7 +130,23 @@ def test_operational_audit_diagnostics_require_admin(path):
     assert client.get(path, headers={"Authorization": "Bearer operator-a"}).status_code == 403
 
 
-def test_admin_can_access_operational_audit_diagnostics():
+def test_platform_admin_can_access_shared_audit_diagnostics():
+    app = FastAPI()
+    app.add_middleware(AccessControlMiddleware, mode="token", tokens={**TOKENS, "platform": Principal("platform-ops", "platform_admin", "ops-tenant")})
+
+    @app.get("/autonomy/audit/health")
+    def audit_health():
+        return {"ok": True}
+
+    response = TestClient(app).get(
+        "/autonomy/audit/health",
+        headers={"Authorization": "Bearer platform"},
+    )
+
+    assert response.status_code == 200
+
+
+def test_tenant_admin_cannot_access_shared_audit_diagnostics():
     app = FastAPI()
     app.add_middleware(AccessControlMiddleware, mode="token", tokens=TOKENS)
 
@@ -143,7 +159,18 @@ def test_admin_can_access_operational_audit_diagnostics():
         headers={"Authorization": "Bearer admin-a"},
     )
 
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Platform administrator role required"
+
+
+def test_platform_admin_keeps_explicit_tenant_context():
+    tokens = {"platform": Principal("platform-ops", "platform_admin", "ops-tenant")}
+    response = build_client(tokens=tokens).get(
+        "/resources", headers={"Authorization": "Bearer platform"}
+    )
+
     assert response.status_code == 200
+    assert response.json() == {"subject": "platform-ops", "tenant_id": "ops-tenant"}
 
 
 def test_process_metrics_require_admin():
@@ -167,8 +194,6 @@ def test_process_metrics_require_admin():
 @pytest.mark.parametrize(
     "path",
     [
-        "/autonomy/audit/health/",
-        "/autonomy/audit/health/details",
         "/operations/failures/",
     ],
 )
@@ -176,8 +201,6 @@ def test_admin_only_route_policy_covers_slash_variants_and_subroutes(path):
     app = FastAPI()
     app.add_middleware(AccessControlMiddleware, mode="token", tokens=TOKENS)
 
-    @app.get("/autonomy/audit/health/")
-    @app.get("/autonomy/audit/health/details")
     @app.get("/operations/failures/")
     def diagnostic():
         return {"ok": True}
@@ -185,6 +208,23 @@ def test_admin_only_route_policy_covers_slash_variants_and_subroutes(path):
     client = TestClient(app)
     assert client.get(path, headers={"Authorization": "Bearer operator-a"}).status_code == 403
     assert client.get(path, headers={"Authorization": "Bearer admin-a"}).status_code == 200
+
+
+def test_platform_admin_route_policy_covers_slash_variants_and_subroutes():
+    app = FastAPI()
+    tokens = {**TOKENS, "platform": Principal("platform-ops", "platform_admin", "ops-tenant")}
+    app.add_middleware(AccessControlMiddleware, mode="token", tokens=tokens)
+
+    @app.get("/autonomy/audit/health/")
+    @app.get("/autonomy/audit/health/details")
+    def diagnostic():
+        return {"ok": True}
+
+    client = TestClient(app)
+    assert client.get("/autonomy/audit/health/", headers={"Authorization": "Bearer admin-a"}).status_code == 403
+    assert client.get("/autonomy/audit/health/details", headers={"Authorization": "Bearer admin-a"}).status_code == 403
+    assert client.get("/autonomy/audit/health/", headers={"Authorization": "Bearer platform"}).status_code == 200
+    assert client.get("/autonomy/audit/health/details", headers={"Authorization": "Bearer platform"}).status_code == 200
 
 
 def test_admin_can_access_shared_control_plane_summary():
@@ -207,6 +247,7 @@ def test_health_is_public_and_development_mode_sets_explicit_local_principal():
 
 def test_token_registry_requires_complete_valid_claims():
     assert load_token_registry('{"secret":{"subject":"alice","role":"reader","tenant_id":"account-a"}}')["secret"] == TOKENS["reader-a"]
+    assert load_token_registry('{"platform":{"subject":"ops","role":"platform_admin","tenant_id":"ops-tenant"}}')["platform"].role == "platform_admin"
 
     with pytest.raises(RuntimeError, match="subject, role, and tenant_id"):
         load_token_registry('{"secret":{"subject":"alice","role":"reader"}}')
