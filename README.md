@@ -148,14 +148,18 @@ context remains bound to that tenant and does not become global AWS access.
 Requests may include
 `X-Cloud-Tenant`, which must match the authenticated token's `tenant_id`.
 
-The optional `exp` claim is a Unix timestamp in seconds and is checked on every
+The `exp` claim is a Unix timestamp in seconds and is checked on every
 authenticated request. Expired tokens receive HTTP 401 with a Bearer challenge.
-For example, the value above expires at 2100-01-01T00:00:00Z. Existing token
-entries without `exp` remain non-expiring for backward compatibility; add an
-expiration to each deployed token as part of the credential-rotation process.
-This registry validates and enforces configured credentials but does not issue
-or persist tokens, and changing the registry still requires a controlled
-configuration update/restart.
+For example, the value above expires at 2100-01-01T00:00:00Z. Staging and
+production require every configured token to include `exp` by default; startup
+fails closed if any token omits it. Development keeps the legacy non-expiring
+behaviour. For a controlled migration only, set
+`CLOUDOPS_REQUIRE_TOKEN_EXPIRATION=false` to temporarily accept legacy tokens
+in staging or production, then remove the override after all credentials have
+expiry timestamps. Set it to `true` to enforce expiry in any token-mode
+environment. Invalid values fail startup. This registry validates and enforces
+configured credentials but does not issue or persist tokens, and changing the
+registry still requires a controlled configuration update/restart.
 Keep token values in a deployment secret store and use an identity provider or
 gateway to issue, rotate, and revoke them. The boundary attaches the principal
 and tenant to request state, and autonomous-run lifecycle and verification
