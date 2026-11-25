@@ -72,7 +72,7 @@ def test_mysql_rate_limit_budget_is_shared_across_api_workers(database_url):
     subject = f"mysql-rate-limit-{uuid.uuid4().hex}"
     token = "rate-limit-admin"
     tokens = {
-        token: {"subject": subject, "role": "admin", "tenant_id": "rate-limit-tenant"},
+        token: {"subject": subject, "role": "admin", "tenant_id": "rate-limit-tenant", "exp": 4102444800},
     }
     environment = os.environ.copy()
     environment.update({
