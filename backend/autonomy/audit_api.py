@@ -334,7 +334,7 @@ def export_audit_events(
 def _visible_actor_filter(request: Request, requested_actor: str | None) -> str | None:
     """Restrict non-admin audit feeds and exports to their own events."""
     principal = getattr(request.state, "principal", None)
-    if principal is None or principal.role == "admin":
+    if principal is None or principal.role in {"admin", "platform_admin"}:
         return requested_actor
     if requested_actor is not None and requested_actor != principal.subject:
         raise HTTPException(status_code=403, detail="Audit events are limited to the authenticated actor")
