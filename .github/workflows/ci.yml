@@ -69,6 +69,34 @@ jobs:
           fi
           grep -q '"status":"healthy"' /tmp/cloudops-health.json
 
+          # The SQLite-backed container must report every persistent store ready.
+          # AWS may be disconnected in CI, so either readiness HTTP status is valid.
+          ready_status=""
+          for attempt in $(seq 1 20); do
+            ready_status="$(curl --silent --show-error --output /tmp/cloudops-sqlite-ready.json --write-out '%{http_code}' "http://127.0.0.1:${host_port}/ready" || true)"
+            if [[ "$ready_status" == "200" || "$ready_status" == "503" ]] && jq -e '
+              (.detail.dependencies // .dependencies) as $d
+              | $d.audit_events == "healthy"
+              and $d.audit_idempotency == "healthy"
+              and $d.action_plans == "healthy"
+              and $d.gitops_changes == "healthy"
+            ' /tmp/cloudops-sqlite-ready.json >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          if [[ "$ready_status" != "200" && "$ready_status" != "503" ]] || ! jq -e '
+            (.detail.dependencies // .dependencies) as $d
+            | $d.audit_events == "healthy"
+            and $d.audit_idempotency == "healthy"
+            and $d.action_plans == "healthy"
+            and $d.gitops_changes == "healthy"
+          ' /tmp/cloudops-sqlite-ready.json >/dev/null; then
+            cat /tmp/cloudops-sqlite-ready.json
+            echo "SQLite-backed production container did not report every persistent store ready"
+            exit 1
+          fi
+
           docker_healthy=0
           for attempt in $(seq 1 20); do
             if [ "$(docker inspect --format='{{.State.Health.Status}}' "$container_name")" = "healthy" ]; then
