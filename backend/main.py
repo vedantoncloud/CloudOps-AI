@@ -138,12 +138,15 @@ def _shared_database_ready(database_url: str) -> bool:
             engine.dispose()
 
 
-def _store_ready(database_path: str | Path) -> bool:
-    """Probe either a legacy SQLite file or the explicitly configured shared DB."""
+def _store_ready(
+    database_path: str | Path,
+    required_queries: tuple[str, ...] = (),
+) -> bool:
+    """Probe the configured shared DB or a SQLite store's required schema."""
     configured_path = str(database_path)
     if "://" in configured_path:
         return _shared_database_ready(configured_path)
-    return _sqlite_store_ready(database_path)
+    return _sqlite_store_ready(database_path, required_queries)
 
 
 @app.get("/")
