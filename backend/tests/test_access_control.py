@@ -367,9 +367,76 @@ def test_staging_token_mode_accepts_configured_credentials():
     middleware = AccessControlMiddleware(
         lambda scope, receive, send: None,
         mode="token",
-        tokens=TOKENS,
+        tokens={"reader": Principal("alice", "reader", "account-a", 4102444800)},
         environment="staging",
     )
 
     assert middleware.mode == "token"
     assert middleware.environment == "staging"
+
+
+@pytest.mark.parametrize("environment", ["staging", "production"])
+def test_non_development_environments_require_expiring_tokens_by_default(environment):
+    with pytest.raises(RuntimeError, match="must include exp"):
+        AccessControlMiddleware(
+            lambda scope, receive, send: None,
+            mode="token",
+            tokens=TOKENS,
+            environment=environment,
+        )
+
+
+def test_production_accepts_expiring_tokens_by_default():
+    middleware = AccessControlMiddleware(
+        lambda scope, receive, send: None,
+        mode="token",
+        tokens={"reader": Principal("alice", "reader", "account-a", 4102444800)},
+        environment="production",
+    )
+
+    assert middleware.require_token_expiration is True
+
+
+def test_legacy_non_expiring_tokens_require_explicit_compatibility_override():
+    middleware = AccessControlMiddleware(
+        lambda scope, receive, send: None,
+        mode="token",
+        tokens=TOKENS,
+        environment="production",
+        require_token_expiration=False,
+    )
+
+    assert middleware.require_token_expiration is False
+
+
+@pytest.mark.parametrize(("setting", "expected"), [
+    ("true", True), ("1", True), ("yes", True),
+    ("false", False), ("0", False), ("off", False),
+])
+def test_token_expiration_environment_override_is_parsed(monkeypatch, setting, expected):
+    monkeypatch.setenv("CLOUDOPS_REQUIRE_TOKEN_EXPIRATION", setting)
+    tokens = (
+        {"reader": Principal("alice", "reader", "account-a", 4102444800)}
+        if expected else TOKENS
+    )
+
+    middleware = AccessControlMiddleware(
+        lambda scope, receive, send: None,
+        mode="token",
+        tokens=tokens,
+        environment="production",
+    )
+
+    assert middleware.require_token_expiration is expected
+
+
+def test_invalid_token_expiration_environment_override_fails_closed(monkeypatch):
+    monkeypatch.setenv("CLOUDOPS_REQUIRE_TOKEN_EXPIRATION", "sometimes")
+
+    with pytest.raises(RuntimeError, match="CLOUDOPS_REQUIRE_TOKEN_EXPIRATION must be a boolean"):
+        AccessControlMiddleware(
+            lambda scope, receive, send: None,
+            mode="token",
+            tokens=TOKENS,
+            environment="production",
+        )

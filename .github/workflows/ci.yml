@@ -32,7 +32,7 @@ jobs:
         run: docker build --tag cloudops-ai:ci .
       - name: Smoke test production container
         env:
-          CLOUDOPS_API_TOKENS: '{"smoke-token":{"subject":"smoke-admin","role":"admin","tenant_id":"smoke-tenant"}}'
+          CLOUDOPS_API_TOKENS: '{"smoke-token":{"subject":"smoke-admin","role":"admin","tenant_id":"smoke-tenant","exp":4102444800}}'
         run: |
           set -euo pipefail
           container_name="cloudops-ai-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
@@ -162,7 +162,7 @@ jobs:
       - name: Smoke test production container against MySQL 8.4
         env:
           CLOUDOPS_DATABASE_URL: ${{ env.CLOUDOPS_MYSQL_TEST_URL }}
-          CLOUDOPS_API_TOKENS: '{"smoke-token":{"subject":"mysql-smoke-admin","role":"admin","tenant_id":"mysql-smoke-tenant"}}'
+          CLOUDOPS_API_TOKENS: '{"smoke-token":{"subject":"mysql-smoke-admin","role":"admin","tenant_id":"mysql-smoke-tenant","exp":4102444800}}'
           AWS_EC2_METADATA_DISABLED: "true"
         run: |
           set -euo pipefail

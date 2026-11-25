@@ -95,8 +95,8 @@ def test_mysql_tenant_scoped_gitops_api_reads_are_isolated_across_workers(databa
     change_b = f"{identity}-tenant-b"
 
     tokens = {
-        "tenant-a-reader": {"subject": "gitops-api-worker-a", "role": "reader", "tenant_id": "tenant-a"},
-        "tenant-b-reader": {"subject": "gitops-api-worker-b", "role": "reader", "tenant_id": "tenant-b"},
+        "tenant-a-reader": {"subject": "gitops-api-worker-a", "role": "reader", "tenant_id": "tenant-a", "exp": 4102444800},
+        "tenant-b-reader": {"subject": "gitops-api-worker-b", "role": "reader", "tenant_id": "tenant-b", "exp": 4102444800},
     }
     environment = os.environ.copy()
     environment.update({
