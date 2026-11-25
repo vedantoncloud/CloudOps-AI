@@ -126,6 +126,7 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
         mode: str | None = None,
         tokens: dict[str, Principal] | None = None,
         environment: str | None = None,
+        require_token_expiration: bool | None = None,
     ):
         super().__init__(app)
         self.mode = (mode or os.getenv("CLOUDOPS_AUTH_MODE", "development")).lower()
@@ -141,6 +142,31 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
         self.tokens = load_token_registry() if tokens is None else tokens
         if self.mode == "token" and not self.tokens:
             raise RuntimeError("CLOUDOPS_API_TOKENS is required when CLOUDOPS_AUTH_MODE=token")
+
+        configured_expiration = os.getenv("CLOUDOPS_REQUIRE_TOKEN_EXPIRATION")
+        if require_token_expiration is not None:
+            if not isinstance(require_token_expiration, bool):
+                raise RuntimeError("require_token_expiration must be a boolean")
+            self.require_token_expiration = require_token_expiration
+        elif configured_expiration is None:
+            self.require_token_expiration = self.environment in {"staging", "production"}
+        else:
+            normalized_expiration = configured_expiration.strip().lower()
+            if normalized_expiration in {"1", "true", "yes", "on"}:
+                self.require_token_expiration = True
+            elif normalized_expiration in {"0", "false", "no", "off"}:
+                self.require_token_expiration = False
+            else:
+                raise RuntimeError(
+                    "CLOUDOPS_REQUIRE_TOKEN_EXPIRATION must be a boolean"
+                )
+
+        if self.mode == "token" and self.require_token_expiration:
+            if any(principal.expires_at is None for principal in self.tokens.values()):
+                raise RuntimeError(
+                    "Every CLOUDOPS_API_TOKENS entry must include exp when "
+                    "CLOUDOPS_REQUIRE_TOKEN_EXPIRATION=true"
+                )
 
     async def dispatch(self, request: Request, call_next):
         if request.url.path in PUBLIC_PATHS or request.method == "OPTIONS":
