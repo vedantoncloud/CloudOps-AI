@@ -112,7 +112,7 @@ def test_readiness_fails_when_a_persistent_store_is_unavailable(monkeypatch):
     monkeypatch.setattr(main.aws_service, "get_status", lambda: {"status": "connected"})
     monkeypatch.setattr(
         main, "_sqlite_store_ready",
-        lambda path: path != main.audit_trail.database_path,
+        lambda path, required_queries=(): path != main.audit_trail.database_path,
     )
 
     response = TestClient(main.app).get("/ready")
@@ -131,7 +131,7 @@ def test_readiness_fails_when_action_plan_store_is_unavailable(monkeypatch):
     monkeypatch.setattr(main.aws_service, "get_status", lambda: {"status": "connected"})
     monkeypatch.setattr(
         main, "_sqlite_store_ready",
-        lambda path: path != main.action_plan_store.database_path,
+        lambda path, required_queries=(): path != main.action_plan_store.database_path,
     )
 
     response = TestClient(main.app).get("/ready")
@@ -145,7 +145,7 @@ def test_readiness_fails_when_gitops_store_is_unavailable(monkeypatch):
     monkeypatch.setattr(
         main,
         "_sqlite_store_ready",
-        lambda path: path != main.gitops_registry.database_path,
+        lambda path, required_queries=(): path != main.gitops_registry.database_path,
     )
 
     response = TestClient(main.app).get("/ready")
@@ -199,3 +199,64 @@ def test_readiness_fails_closed_when_shared_database_is_unavailable(monkeypatch)
     }
     assert "secret" not in response.text
     assert "db.example.test" not in response.text
+
+
+def test_sqlite_readiness_rejects_a_database_missing_the_required_store_table(tmp_path):
+    database_path = tmp_path / "incomplete.db"
+    import sqlite3
+
+    with sqlite3.connect(database_path) as connection:
+        connection.execute("CREATE TABLE unrelated (id INTEGER PRIMARY KEY)")
+
+    assert not main._sqlite_store_ready(
+        database_path,
+        ("SELECT sequence, event_json, event_hash, tenant_id FROM audit_events LIMIT 0",),
+    )
+
+
+def test_sqlite_readiness_rejects_a_store_with_missing_required_columns(tmp_path):
+    database_path = tmp_path / "incomplete-columns.db"
+    import sqlite3
+
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            "CREATE TABLE audit_events (sequence INTEGER PRIMARY KEY, event_json TEXT)"
+        )
+
+    assert not main._sqlite_store_ready(
+        database_path,
+        ("SELECT sequence, event_json, event_hash, tenant_id FROM audit_events LIMIT 0",),
+    )
+
+
+def test_sqlite_readiness_accepts_the_expected_store_schema(tmp_path):
+    database_path = tmp_path / "ready.db"
+    import sqlite3
+
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            "CREATE TABLE audit_events (sequence INTEGER PRIMARY KEY, "
+            "event_json TEXT NOT NULL, event_hash TEXT NOT NULL, tenant_id TEXT)"
+        )
+
+    assert main._sqlite_store_ready(
+        database_path,
+        ("SELECT sequence, event_json, event_hash, tenant_id FROM audit_events LIMIT 0",),
+    )
+
+
+def test_readiness_marks_incomplete_sqlite_store_schema_unhealthy(tmp_path, monkeypatch):
+    import sqlite3
+
+    database_path = tmp_path / "incomplete-audit.db"
+    with sqlite3.connect(database_path) as connection:
+        connection.execute("CREATE TABLE unrelated (id INTEGER PRIMARY KEY)")
+
+    monkeypatch.setattr(main.audit_trail, "database_path", str(database_path))
+    monkeypatch.setattr(main.aws_service, "get_status", lambda: {"status": "connected"})
+
+    response = TestClient(main.app).get("/ready")
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["dependencies"]["audit_events"] == "unhealthy"
+    assert "incomplete-audit.db" not in response.text

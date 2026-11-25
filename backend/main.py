@@ -80,14 +80,19 @@ app.include_router(resource_governance_router)
 app.include_router(resource_inventory_router)
 
 
-def _sqlite_store_ready(database_path: str | Path) -> bool:
-    """Check that a configured SQLite store can be opened and queried."""
+def _sqlite_store_ready(
+    database_path: str | Path,
+    required_queries: tuple[str, ...] = (),
+) -> bool:
+    """Check SQLite connectivity and the configured store's required schema."""
     path = Path(database_path).resolve()
     try:
         with sqlite3.connect(
             f"file:{path.as_posix()}?mode=ro", uri=True, timeout=1
         ) as connection:
             connection.execute("SELECT 1").fetchone()
+            for statement in required_queries:
+                connection.execute(statement).fetchall()
         return True
     except (OSError, sqlite3.Error, ValueError):
         return False
@@ -133,12 +138,15 @@ def _shared_database_ready(database_url: str) -> bool:
             engine.dispose()
 
 
-def _store_ready(database_path: str | Path) -> bool:
-    """Probe either a legacy SQLite file or the explicitly configured shared DB."""
+def _store_ready(
+    database_path: str | Path,
+    required_queries: tuple[str, ...] = (),
+) -> bool:
+    """Probe the configured shared DB or a SQLite store's required schema."""
     configured_path = str(database_path)
     if "://" in configured_path:
         return _shared_database_ready(configured_path)
-    return _sqlite_store_ready(database_path)
+    return _sqlite_store_ready(database_path, required_queries)
 
 
 @app.get("/")
@@ -211,18 +219,39 @@ def readiness_check():
     aws_ready = isinstance(result, dict) and result.get("status") == "connected"
     persistence = {
         "audit_events": (
-            "healthy" if _store_ready(audit_trail.database_path) else "unhealthy"
+            "healthy"
+            if _store_ready(
+                audit_trail.database_path,
+                ("SELECT sequence, event_json, event_hash, tenant_id FROM audit_events LIMIT 0",),
+            )
+            else "unhealthy"
         ),
         "audit_idempotency": (
-            "healthy" if _store_ready(os.getenv("CLOUDOPS_DATABASE_URL") or DEFAULT_DB_PATH) else "unhealthy"
+            "healthy"
+            if _store_ready(
+                os.getenv("CLOUDOPS_DATABASE_URL") or DEFAULT_DB_PATH,
+                (
+                    "SELECT run_id, event_type, evidence_json, status, claim_token, claimed_at "
+                    "FROM audit_idempotency LIMIT 0",
+                ),
+            )
+            else "unhealthy"
         ),
         "action_plans": (
-            "healthy" if _store_ready(action_plan_store.database_path) else "unhealthy"
+            "healthy"
+            if _store_ready(
+                action_plan_store.database_path,
+                ("SELECT action_id, tenant_id, payload, created_order FROM action_plans LIMIT 0",),
+            )
+            else "unhealthy"
         ),
         "gitops_changes": (
             "healthy"
             if gitops_registry.database_path is None
-            or _store_ready(gitops_registry.database_path)
+            or _store_ready(
+                gitops_registry.database_path,
+                ("SELECT change_id, payload, created_order FROM gitops_change_sets LIMIT 0",),
+            )
             else "unhealthy"
         ),
     }
