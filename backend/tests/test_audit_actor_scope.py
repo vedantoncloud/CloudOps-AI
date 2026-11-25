@@ -11,6 +11,7 @@ TOKENS = {
     "reader": Principal("alice", "reader", "tenant-a"),
     "reader-b": Principal("alice", "reader", "tenant-b"),
     "admin": Principal("dana", "admin", "tenant-a"),
+    "platform": Principal("platform-ops", "platform_admin", "tenant-a"),
 }
 
 
@@ -42,6 +43,7 @@ def clients(monkeypatch):
         "reader": TestClient(app, headers={"Authorization": "Bearer reader"}),
         "reader-b": TestClient(app, headers={"Authorization": "Bearer reader-b"}),
         "admin": TestClient(app, headers={"Authorization": "Bearer admin"}),
+        "platform": TestClient(app, headers={"Authorization": "Bearer platform"}),
     }
 
 
@@ -79,6 +81,18 @@ def test_reader_cannot_select_another_actor_for_audit_feed_or_export(clients, pa
 @pytest.mark.parametrize("path", ["/autonomy/audit/events", "/autonomy/audit/events/export"])
 def test_admin_can_read_all_actors_but_only_within_own_tenant(clients, path):
     response = clients["admin"].get(path)
+
+    assert response.status_code == 200
+    body = response.text
+    assert "own" in body
+    assert "foreign-actor-event" in body
+    assert "same-actor-other-tenant" not in body
+    assert "legacy-unattributed" not in body
+
+
+@pytest.mark.parametrize("path", ["/autonomy/audit/events", "/autonomy/audit/events/export"])
+def test_platform_admin_can_read_all_actors_within_its_tenant(clients, path):
+    response = clients["platform"].get(path)
 
     assert response.status_code == 200
     body = response.text
