@@ -198,7 +198,7 @@ jobs:
       - name: Smoke test production container against MySQL 8.4
         env:
           CLOUDOPS_DATABASE_URL: ${{ env.CLOUDOPS_MYSQL_TEST_URL }}
-          CLOUDOPS_API_TOKENS: '{"smoke-token":{"subject":"mysql-smoke-admin","role":"admin","tenant_id":"mysql-smoke-tenant","exp":4102444800}}'
+          CLOUDOPS_API_TOKENS: '{"smoke-token":{"subject":"mysql-smoke-platform-admin","role":"platform_admin","tenant_id":"mysql-smoke-tenant","exp":4102444800}}'
           AWS_EC2_METADATA_DISABLED: "true"
         run: |
           set -euo pipefail
@@ -235,6 +235,16 @@ jobs:
             exit 1
           fi
           grep -q '"status":"healthy"' /tmp/cloudops-mysql-health.json
+
+          # Verify the shared-MySQL audit reconciliation endpoint through the production container.
+          reconciliation_status="$(curl --silent --show-error --output /tmp/cloudops-mysql-reconciliation.json --write-out '%{http_code}' \
+            --header "Authorization: Bearer smoke-token" \
+            http://127.0.0.1:8000/autonomy/audit/reconciliation)"
+          if [ "$reconciliation_status" != "200" ] || ! jq -e '.read_only == true' /tmp/cloudops-mysql-reconciliation.json >/dev/null; then
+            cat /tmp/cloudops-mysql-reconciliation.json
+            echo "MySQL audit reconciliation smoke request did not return a read-only result"
+            exit 1
+          fi
 
           docker_healthy=0
           for attempt in $(seq 1 20); do
