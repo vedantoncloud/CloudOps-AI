@@ -1,6 +1,7 @@
 import boto3
 import hashlib
 import json
+import logging
 import os
 import re
 import threading
@@ -12,6 +13,9 @@ from datetime import datetime, timedelta, timezone
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 from observability import aws_operation_metrics
+
+
+_error_logger = logging.getLogger("cloudops.aws")
 
 
 AWS_CLIENT_CONFIG = Config(
@@ -2928,13 +2932,42 @@ def _record_operation_metrics(method):
     def measured(self, *args, **kwargs):
         try:
             result = method(self, *args, **kwargs)
-        except Exception:
+        except Exception as error:
             aws_operation_metrics.observe(method.__name__, True)
+            # Do not log exception messages or tracebacks: SDK/transport errors
+            # may embed request data, account details, or credential material.
+            _error_logger.error(
+                json.dumps(
+                    {
+                        "event": "aws_operation_failed",
+                        "operation": method.__name__,
+                        "failure_kind": "exception",
+                        "exception_type": type(error).__name__,
+                    },
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+            )
             raise
         failed = isinstance(result, dict) and result.get("status") in {
             "unhealthy", "disconnected", "error"
         }
         aws_operation_metrics.observe(method.__name__, failed)
+        if failed:
+            # The provider result is intentionally not logged; it may contain
+            # sensitive AWS diagnostics. The fixed operation label is enough
+            # to correlate with the existing failure counters.
+            _error_logger.warning(
+                json.dumps(
+                    {
+                        "event": "aws_operation_failed",
+                        "operation": method.__name__,
+                        "failure_kind": "provider_response",
+                    },
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+            )
         return result
     return measured
 
