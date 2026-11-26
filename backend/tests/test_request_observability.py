@@ -59,7 +59,8 @@ def test_invalid_request_id_is_replaced_with_generated_id():
     assert len(response.headers["x-request-id"]) == 36
 
 
-def test_unhandled_server_errors_return_request_id_without_exception_details():
+def test_unhandled_server_errors_return_request_id_and_log_safe_diagnostics(caplog):
+    caplog.set_level(logging.ERROR, logger="cloudops.errors")
     app = FastAPI()
     app.add_middleware(RequestObservabilityMiddleware)
     app.add_exception_handler(Exception, main._unhandled_exception_handler)
@@ -74,6 +75,17 @@ def test_unhandled_server_errors_return_request_id_without_exception_details():
     assert len(response.headers["x-request-id"]) == 36
     assert response.json() == {"detail": "Internal server error"}
     assert "sensitive database connection detail" not in response.text
+    record = json.loads(
+        next(item.message for item in caplog.records if item.name == "cloudops.errors")
+    )
+    assert record == {
+        "event": "http_unhandled_exception",
+        "request_id": response.headers["x-request-id"],
+        "method": "GET",
+        "path": "/failure",
+        "exception_type": "RuntimeError",
+    }
+    assert "sensitive database connection detail" not in caplog.text
 
 
 def test_production_app_registers_sanitized_unhandled_exception_handler():
