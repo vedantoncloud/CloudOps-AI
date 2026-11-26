@@ -240,7 +240,7 @@ jobs:
           reconciliation_status="$(curl --silent --show-error --output /tmp/cloudops-mysql-reconciliation.json --write-out '%{http_code}' \
             --header "Authorization: Bearer smoke-token" \
             http://127.0.0.1:8000/autonomy/audit/reconciliation)"
-          if [ "$reconciliation_status" != "200" ] || ! jq -e '.read_only == true' /tmp/cloudops-mysql-reconciliation.json >/dev/null; then
+          if [ "$reconciliation_status" != "200" ] || ! jq -e '.read_only == true and .evidence.read_only == true and .evidence.store == "mysql"' /tmp/cloudops-mysql-reconciliation.json >/dev/null; then
             cat /tmp/cloudops-mysql-reconciliation.json
             echo "MySQL audit reconciliation smoke request did not return a read-only result"
             exit 1
