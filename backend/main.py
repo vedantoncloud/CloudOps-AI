@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from pathlib import Path
 from datetime import date, datetime
 from math import isfinite
@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import re
+import secrets
 import sqlite3
 from urllib.parse import urlsplit
 
@@ -180,8 +181,32 @@ def root():
 
 @app.get("/console", include_in_schema=False)
 def console():
-    """Serve the authenticated operations console."""
-    return FileResponse(CONSOLE_PAGE, media_type="text/html")
+    """Serve the operations console with a per-response nonce-based CSP."""
+    nonce = secrets.token_urlsafe(18)
+    html = CONSOLE_PAGE.read_text(encoding="utf-8")
+    # The console intentionally keeps its CSS and application script inline.
+    # Bind both blocks to a fresh nonce instead of allowing unsafe-inline scripts.
+    html = re.sub(r"<script(?=[\s>])", f'<script nonce="{nonce}"', html, count=1, flags=re.IGNORECASE)
+    html = re.sub(r"<style(?=[\s>])", f'<style nonce="{nonce}"', html, count=1, flags=re.IGNORECASE)
+    policy = "; ".join(
+        (
+            "default-src 'self'",
+            f"script-src 'nonce-{nonce}'",
+            f"style-src 'nonce-{nonce}'",
+            "style-src-attr 'unsafe-inline'",
+            "img-src 'self' data: blob:",
+            "font-src 'self' data:",
+            "connect-src 'self'",
+            "object-src 'none'",
+            "base-uri 'self'",
+            "form-action 'self'",
+            "frame-ancestors 'none'",
+        )
+    )
+    return HTMLResponse(
+        content=html,
+        headers={"Content-Security-Policy": policy},
+    )
 
 
 @app.get("/health")
