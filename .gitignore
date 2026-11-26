@@ -25,3 +25,9 @@ Thumbs.db
 
 # Local durable GitOps proposal state
 backend/gitops_changes.db
+
+# Local durable audit-event SQLite state and transient sidecar files
+cloudops_audit_events.db
+cloudops_audit_events.db-wal
+cloudops_audit_events.db-shm
+cloudops_audit_events.db-journal
