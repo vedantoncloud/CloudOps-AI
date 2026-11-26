@@ -3,6 +3,8 @@ from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from pathlib import Path
 from datetime import date, datetime
 from math import isfinite
+import json
+import logging
 import os
 import re
 import sqlite3
@@ -35,6 +37,9 @@ from autonomy.audit_api import audit_trail
 from autonomy.persistent_audit_reconciliation_api import DEFAULT_DB_PATH
 
 
+error_logger = logging.getLogger("cloudops.errors")
+
+
 app = FastAPI(
     title="CloudOps AI",
     description="AI-powered Cloud Operations Platform",
@@ -52,6 +57,22 @@ async def _unhandled_exception_handler(request: Request, exc: Exception):
     """Return a sanitized 500 response while preserving request correlation."""
     request_id = getattr(request.state, "request_id", None)
     headers = {"X-Request-ID": request_id} if isinstance(request_id, str) else None
+    route = getattr(request.scope.get("route"), "path", "<unmatched>")
+    # Log only bounded request metadata and the exception class. Exception
+    # messages and tracebacks can contain credentials, SQL, or tenant data.
+    error_logger.error(
+        json.dumps(
+            {
+                "event": "http_unhandled_exception",
+                "request_id": request_id,
+                "method": request.method,
+                "path": route,
+                "exception_type": type(exc).__name__,
+            },
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+    )
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal server error"},
