@@ -70,7 +70,7 @@ jobs:
           grep -q '"status":"healthy"' /tmp/cloudops-health.json
 
           # Initialize the lazy SQLite idempotency store before checking readiness.
-          reconciliation_status="$(curl --silent --show-error --output /tmp/cloudops-reconciliation.json --write-out '%{http_code}' "http://127.0.0.1:${host_port}/autonomy/audit/reconciliation")"
+          reconciliation_status="$(curl --silent --show-error --output /tmp/cloudops-reconciliation.json --write-out '%{http_code}' --header "Authorization: Bearer smoke-token" "http://127.0.0.1:${host_port}/autonomy/audit/reconciliation")"
           if [ "$reconciliation_status" != "200" ] || ! jq -e '.read_only == true' /tmp/cloudops-reconciliation.json >/dev/null; then
             cat /tmp/cloudops-reconciliation.json
             echo "SQLite audit idempotency store did not initialize successfully"
