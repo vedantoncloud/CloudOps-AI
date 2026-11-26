@@ -1,8 +1,35 @@
+import re
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from auth import AccessControlMiddleware, Principal
 from main import app, console
+
+
+def test_console_uses_a_nonce_based_content_security_policy():
+    client = TestClient(app)
+    first = client.get("/console")
+    second = client.get("/console")
+
+    assert first.status_code == 200
+    assert first.headers["content-type"].startswith("text/html")
+    first_policy = first.headers["content-security-policy"]
+    second_policy = second.headers["content-security-policy"]
+
+    first_nonce = re.search(r'<script nonce="([^"]+)">', first.text).group(1)
+    style_nonce = re.search(r'<style nonce="([^"]+)">', first.text).group(1)
+    second_nonce = re.search(r'<script nonce="([^"]+)">', second.text).group(1)
+
+    assert first_nonce == style_nonce
+    assert f"script-src 'nonce-{first_nonce}'" in first_policy
+    assert f"style-src 'nonce-{first_nonce}'" in first_policy
+    assert "script-src 'unsafe-inline'" not in first_policy
+    assert "style-src-attr 'unsafe-inline'" in first_policy
+    assert "object-src 'none'" in first_policy
+    assert "base-uri 'self'" in first_policy
+    assert "frame-ancestors 'none'" in first_policy
+    assert second_nonce != first_nonce
+    assert f"nonce-{second_nonce}" in second_policy
 
 
 def test_console_is_served_to_authenticated_reader():
