@@ -51,6 +51,12 @@ def test_http_responses_include_default_browser_security_headers():
     assert headers[b"permissions-policy"] == b"camera=(), microphone=(), geolocation=()"
     assert headers[b"cross-origin-resource-policy"] == b"same-origin"
     assert headers[b"cache-control"] == b"no-store"
+    assert headers[b"content-security-policy"] == (
+        b"default-src 'self'; base-uri 'self'; connect-src 'self'; "
+        b"font-src 'self'; form-action 'self'; frame-ancestors 'none'; "
+        b"img-src 'self' data: blob:; object-src 'none'; "
+        b"script-src 'self'; style-src 'self'"
+    )
     assert b"strict-transport-security" not in headers
 
 
@@ -64,6 +70,7 @@ def test_existing_route_security_headers_are_not_overwritten():
     existing = [
         (b"cache-control", b"private, max-age=60"),
         (b"x-frame-options", b"SAMEORIGIN"),
+        (b"content-security-policy", b"default-src 'none'"),
         (b"x-custom-header", b"preserved"),
     ]
 
@@ -72,6 +79,7 @@ def test_existing_route_security_headers_are_not_overwritten():
 
     assert headers[b"cache-control"] == b"private, max-age=60"
     assert headers[b"x-frame-options"] == b"SAMEORIGIN"
+    assert headers[b"content-security-policy"] == b"default-src 'none'"
     assert headers[b"x-custom-header"] == b"preserved"
     assert headers[b"x-content-type-options"] == b"nosniff"
 
