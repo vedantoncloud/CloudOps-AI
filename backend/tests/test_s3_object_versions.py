@@ -1,3 +1,4 @@
+from conftest import read_console_source
 from datetime import datetime, timezone
 from unittest.mock import patch
 
@@ -265,7 +266,7 @@ def test_s3_version_metadata_sanitizes_provider_failure_and_rejects_empty_versio
 
 
 def test_console_exposes_version_browsing_pagination_and_download():
-    html = main.CONSOLE_PAGE.read_text(encoding="utf-8")
+    html = read_console_source()
     assert 'id="objectVersions"' in html
     assert 'id="moreVersions"' in html
     assert "object-versions?${query}" in html

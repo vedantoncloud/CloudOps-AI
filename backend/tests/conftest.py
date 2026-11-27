@@ -26,7 +26,7 @@ def console_response(client, **kwargs):
     if response.status_code == 200:
         script = client.get("/static/console.js")
         if script.status_code == 200:
-            source += "\\n" + script.text
+            source += "\n" + script.text
     return _ConsoleSourceResponse(response, source)
 
 
@@ -35,6 +35,6 @@ def read_console_source():
     from pathlib import Path
 
     static_dir = Path(__file__).parents[1] / "static"
-    return (static_dir / "console.html").read_text(encoding="utf-8") + "\\n" + (
+    return (static_dir / "console.html").read_text(encoding="utf-8") + "\n" + (
         static_dir / "console.js"
     ).read_text(encoding="utf-8")

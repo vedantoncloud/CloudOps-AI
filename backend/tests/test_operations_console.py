@@ -211,3 +211,20 @@ def test_run_inspection_handles_success_failure_and_escapes_run_id():
     assert "encodeURIComponent(actionId)" in html
     assert "content.textContent=JSON.stringify(data,null,2)" in html
     assert "content.textContent=`Unable to load run details: ${e.message}`" in html
+
+
+def test_console_static_assets_are_served_same_origin():
+    client = TestClient(app)
+
+    page = client.get("/console")
+    stylesheet = client.get("/static/console.css")
+    script = client.get("/static/console.js")
+
+    assert page.status_code == 200
+    assert '<link rel="stylesheet" href="/static/console.css">' in page.text
+    assert '<script src="/static/console.js" defer></script>' in page.text
+    assert stylesheet.status_code == 200
+    assert stylesheet.headers["content-type"].startswith("text/css")
+    assert script.status_code == 200
+    assert script.headers["content-type"].startswith("application/javascript")
+    assert "function metricChart(title,points,unit)" in script.text
