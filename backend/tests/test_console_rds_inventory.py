@@ -1,10 +1,11 @@
+from conftest import console_response, read_console_source
 from fastapi.testclient import TestClient
 
 import main
 
 
 def test_console_exposes_regional_paginated_rds_inventory_and_csv_export():
-    html = TestClient(main.app).get("/console").text
+    html = console_response(TestClient(main.app)).text
     assert 'id="loadRdsInstances"' in html
     assert 'id="rdsEngine"' in html
     assert 'id="rdsStatusFilter"' in html
