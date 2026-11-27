@@ -264,6 +264,28 @@ python -m pytest backend/tests
 
 GitHub Actions runs this suite on pushes and pull requests with Python 3.13.
 
+## Local development with Docker Compose
+
+For a local-only development instance, copy the safe example environment file
+and start the service:
+
+```sh
+cp .env.example .env
+docker compose up --build
+```
+
+Open the console at [http://localhost:8000/console](http://localhost:8000/console).
+The Compose service binds to loopback only and persists local SQLite state in
+the `cloudops-data` named volume. This profile deliberately enables the
+development authentication mode, which grants local admin access without a
+token. Use it only on your own machine; do not expose this configuration to a
+network or use it for staging or production. The production image defaults to
+token authentication, and the production deployment instructions below remain
+separate.
+
+Stop the service with `docker compose down`. This preserves the named data
+volume; `docker compose down --volumes` deletes that local persistent state.
+
 ## Container deployment
 
 Build the production image from the repository root:
