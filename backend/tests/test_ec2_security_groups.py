@@ -1,3 +1,4 @@
+from conftest import console_response, read_console_source
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from botocore.exceptions import ClientError
@@ -172,7 +173,7 @@ def test_provider_returns_explicit_empty_groups_and_sanitizable_failure(monkeypa
 
 
 def test_console_labels_and_renders_both_security_group_directions():
-    html = TestClient(main.app).get("/console").text
+    html = console_response(TestClient(main.app)).text
 
     assert "Security group rules" in html
     assert "ingress_rules" in html

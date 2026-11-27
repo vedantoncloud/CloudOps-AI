@@ -1,3 +1,4 @@
+from conftest import console_response, read_console_source
 from datetime import datetime, timezone
 
 from botocore.exceptions import ClientError
@@ -96,7 +97,7 @@ def test_snapshot_endpoint_auth_tenant_scope_and_empty_page(monkeypatch):
 
 
 def test_console_exposes_snapshot_pagination_and_export():
-    html = TestClient(main.app).get("/console").text
+    html = console_response(TestClient(main.app)).text
     assert "Inspect EBS snapshots" in html
     assert "/cloud/aws/ec2/snapshots?" in html
     assert "Download snapshot CSV" in html

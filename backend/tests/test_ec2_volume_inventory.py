@@ -1,3 +1,4 @@
+from conftest import console_response, read_console_source
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from botocore.exceptions import ClientError
@@ -92,7 +93,7 @@ def test_volume_endpoint_tenant_scope_auth_and_unattached_filter_data(monkeypatc
 
 
 def test_console_exposes_paginated_unattached_volume_inventory():
-    html = TestClient(main.app).get("/console").text
+    html = console_response(TestClient(main.app)).text
     assert "Inspect EBS volumes" in html
     assert "Show unattached volumes only" in html
     assert "Download volume CSV" in html

@@ -1,3 +1,4 @@
+from conftest import console_response, read_console_source
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -7,7 +8,7 @@ from main import app, console
 
 def test_console_is_served_to_authenticated_reader():
     client = TestClient(app)
-    response = client.get("/console")
+    response = console_response(client)
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
@@ -39,7 +40,7 @@ def test_console_is_served_to_authenticated_reader():
 
 
 def test_console_exposes_gitops_review_dry_run_and_verification_workflow():
-    response = TestClient(app).get("/console")
+    response = console_response(TestClient(app))
 
     assert response.status_code == 200
     html = response.text
@@ -68,7 +69,7 @@ def test_console_exposes_gitops_review_dry_run_and_verification_workflow():
 
 
 def test_console_uses_tenant_api_contracts_and_does_not_persist_bearer_token():
-    response = TestClient(app).get("/console")
+    response = console_response(TestClient(app))
 
     assert "/autonomy/resources/" in response.text
     assert "`/autonomy/approvals?${query}`" in response.text
@@ -117,7 +118,7 @@ def test_console_uses_tenant_api_contracts_and_does_not_persist_bearer_token():
 
 
 def test_console_s3_object_browser_uses_bounded_resumable_listing_contract():
-    response = TestClient(app).get("/console")
+    response = console_response(TestClient(app))
 
     assert "max_keys:$('objectPageSize').value" in response.text
     assert "query.set('prefix',prefix)" in response.text
@@ -148,13 +149,13 @@ def test_console_is_protected_by_token_authentication():
     secured.add_api_route("/console", console)
     client = TestClient(secured)
 
-    assert client.get("/console").status_code == 401
-    response = client.get("/console", headers={"Authorization": "Bearer valid"})
+    assert console_response(client).status_code == 401
+    response = console_response(client, headers={"Authorization": "Bearer valid"})
     assert response.status_code == 200
 
 
 def test_console_exposes_ec2_and_s3_resource_details_and_metrics():
-    response = TestClient(app).get("/console")
+    response = console_response(TestClient(app))
 
     assert response.status_code == 200
     assert 'id="resourceDetails"' in response.text
@@ -166,7 +167,7 @@ def test_console_exposes_ec2_and_s3_resource_details_and_metrics():
 
 
 def test_console_renders_ec2_metric_series_as_accessible_trend_charts():
-    response = TestClient(app).get("/console")
+    response = console_response(TestClient(app))
 
     assert response.status_code == 200
     assert "function metricChart(title,points,unit)" in response.text
@@ -183,7 +184,7 @@ def test_console_renders_ec2_metric_series_as_accessible_trend_charts():
 
 
 def test_console_exposes_bounded_s3_bucket_analysis_with_independent_results():
-    response = TestClient(app).get("/console")
+    response = console_response(TestClient(app))
 
     assert response.status_code == 200
     html = response.text
@@ -204,7 +205,7 @@ def test_console_exposes_bounded_s3_bucket_analysis_with_independent_results():
 
 
 def test_run_inspection_handles_success_failure_and_escapes_run_id():
-    html = TestClient(app).get("/console").text
+    html = console_response(TestClient(app)).text
 
     assert "async function inspectRun(actionId)" in html
     assert "encodeURIComponent(actionId)" in html

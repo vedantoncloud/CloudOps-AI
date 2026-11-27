@@ -1,3 +1,4 @@
+from conftest import console_response, read_console_source
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -67,5 +68,5 @@ def test_bucket_tags_endpoint_checks_tenant_and_sanitizes_provider_failure(monke
 
 
 def test_console_bucket_analysis_includes_tags_check():
-    html = TestClient(main.app).get("/console").text
+    html = console_response(TestClient(main.app)).text
     assert "['Tags',`${base}/tags`]" in html

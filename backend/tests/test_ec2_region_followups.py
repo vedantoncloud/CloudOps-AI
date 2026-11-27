@@ -1,3 +1,4 @@
+from conftest import console_response, read_console_source
 from pathlib import Path
 from unittest.mock import patch
 
@@ -170,6 +171,6 @@ def test_aggregate_insights_without_region_keeps_configured_default(monkeypatch)
 
 
 def test_console_passes_selected_region_to_fleet_insights():
-    html = (Path(__file__).parents[1] / "static" / "console.html").read_text(encoding="utf-8")
+    html = read_console_source()
     assert "const query=region?`?region=${encodeURIComponent(region)}`:''" in html
     assert "`/cloud/aws/ec2/${category}-insights${query}`" in html

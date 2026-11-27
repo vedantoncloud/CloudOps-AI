@@ -1,3 +1,4 @@
+from conftest import console_response, read_console_source
 ﻿import csv
 import io
 from pathlib import Path
@@ -614,7 +615,7 @@ def test_gitops_csv_export_rejects_invalid_filters():
     assert client.get("/autonomy/gitops/changes/export.csv?search=" + "x" * 201).status_code == 422
 
 def test_gitops_export_is_available_in_console_with_current_filters_and_auth():
-    console = (Path(__file__).parents[1] / "static" / "console.html").read_text(encoding="utf-8")
+    console = read_console_source()
 
     assert 'id="exportGitops"' in console
     assert "$('exportGitops').addEventListener('click',exportGitops)" in console
