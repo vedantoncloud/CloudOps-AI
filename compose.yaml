@@ -1,0 +1,14 @@
+services:
+  cloudops-ai:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - cloudops-data:/var/lib/cloudops
+
+volumes:
+  cloudops-data:
