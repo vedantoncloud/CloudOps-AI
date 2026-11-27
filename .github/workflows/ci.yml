@@ -289,3 +289,20 @@ jobs:
             echo "Expected authenticated operations request to return 200, got ${authenticated_status}"
             exit 1
           fi
+
+  ruff-baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install pinned Ruff
+        run: python -m pip install --disable-pip-version-check ruff==0.17.6
+      - name: Collect baseline diagnostics (non-blocking)
+        continue-on-error: true
+        run: ruff check backend --output-format=github
+      - name: Summarize baseline diagnostics (non-blocking)
+        continue-on-error: true
+        run: ruff check backend --statistics
