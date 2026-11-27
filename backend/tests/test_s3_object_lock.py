@@ -1,4 +1,5 @@
-﻿from types import SimpleNamespace
+from .conftest import console_response, read_console_source
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from botocore.exceptions import ClientError
@@ -78,6 +79,6 @@ def test_object_lock_contract_rejects_invalid_shapes_and_console_exposes_check()
         assert False, "invalid retention mode must fail closed"
     except Exception as error:
         assert getattr(error, "status_code", None) == 503
-    html = TestClient(main.app).get("/console").text
+    html = console_response(TestClient(main.app)).text
     assert "Object Lock retention" in html
     assert "/object-lock" in html

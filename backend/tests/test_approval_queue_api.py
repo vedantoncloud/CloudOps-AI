@@ -1,3 +1,4 @@
+from .conftest import console_response, read_console_source
 from types import SimpleNamespace
 
 import pytest
@@ -122,9 +123,7 @@ def test_approval_queue_http_rejects_invalid_risk_filter():
 def test_approval_console_exposes_and_submits_filters():
     from pathlib import Path
 
-    html = (Path(__file__).parents[1] / "static" / "console.html").read_text(
-        encoding="utf-8"
-    )
+    html = read_console_source()
 
     assert 'id="approvalSearch"' in html
     assert 'id="approvalRisk"' in html

@@ -1,3 +1,4 @@
+from .conftest import console_response, read_console_source
 import json
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -96,5 +97,5 @@ def test_policy_endpoint_is_tenant_scoped_and_sanitizes_provider_failure(monkeyp
 
 
 def test_bucket_policy_is_in_console_analysis():
-    html = TestClient(main.app).get("/console").text
+    html = console_response(TestClient(main.app)).text
     assert "['Bucket policy',`${base}/policy`]" in html

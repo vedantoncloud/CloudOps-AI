@@ -1,3 +1,4 @@
+from .conftest import console_response, read_console_source
 from unittest.mock import patch
 
 from botocore.exceptions import ClientError
@@ -101,5 +102,5 @@ def test_logging_endpoint_checks_ownership_and_sanitizes_provider_failure(monkey
 
 
 def test_logging_check_is_in_bucket_analysis():
-    html = TestClient(main.app).get("/console").text
+    html = console_response(TestClient(main.app)).text
     assert "['Server access logging',`${base}/logging`]" in html

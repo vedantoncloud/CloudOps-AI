@@ -1,10 +1,11 @@
+from .conftest import console_response, read_console_source
 from fastapi.testclient import TestClient
 
 from main import app
 
 
 def test_console_s3_bucket_prefix_filter_is_preserved_across_pages_and_exports():
-    html = TestClient(app).get("/console").text
+    html = console_response(TestClient(app)).text
 
     assert 'id="bucketPrefix"' in html
     assert 'aria-label="Filter S3 buckets by name prefix"' in html

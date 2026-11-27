@@ -1,3 +1,4 @@
+from .conftest import console_response, read_console_source
 from pathlib import Path
 from unittest.mock import patch
 
@@ -141,7 +142,7 @@ def test_ec2_alarms_require_tenant_ownership_and_use_selected_region(monkeypatch
 
 
 def test_console_shows_ec2_alarm_details():
-    html = (Path(__file__).parents[1] / "static" / "console.html").read_text(encoding="utf-8")
+    html = read_console_source()
     assert "['CloudWatch alarms',root+'/alarms'+regional]" in html
     assert "No CPU utilization alarms are configured for this instance." in html
     assert "More alarms" in html
@@ -268,7 +269,7 @@ def test_ec2_alarm_routes_reject_malformed_healthy_payloads(monkeypatch, path, m
     assert response.json() == {"detail": "AWS resource data is unavailable"}
 
 def test_console_renders_filterable_fleet_alarm_summary_and_table():
-    html = (Path(__file__).parents[1] / "static" / "console.html").read_text(encoding="utf-8")
+    html = read_console_source()
     assert 'id="alarmStateFilter"' in html
     assert 'value="INSUFFICIENT_DATA"' in html
     assert "function renderFleetAlarms(data" in html
@@ -288,7 +289,7 @@ def test_fleet_alarm_csv_export_respects_filter_and_is_spreadsheet_safe():
 
     if not shutil.which("node"):
         pytest.skip("Node.js is needed to run the console JavaScript behavior check")
-    html = (Path(__file__).parents[1] / "static" / "console.html").read_text(encoding="utf-8")
+    html = read_console_source()
     assert 'id="exportFleetAlarms"' in html
     match = re.search(r"function exportFleetAlarms\(\).*?(?=function renderFleetAlarms)", html, re.S)
     assert match

@@ -1,10 +1,11 @@
+from .conftest import console_response, read_console_source
 from fastapi.testclient import TestClient
 
 from main import app
 
 
 def test_console_can_download_actor_scoped_audit_export_with_current_filter():
-    response = TestClient(app).get("/console")
+    response = console_response(TestClient(app))
 
     assert response.status_code == 200
     html = response.text
@@ -28,7 +29,7 @@ def test_console_can_download_actor_scoped_audit_export_with_current_filter():
 
 
 def test_console_audit_actor_filter_is_shared_by_listing_and_export():
-    response = TestClient(app).get("/console")
+    response = console_response(TestClient(app))
 
     assert response.status_code == 200
     html = response.text
@@ -39,7 +40,7 @@ def test_console_audit_actor_filter_is_shared_by_listing_and_export():
     assert "const query=auditFilters();const response=await fetch" in html
 
 def test_console_audit_event_type_filter_is_shared_by_listing_and_export():
-    response = TestClient(app).get("/console")
+    response = console_response(TestClient(app))
 
     assert response.status_code == 200
     html = response.text
@@ -52,7 +53,7 @@ def test_console_audit_event_type_filter_is_shared_by_listing_and_export():
 
 
 def test_console_audit_action_and_status_filters_are_shared_by_listing_and_export():
-    html = TestClient(app).get("/console").text
+    html = console_response(TestClient(app)).text
 
     assert 'id="auditAction"' in html
     assert 'id="auditStatus"' in html
@@ -66,7 +67,7 @@ def test_console_audit_action_and_status_filters_are_shared_by_listing_and_expor
 
 
 def test_console_exposes_admin_audit_integrity_check():
-    response = TestClient(app).get("/console")
+    response = console_response(TestClient(app))
 
     assert response.status_code == 200
     html = response.text
@@ -80,7 +81,7 @@ def test_console_exposes_admin_audit_integrity_check():
 
 
 def test_console_can_download_complete_verifiable_audit_chain():
-    html = TestClient(app).get("/console").text
+    html = console_response(TestClient(app)).text
 
     assert 'id="exportVerifiableAudit"' in html
     assert "addEventListener('click',exportVerifiableAudit)" in html
@@ -90,7 +91,7 @@ def test_console_can_download_complete_verifiable_audit_chain():
 
 
 def test_console_audit_rows_expose_safe_event_evidence_inspection():
-    html = TestClient(app).get("/console").text
+    html = console_response(TestClient(app)).text
 
     assert '<th>Evidence</th>' in html
     assert 'id="auditDetails"' in html

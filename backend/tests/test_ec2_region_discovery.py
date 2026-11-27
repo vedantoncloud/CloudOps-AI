@@ -1,3 +1,4 @@
+from .conftest import console_response, read_console_source
 from pathlib import Path
 from unittest.mock import patch
 
@@ -95,7 +96,7 @@ def test_region_discovery_failure_is_stable_and_does_not_expose_sdk_details():
 
 
 def test_console_offers_region_suggestions_and_keeps_manual_fallback():
-    html = (Path(__file__).parents[1] / "static" / "console.html").read_text(encoding="utf-8")
+    html = read_console_source()
 
     assert 'list="ec2Regions"' in html
     assert 'id="refreshRegions"' in html

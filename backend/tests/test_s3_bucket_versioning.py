@@ -1,3 +1,4 @@
+from .conftest import console_response, read_console_source
 from unittest.mock import patch
 
 from botocore.exceptions import ClientError
@@ -96,7 +97,7 @@ def test_versioning_endpoint_returns_state_for_owned_bucket(monkeypatch):
 
 
 def test_console_bucket_analysis_includes_versioning_status():
-    html = TestClient(main.app).get("/console").text
+    html = console_response(TestClient(main.app)).text
 
     assert "['Versioning',`${base}/versioning`]" in html
     assert "bucket configuration" in html
@@ -178,6 +179,6 @@ def test_lifecycle_endpoint_hides_foreign_bucket_before_reading_configuration(mo
 
 
 def test_console_bucket_analysis_includes_lifecycle_rules():
-    html = TestClient(main.app).get("/console").text
+    html = console_response(TestClient(main.app)).text
 
     assert "['Lifecycle',`${base}/lifecycle`]" in html
