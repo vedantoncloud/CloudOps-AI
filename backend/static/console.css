@@ -237,3 +237,9 @@ tbody tr:hover{background:rgba(130,117,220,.07)}
 }
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{transition:none!important;animation:none!important}}
 
+
+/* Per-card accent colors formerly supplied by inline style attributes. */
+.kpi-blue{--glow:rgba(109,168,255,.18)}
+.kpi-green{--glow:rgba(85,214,194,.18)}
+.kpi-amber{--glow:rgba(243,196,107,.16)}
+.kpi-violet{--glow:rgba(157,128,255,.18)}
