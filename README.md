@@ -5,24 +5,24 @@ analyze, and manage cloud infrastructure through a secured browser console and A
 
 ## Project Status
 
-**Portfolio milestone — 22 November 2026.** The current `main` branch
+**Portfolio milestone — 28 November 2026.** The current `main` branch
 includes the authenticated FastAPI operations console at `/console` for
 EC2/S3 inventory, resource governance, pending approvals, and actor-scoped
 autonomous run history. In development auth mode it connects without a token;
 in token mode, enter a bearer token in the console. The token is held in page
 memory and cleared when the page closes.
 
-CI on `main` commit `6e3d471` passed all three jobs in post-merge
-run [#45021912420](https://github.com/vedantoncloud/CloudOps-AI/actions/runs/45021912420):
-backend tests, MySQL 8.4 migration and production-container smoke tests, and the
-pinned dependency audit. The verified commit includes PR #150's documentation
-reconciliation and PR #149's sanitized unhandled-error response with request-ID
-correlation. The MySQL integration tests cover shared writes across
-independent processes, tenant-scoped reads across two API workers, and Action
-Plan/GitOps persistence after a worker process restart. The production-container
-smoke tests cover SQLite and MySQL-backed startup, health/readiness, and an
-authenticated API request. These are CI integration checks, not evidence of a
-live multi-replica deployment or a MySQL backup/restore rehearsal.
+The verified `main` commit is `4ef14c3` (PR #177, local Docker Compose
+workflow). Its post-merge CI run
+[#46051732942](https://github.com/vedantoncloud/CloudOps-AI/actions/runs/46051732942)
+passed all three jobs: backend tests and production-container smoke tests,
+MySQL 8.4 migrations and MySQL-backed production-container smoke tests, and
+the pinned dependency audit. Recent security and developer-experience updates
+also include sanitized operational failure logging (PR #172), local audit
+database ignore rules (PR #173), a Content Security Policy with externalized
+console assets (PR #175 and #176), and the local Compose workflow (PR #177).
+These are CI integration checks, not evidence of a live multi-replica
+deployment or a MySQL backup/restore rehearsal.
 
 This is a portfolio/demo-ready milestone, not a claim of a live AWS production
 deployment. The console and API show planning and governance information.
