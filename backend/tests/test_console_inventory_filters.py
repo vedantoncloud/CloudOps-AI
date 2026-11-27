@@ -1,3 +1,4 @@
+from conftest import console_response, read_console_source
 import json
 import re
 import shutil
@@ -11,7 +12,7 @@ from main import app
 
 
 def test_console_exposes_inventory_search_and_ec2_state_filter():
-    response = TestClient(app).get("/console")
+    response = console_response(TestClient(app))
 
     assert response.status_code == 200
     html = response.text
@@ -46,7 +47,7 @@ def test_console_exposes_inventory_search_and_ec2_state_filter():
 
 
 def test_console_exposes_resumable_s3_bucket_inventory():
-    response = TestClient(app).get("/console")
+    response = console_response(TestClient(app))
     assert response.status_code == 200
     html = response.text
     assert 'id="bucketPageSize"' in html
@@ -57,7 +58,7 @@ def test_console_exposes_resumable_s3_bucket_inventory():
 
 
 def test_console_exposes_tenant_scoped_ec2_fleet_insights():
-    response = TestClient(app).get("/console")
+    response = console_response(TestClient(app))
 
     assert response.status_code == 200
     html = response.text
@@ -76,7 +77,7 @@ def test_console_exposes_tenant_scoped_ec2_fleet_insights():
 def test_console_loads_regional_fleet_totals_and_reports_failures():
     if not shutil.which("node"):
         pytest.skip("Node.js is needed to run the console JavaScript behavior check")
-    html = TestClient(app).get("/console").text
+    html = console_response(TestClient(app)).text
     assert 'id="fleetSummary"' in html
     assert "if(aws)loadFleetSummary()" in html
     match = re.search(r"function renderFleetSummary\(.*?(?=async function loadInventory)", html, re.S)
@@ -103,7 +104,7 @@ async function run(api){box.textContent='';box.className='';await make(elements,
 
 
 def test_console_can_download_s3_objects_from_the_object_browser():
-    response = TestClient(app).get("/console")
+    response = console_response(TestClient(app))
 
     assert response.status_code == 200
     html = response.text
@@ -115,7 +116,7 @@ def test_console_can_download_s3_objects_from_the_object_browser():
 def test_s3_object_download_opens_separate_tab_and_handles_failures():
     if not shutil.which("node"):
         pytest.skip("Node.js is needed to run the console JavaScript behavior check")
-    html = TestClient(app).get("/console").text
+    html = console_response(TestClient(app)).text
     match = re.search(r"async function downloadObject\(.*?(?=async function fetchObjects)", html, re.S)
     assert match
     script = r"""
@@ -140,7 +141,7 @@ const run = (api, popupValue=popup) => {popup=popupValue;status.textContent='';s
 
 
 def test_console_exports_loaded_inventory_as_search_aware_csv():
-    response = TestClient(app).get("/console")
+    response = console_response(TestClient(app))
 
     assert response.status_code == 200
     html = response.text
@@ -156,7 +157,7 @@ def test_console_exports_loaded_inventory_as_search_aware_csv():
 
 
 def test_console_can_export_all_filtered_inventory_pages_without_partial_downloads():
-    response = TestClient(app).get("/console")
+    response = console_response(TestClient(app))
 
     assert response.status_code == 200
     html = response.text
@@ -177,7 +178,7 @@ def test_console_can_export_all_filtered_inventory_pages_without_partial_downloa
 
 
 def test_console_exports_all_filtered_action_plan_pages_as_safe_csv():
-    response = TestClient(app).get("/console")
+    response = console_response(TestClient(app))
     assert response.status_code == 200
     html = response.text
     assert 'id="exportPlans"' in html
@@ -193,7 +194,7 @@ def test_console_exports_all_filtered_action_plan_pages_as_safe_csv():
 def test_full_inventory_export_paginates_filters_and_fails_closed():
     if not shutil.which("node"):
         pytest.skip("Node.js is needed to run the console JavaScript behavior check")
-    html = TestClient(app).get("/console").text
+    html = console_response(TestClient(app)).text
     match = re.search(r"async function exportAllInventory\(\).*?(?=function rows\()", html, re.S)
     assert match
     script = r"""
@@ -223,7 +224,7 @@ async function scenario(apiImpl,count,errorText){downloads=[];messages=[];blobs=
 
 
 def test_approval_review_can_inspect_plan_before_decision():
-    html = TestClient(app).get("/console").text
+    html = console_response(TestClient(app)).text
     assert 'id="approvalDetails"' in html
     assert "inspect.textContent='Inspect plan'" in html
     assert "inspect.addEventListener('click',()=>inspectApprovalPlan(p.action_id))" in html
@@ -233,7 +234,7 @@ def test_approval_review_can_inspect_plan_before_decision():
 def test_approval_plan_inspection_handles_success_failures_and_encoded_ids():
     if not shutil.which("node"):
         pytest.skip("Node.js is needed to run the console JavaScript behavior check")
-    html = TestClient(app).get("/console").text
+    html = console_response(TestClient(app)).text
     match = re.search(r"function formatApprovalPlan\(action\).*?(?=async function loadApprovals)", html, re.S)
     assert match
     script = r"""
@@ -270,7 +271,7 @@ const inspect = new Function('$','api','message',source+';return inspectApproval
 def test_action_plan_export_includes_review_context_and_fails_without_partial_csv():
     if not shutil.which("node"):
         pytest.skip("Node.js is needed to run the console JavaScript behavior check")
-    html = TestClient(app).get("/console").text
+    html = console_response(TestClient(app)).text
     match = re.search(r"async function exportPlans\(\).*?(?=async function loadPlans\()", html, re.S)
     assert match
     script = r"""

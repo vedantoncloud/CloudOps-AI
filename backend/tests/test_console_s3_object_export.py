@@ -1,3 +1,4 @@
+from conftest import console_response, read_console_source
 import json
 import re
 import shutil
@@ -10,7 +11,7 @@ from main import app
 
 
 def test_console_exposes_complete_prefix_object_export():
-    html = TestClient(app).get("/console").text
+    html = console_response(TestClient(app)).text
     assert 'id="exportAllObjects"' in html
     assert "async function exportAllObjects()" in html
     assert "query.set('continuation_token',token)" in html
@@ -22,7 +23,7 @@ def test_console_exposes_complete_prefix_object_export():
 def test_complete_object_export_paginates_and_fails_closed():
     if not shutil.which("node"):
         pytest.skip("Node.js is needed to run the console JavaScript behavior check")
-    html = TestClient(app).get("/console").text
+    html = console_response(TestClient(app)).text
     match = re.search(r"async function exportAllObjects\(\).*?(?=async function analyzeBucket)", html, re.S)
     assert match
     script = r"""
@@ -51,7 +52,7 @@ async function scenario(apiImpl,count,errorText){downloads=[];messages=[];blobs=
 def test_console_exports_complete_object_version_history_safely():
     if not shutil.which("node"):
         pytest.skip("Node.js is needed to run the console JavaScript behavior check")
-    html = TestClient(app).get("/console").text
+    html = console_response(TestClient(app)).text
     assert 'id="exportAllVersions"' in html
     match = re.search(r"async function exportAllVersions\(\).*?(?=async function loadObjectVersions)", html, re.S)
     assert match

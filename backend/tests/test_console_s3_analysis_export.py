@@ -1,3 +1,4 @@
+from conftest import console_response, read_console_source
 import json
 import re
 import shutil
@@ -19,7 +20,7 @@ def _script_function(html, name, next_name):
 
 
 def test_console_exposes_s3_analysis_export_disabled_until_analysis_finishes():
-    html = TestClient(app).get("/console").text
+    html = console_response(TestClient(app)).text
     assert 'id="exportBucketAnalysis" disabled' in html
     assert "$('exportBucketAnalysis').disabled=false" in html
     assert "$('exportBucketAnalysis').disabled=true" in html
@@ -29,7 +30,7 @@ def test_console_exposes_s3_analysis_export_disabled_until_analysis_finishes():
 def test_s3_analysis_export_flattens_results_and_marks_scan_coverage_safely():
     if not shutil.which("node"):
         return
-    html = TestClient(app).get("/console").text
+    html = console_response(TestClient(app)).text
     match = _script_function(html, "exportBucketAnalysis", "analyzeBucket")
     assert match
     script = r"""
@@ -55,7 +56,7 @@ const make=new Function('$','message','csvCell','URL','Blob','document','initial
 def test_s3_analysis_retains_partial_failures_for_export_and_clears_stale_report():
     if not shutil.which("node"):
         return
-    html = TestClient(app).get("/console").text
+    html = console_response(TestClient(app)).text
     match = _script_function(html, "analyzeBucket", "billingData")
     assert match
     script = r"""

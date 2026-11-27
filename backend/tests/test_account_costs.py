@@ -1,3 +1,4 @@
+from conftest import console_response, read_console_source
 from unittest.mock import patch
 from datetime import datetime, timezone, timedelta
 import pytest
@@ -235,7 +236,7 @@ def test_account_costs_api_rejects_malformed_healthy_payloads(field, value):
 
 def test_console_exposes_admin_account_billing_option():
     from pathlib import Path
-    html = (Path(__file__).parents[1] / "static" / "console.html").read_text(encoding="utf-8")
+    html = read_console_source()
     assert 'value="billing">Account billing (admin)' in html
     assert 'id="billingWindow"' in html
     assert 'value="7">Last 7 complete days' in html and 'value="90">Last 90 complete days' in html

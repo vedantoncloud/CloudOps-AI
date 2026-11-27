@@ -1,3 +1,4 @@
+from conftest import console_response, read_console_source
 import json
 import re
 import shutil
@@ -9,7 +10,7 @@ from main import app
 
 
 def test_console_enables_insight_export_only_for_loaded_fleet_results():
-    html = TestClient(app).get("/console").text
+    html = console_response(TestClient(app)).text
     assert 'id="exportInsights" disabled' in html
     assert "function exportAggregateInsights()" in html
     assert "$('exportInsights').disabled=false" in html
@@ -19,7 +20,7 @@ def test_console_enables_insight_export_only_for_loaded_fleet_results():
 def test_fleet_insight_csv_flattens_nested_values_and_escapes_formulas():
     if not shutil.which("node"):
         return
-    html = TestClient(app).get("/console").text
+    html = console_response(TestClient(app)).text
     match = re.search(r"function exportAggregateInsights\(\).*?(?=async function loadAggregateInsights)", html, re.S)
     assert match
     script = r"""
@@ -44,7 +45,7 @@ const exportInsights=make(id=>elements[id],(text,error)=>messages.push([text,err
 def test_insight_provider_failure_disables_export_and_shows_error():
     if not shutil.which("node"):
         return
-    html = TestClient(app).get("/console").text
+    html = console_response(TestClient(app)).text
     match = re.search(r"async function loadAggregateInsights\(\).*?(?=function metricChart)", html, re.S)
     assert match
     script = r"""
