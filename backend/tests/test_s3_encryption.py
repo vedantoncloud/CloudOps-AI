@@ -1,3 +1,4 @@
+from conftest import console_response, read_console_source
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -93,5 +94,5 @@ def test_encryption_endpoint_scopes_tenant_and_sanitizes_provider_error(monkeypa
 
 
 def test_console_bucket_analysis_includes_default_encryption_check():
-    html = TestClient(main.app).get("/console").text
+    html = console_response(TestClient(main.app)).text
     assert "['Default encryption',`${base}/encryption`]" in html

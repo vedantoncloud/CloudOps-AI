@@ -1,3 +1,4 @@
+from conftest import console_response, read_console_source
 from unittest.mock import patch
 
 from botocore.exceptions import ClientError
@@ -100,5 +101,5 @@ def test_replication_endpoint_and_console_report_expose_configuration(monkeypatc
     response = TestClient(main.app).get("/cloud/aws/s3/buckets/source/replication")
     assert response.status_code == 200
     assert response.json()["enabled_rule_count"] == 1
-    html = TestClient(main.app).get("/console").text
+    html = console_response(TestClient(main.app)).text
     assert "['Replication',`${base}/replication`]" in html
