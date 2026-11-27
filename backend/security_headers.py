@@ -1,5 +1,6 @@
 """Conservative browser security headers for API and console responses."""
 
+
 class SecurityHeadersMiddleware:
     """Add safe defaults without overriding headers set by individual routes."""
 
@@ -22,6 +23,11 @@ class SecurityHeadersMiddleware:
                     (b"permissions-policy", b"camera=(), microphone=(), geolocation=()"),
                     (b"cross-origin-resource-policy", b"same-origin"),
                     (b"cache-control", b"no-store"),
+                    (b"content-security-policy",
+                     b"default-src 'self'; base-uri 'self'; connect-src 'self'; "
+                     b"font-src 'self'; form-action 'self'; frame-ancestors 'none'; "
+                     b"img-src 'self' data: blob:; object-src 'none'; "
+                     b"script-src 'self'; style-src 'self'"),
                 ]
                 if scope.get("scheme") == "https":
                     defaults.append((b"strict-transport-security", b"max-age=31536000"))
@@ -30,4 +36,3 @@ class SecurityHeadersMiddleware:
             await send(message)
 
         await self.app(scope, receive, send_with_security_headers)
-
