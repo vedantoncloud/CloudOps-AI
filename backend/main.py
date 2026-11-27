@@ -82,7 +82,10 @@ async def _unhandled_exception_handler(request: Request, exc: Exception):
 
 app.add_exception_handler(Exception, _unhandled_exception_handler)
 
-CONSOLE_PAGE = Path(__file__).parent / "static" / "console.html"
+CONSOLE_STATIC = Path(__file__).parent / "static"
+CONSOLE_PAGE = CONSOLE_STATIC / "console.html"
+CONSOLE_CSS = CONSOLE_STATIC / "console.css"
+CONSOLE_JS = CONSOLE_STATIC / "console.js"
 
 
 aws_service = AWSService()
@@ -182,6 +185,18 @@ def root():
 def console():
     """Serve the authenticated operations console."""
     return FileResponse(CONSOLE_PAGE, media_type="text/html")
+
+
+@app.get("/static/console.css", include_in_schema=False)
+def console_css():
+    """Serve the console stylesheet as a same-origin static asset."""
+    return FileResponse(CONSOLE_CSS, media_type="text/css")
+
+
+@app.get("/static/console.js", include_in_schema=False)
+def console_js():
+    """Serve the console script as a same-origin static asset."""
+    return FileResponse(CONSOLE_JS, media_type="application/javascript")
 
 
 @app.get("/health")
