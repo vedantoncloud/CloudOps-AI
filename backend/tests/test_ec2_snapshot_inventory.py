@@ -1,4 +1,4 @@
-from conftest import console_response, read_console_source
+from .conftest import console_response, read_console_source
 from datetime import datetime, timezone
 
 from botocore.exceptions import ClientError

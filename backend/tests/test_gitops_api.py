@@ -1,4 +1,4 @@
-from conftest import console_response, read_console_source
+from .conftest import console_response, read_console_source
 ﻿import csv
 import io
 from pathlib import Path

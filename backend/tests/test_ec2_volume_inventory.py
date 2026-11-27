@@ -1,4 +1,4 @@
-from conftest import console_response, read_console_source
+from .conftest import console_response, read_console_source
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from botocore.exceptions import ClientError
