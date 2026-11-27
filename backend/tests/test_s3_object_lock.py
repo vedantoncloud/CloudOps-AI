@@ -1,5 +1,5 @@
 from .conftest import console_response, read_console_source
-﻿from types import SimpleNamespace
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from botocore.exceptions import ClientError
