@@ -1,4 +1,4 @@
-from conftest import console_response, read_console_source
+from .conftest import console_response, read_console_source
 import json
 import re
 import shutil

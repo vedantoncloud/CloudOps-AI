@@ -1,4 +1,4 @@
-from conftest import console_response, read_console_source
+from .conftest import console_response, read_console_source
 from unittest.mock import patch
 from datetime import datetime, timezone, timedelta
 import pytest
